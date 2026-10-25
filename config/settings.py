@@ -36,6 +36,8 @@ INSTALLED_APPS = [
     # Local apps
     "apps.samian",
     "apps.storefront",
+    "apps.legacy",
+    "apps.website",
 ]
 
 MIDDLEWARE = [
@@ -164,3 +166,14 @@ SAMIAN_USERNAME = os.getenv("SAMIAN_USERNAME", "REMOVED")
 SAMIAN_PASSWORD = os.getenv("SAMIAN_PASSWORD", "REMOVED")
 SAMIAN_TIMEOUT = int(os.getenv("SAMIAN_TIMEOUT", "60"))
 SAMIAN_STORE_RAW_DATA = os.getenv("SAMIAN_STORE_RAW_DATA", "False").lower() in ("true", "1")
+
+# -----------------------------------------------------------------------------
+# Legacy website database (DadehfaOnlineShop) - READ ONLY, used for data import
+# -----------------------------------------------------------------------------
+DADEHFA_DB = {
+    "HOST": os.getenv("DADEHFA_DB_HOST", ""),
+    "PORT": os.getenv("DADEHFA_DB_PORT", "1433"),
+    "NAME": os.getenv("DADEHFA_DB_NAME", "DadehfaOnlineShop"),
+    "USER": os.getenv("DADEHFA_DB_USER", ""),
+    "PASSWORD": os.getenv("DADEHFA_DB_PASSWORD", ""),
+}

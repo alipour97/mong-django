@@ -1,0 +1,581 @@
+"""
+Website layer models (what used to live in DadehfaOnlineShop).
+
+Samian ERP owns products, barcodes, prices and stock. Everything the website
+adds on top of that lives here: the online category tree and slugs, product
+pages (titles, descriptions, images per color), home page configs, banners,
+collections, outfits, themes, comments and so on.
+
+Primary keys keep the legacy DadehfaOnlineShop ids so the ids stored inside
+configs (sortRowsConfig, webSortOrder), URLs, carts and favorites stay valid.
+"""
+from __future__ import annotations
+
+from django.db import models
+from django.utils.translation import gettext_lazy as _
+
+
+class LegacyMixin(models.Model):
+    """Fields every imported row carries over from DadehfaOnlineShop."""
+
+    map_id = models.CharField(_("MapId (کد در سیستم مبدا)"), max_length=64, blank=True, default="", db_index=True)
+    is_deleted = models.BooleanField(_("حذف شده"), default=False, db_index=True)
+    created = models.DateTimeField(_("ایجاد"), null=True, blank=True)
+    last_modified = models.DateTimeField(_("آخرین تغییر"), null=True, blank=True)
+
+    class Meta:
+        abstract = True
+
+
+# -----------------------------------------------------------------------------
+# Catalog
+# -----------------------------------------------------------------------------
+class Brand(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    title = models.CharField(_("عنوان"), max_length=255)
+    group_name = models.CharField(_("گروه برند"), max_length=255, blank=True, default="")
+
+    class Meta:
+        verbose_name = _("برند")
+        verbose_name_plural = _("برندها")
+
+    def __str__(self):
+        return self.title
+
+
+class Category(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="children")
+    title = models.CharField(_("عنوان"), max_length=255)
+    slug = models.CharField(_("اسلاگ"), max_length=255, blank=True, default="", db_index=True)
+    has_manual_slug = models.BooleanField(default=False)
+    group_level = models.IntegerField(_("سطح"), null=True, blank=True)
+    display_priority = models.IntegerField(_("اولویت نمایش"), default=0)
+    in_main_page = models.BooleanField(_("نمایش در صفحه اصلی"), default=False)
+    is_online_active = models.BooleanField(_("فعال در سایت"), default=False, db_index=True)
+    discount = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    short_description_html = models.TextField(blank=True, default="")
+    long_description_html = models.TextField(blank=True, default="")
+    base_category_type_id = models.IntegerField(null=True, blank=True)
+    base_category_type_title = models.CharField(max_length=255, blank=True, default="")
+    # ERP department code; PTC/Samian department this online category maps to
+    parent_map_id = models.CharField(max_length=64, blank=True, default="")
+
+    class Meta:
+        verbose_name = _("دسته‌بندی سایت")
+        verbose_name_plural = _("دسته‌بندی‌های سایت")
+        ordering = ["display_priority", "id"]
+
+    def __str__(self):
+        return self.title
+
+
+class Tag(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    title = models.CharField(max_length=255)
+    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="children")
+
+    class Meta:
+        verbose_name = _("برچسب")
+        verbose_name_plural = _("برچسب‌ها")
+
+    def __str__(self):
+        return self.title
+
+
+class CategoryTag(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="tag_links")
+    tag = models.ForeignKey(Tag, on_delete=models.CASCADE, related_name="category_links")
+
+
+class Feature(LegacyMixin):
+    """رنگ (1) و سایز (2)."""
+
+    COLOR = 1
+    SIZE = 2
+
+    id = models.BigAutoField(primary_key=True)
+    name = models.CharField(max_length=128)
+    display_priority = models.IntegerField(default=0)
+
+    class Meta:
+        verbose_name = _("ویژگی")
+        verbose_name_plural = _("ویژگی‌ها")
+
+    def __str__(self):
+        return self.name
+
+
+class FeatureValue(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    feature = models.ForeignKey(Feature, on_delete=models.CASCADE, related_name="values")
+    name = models.CharField(max_length=255)
+    value = models.CharField(_("مقدار (کد رنگ / سایز)"), max_length=255, blank=True, default="")
+    display_priority = models.IntegerField(default=0)
+
+    class Meta:
+        verbose_name = _("مقدار ویژگی")
+        verbose_name_plural = _("مقادیر ویژگی")
+
+    def __str__(self):
+        return f"{self.feature_id}:{self.name}"
+
+
+class Product(LegacyMixin):
+    """Product page on the website. Pricing and stock come from Samian once linked."""
+
+    id = models.BigAutoField(primary_key=True)
+    title = models.CharField(_("عنوان"), max_length=512)
+    slug = models.CharField(_("اسلاگ"), max_length=512, blank=True, default="", db_index=True)
+    has_manual_slug = models.BooleanField(default=False)
+    category = models.ForeignKey(Category, null=True, blank=True, on_delete=models.SET_NULL, related_name="products")
+    brand = models.ForeignKey(Brand, null=True, blank=True, on_delete=models.SET_NULL, related_name="products")
+    barcode = models.CharField(_("کد کالا"), max_length=64, blank=True, default="", db_index=True)
+
+    price = models.DecimalField(_("قیمت (ریال)"), max_digits=18, decimal_places=3, default=0)
+    reduction = models.DecimalField(_("درصد تخفیف"), max_digits=18, decimal_places=3, default=0)
+    discount = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    tax = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    vat = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+
+    description = models.TextField(blank=True, default="")
+    short_desc = models.TextField(blank=True, default="")
+    short_description_html = models.TextField(blank=True, default="")
+    long_description_html = models.TextField(blank=True, default="")
+    size_guide = models.TextField(blank=True, default="")
+
+    is_active = models.BooleanField(default=True, db_index=True)
+    is_saleable = models.BooleanField(default=True)
+    show_torob = models.BooleanField(default=False)
+    show_snapp = models.BooleanField(default=False)
+    shipping_time = models.IntegerField(null=True, blank=True)
+    sales_count = models.IntegerField(default=0)
+    view_count = models.IntegerField(default=0)
+    buyer_score_average = models.DecimalField(max_digits=10, decimal_places=3, default=0)
+    overall_score_average = models.DecimalField(max_digits=10, decimal_places=3, default=0)
+
+    product_category_title = models.CharField(max_length=255, blank=True, default="")
+    product_gender_title = models.CharField(max_length=255, blank=True, default="")
+    product_season_title = models.CharField(max_length=255, blank=True, default="")
+    product_style_title = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        verbose_name = _("محصول سایت")
+        verbose_name_plural = _("محصولات سایت")
+
+    def __str__(self):
+        return self.title
+
+
+class ProductTag(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="tag_links")
+    tag = models.ForeignKey(Tag, on_delete=models.CASCADE, related_name="product_links")
+
+
+class ProductVariant(LegacyMixin):
+    """One color/size combination of a product (one barcode)."""
+
+    id = models.BigAutoField(primary_key=True)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="variants")
+    barcode = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    color = models.ForeignKey(FeatureValue, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    size = models.ForeignKey(FeatureValue, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    price = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    reduction = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    discount = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    legacy_qty = models.DecimalField(_("موجودی در سیستم قبلی"), max_digits=18, decimal_places=3, default=0)
+
+    class Meta:
+        verbose_name = _("تنوع محصول")
+        verbose_name_plural = _("تنوع‌های محصول")
+
+
+class ProductColorMedia(LegacyMixin):
+    """A product's gallery for one color (legacy FeatureValueMedias)."""
+
+    id = models.BigAutoField(primary_key=True)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="color_medias")
+    feature_value = models.ForeignKey(FeatureValue, on_delete=models.CASCADE, related_name="+")
+
+
+class MediaAttachment(LegacyMixin):
+    """Image/video attached to any record (generic, as in the legacy schema)."""
+
+    class Table(models.IntegerChoices):
+        COLLECTIONS = 12, "Collections"
+        PRODUCTS = 14, "Products"
+        OUTFITS = 19, "Outfits"
+        FEATURE_VALUE_MEDIAS = 27, "FeatureValueMedias"
+        ARTICLES = 32, "Articles"
+        CATEGORIES = 38, "Categories"
+        MEDIA_ATTACHMENTS = 45, "MediaAttachments"
+        COMPANY_INFOS = 46, "CompanyInfos"
+        COOPERATION_REQUESTS = 100, "CooperationRequests"
+
+    id = models.BigAutoField(primary_key=True)
+    table = models.IntegerField(choices=Table.choices, db_index=True)
+    record_id = models.BigIntegerField(db_index=True)
+    media_url = models.CharField(max_length=1024)
+    is_video = models.BooleanField(default=False)
+    alternative = models.CharField(max_length=512, blank=True, default="")
+    tooltip_title = models.CharField(max_length=512, blank=True, default="")
+    hash_code = models.CharField(max_length=255, blank=True, default="")
+    is_product_guid = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = _("مدیای الصاقی")
+        verbose_name_plural = _("مدیاهای الصاقی")
+        indexes = [models.Index(fields=["table", "record_id"])]
+
+
+class FileMedia(LegacyMixin):
+    """Uploaded file in the admin media gallery."""
+
+    id = models.BigAutoField(primary_key=True)
+    file_name = models.CharField(max_length=512, blank=True, default="")
+    url = models.CharField(max_length=1024)
+    format_id = models.IntegerField(null=True, blank=True)
+    upload_time = models.DateTimeField(null=True, blank=True)
+    content_hash = models.CharField(max_length=255, blank=True, default="")
+    domain = models.CharField(max_length=255, blank=True, default="")
+    size = models.BigIntegerField(null=True, blank=True)
+    width = models.IntegerField(null=True, blank=True)
+    height = models.IntegerField(null=True, blank=True)
+    used = models.BooleanField(default=False)
+    favorite = models.BooleanField(default=False)
+    alternative = models.CharField(max_length=512, blank=True, default="")
+    tooltip_title = models.CharField(max_length=512, blank=True, default="")
+
+    class Meta:
+        verbose_name = _("فایل گالری")
+        verbose_name_plural = _("گالری فایل‌ها")
+
+
+class ProductSamianLink(models.Model):
+    """Which Samian productmain a website product corresponds to."""
+
+    class Method(models.TextChoices):
+        EXACT_CODE = "exact_code", _("کد کالا یکسان")
+        MANUAL = "manual", _("دستی")
+
+    product = models.OneToOneField(Product, on_delete=models.CASCADE, related_name="samian_link")
+    samian_product_id = models.BigIntegerField(_("productmain_id سامیان"), db_index=True)
+    method = models.CharField(max_length=32, choices=Method.choices)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("اتصال محصول به سامیان")
+        verbose_name_plural = _("اتصال محصولات به سامیان")
+
+
+# -----------------------------------------------------------------------------
+# Merchandising and content
+# -----------------------------------------------------------------------------
+class PrimaryConfig(LegacyMixin):
+    """Admin-editable JSON configs (sortRowsConfig, footerConfig, websiteMetaData, ...)."""
+
+    id = models.BigAutoField(primary_key=True)
+    key = models.CharField(max_length=128, unique=True)
+    value = models.TextField(_("مقدار (JSON)"), blank=True, default="")
+
+    class Meta:
+        verbose_name = _("پیکربندی")
+        verbose_name_plural = _("پیکربندی‌ها")
+
+    def __str__(self):
+        return self.key
+
+
+class Banner(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    media_url = models.CharField(max_length=1024)
+    link = models.CharField(max_length=1024, blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    is_banner = models.BooleanField(default=True)
+    display_priority = models.IntegerField(default=0)
+
+    class Meta:
+        verbose_name = _("بنر")
+        verbose_name_plural = _("بنرها")
+        ordering = ["display_priority", "id"]
+
+
+class Collection(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    title = models.CharField(max_length=255)
+    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="children")
+    in_main_page = models.BooleanField(default=False)
+    display_priority = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    beginning_date = models.DateTimeField(null=True, blank=True)
+    end_date = models.DateTimeField(null=True, blank=True)
+    reduction = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+
+    class Meta:
+        verbose_name = _("کالکشن")
+        verbose_name_plural = _("کالکشن‌ها")
+
+
+class CollectionCategory(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    collection = models.ForeignKey(Collection, on_delete=models.CASCADE, related_name="category_links")
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="collection_links")
+
+
+class ProductCollection(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    collection = models.ForeignKey(Collection, on_delete=models.CASCADE, related_name="product_links")
+    product = models.ForeignKey(Product, null=True, blank=True, on_delete=models.CASCADE, related_name="collection_links")
+    brand = models.ForeignKey(Brand, null=True, blank=True, on_delete=models.CASCADE, related_name="collection_links")
+
+
+class Outfit(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    title = models.CharField(max_length=255)
+    label_title = models.CharField(max_length=255, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    category = models.ForeignKey(Category, null=True, blank=True, on_delete=models.SET_NULL, related_name="outfits")
+    is_active = models.BooleanField(default=True)
+    start_date = models.DateTimeField(null=True, blank=True)
+    expiration_date = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("استایل")
+        verbose_name_plural = _("استایل‌ها")
+
+
+class OutfitProduct(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    outfit = models.ForeignKey(Outfit, on_delete=models.CASCADE, related_name="product_links")
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="outfit_links")
+    feature_value = models.ForeignKey(FeatureValue, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+
+class SelectedProduct(LegacyMixin):
+    """Products picked by the admin for the home page slider."""
+
+    id = models.BigAutoField(primary_key=True)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="selections")
+    feature_value = models.ForeignKey(FeatureValue, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    sorting_weight = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+
+    class Meta:
+        verbose_name = _("محصول منتخب")
+        verbose_name_plural = _("محصولات منتخب")
+        ordering = ["-sorting_weight", "id"]
+
+
+class ProductComment(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="comments")
+    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.CASCADE, related_name="replies")
+    # Customers are migrated in a later phase; keep the legacy id until then.
+    commenter_id = models.BigIntegerField(null=True, blank=True)
+    feature_value = models.ForeignKey(FeatureValue, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    invoice_id = models.BigIntegerField(null=True, blank=True)
+    title = models.CharField(max_length=512, blank=True, default="")
+    comment = models.TextField(blank=True, default="")
+    score = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    is_admin_comment = models.BooleanField(default=False)
+    is_buyer = models.BooleanField(default=False)
+    is_anonymous = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=False)
+    status = models.IntegerField(default=0)
+    status_description = models.TextField(blank=True, default="")
+    verified_by_user_id = models.BigIntegerField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("نظر محصول")
+        verbose_name_plural = _("نظرات محصولات")
+
+
+class Redirect(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    source_url = models.CharField(max_length=1024, db_index=True)
+    destination_url = models.CharField(max_length=1024)
+    permanent = models.BooleanField(default=True)
+    title = models.CharField(max_length=255, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = _("ریدایرکت")
+        verbose_name_plural = _("ریدایرکت‌ها")
+
+
+# -----------------------------------------------------------------------------
+# Site settings, company, themes
+# -----------------------------------------------------------------------------
+class CompanyInfo(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    name = models.CharField(max_length=255, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    address = models.TextField(blank=True, default="")
+    postal_code = models.CharField(max_length=32, blank=True, default="")
+    phone_numbers = models.TextField(blank=True, default="")
+    website_logo_address = models.CharField(max_length=1024, blank=True, default="")
+    keywords = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = _("اطلاعات شرکت")
+        verbose_name_plural = _("اطلاعات شرکت")
+
+
+class CompanyBranch(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    name = models.CharField(max_length=255)
+    address = models.TextField(blank=True, default="")
+    phone = models.CharField(max_length=128, blank=True, default="")
+    province_id = models.BigIntegerField(null=True, blank=True)
+    province_title = models.CharField(max_length=128, blank=True, default="")
+    city_id = models.BigIntegerField(null=True, blank=True)
+    city_title = models.CharField(max_length=128, blank=True, default="")
+    zip_code = models.CharField(max_length=32, blank=True, default="")
+    latitude = models.DecimalField(max_digits=18, decimal_places=10, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=18, decimal_places=10, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = _("شعبه")
+        verbose_name_plural = _("شعب")
+
+
+class SiteSetting(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    website_title = models.CharField(max_length=255, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    is_payment = models.BooleanField(default=True)
+    payment_bank = models.IntegerField(null=True, blank=True)
+    online_branch_id = models.IntegerField(null=True, blank=True)
+    default_sms_panel_id = models.IntegerField(null=True, blank=True)
+    has_connection_with_snapp_express = models.BooleanField(default=False)
+    has_connection_with_snapp_pay = models.BooleanField(default=False)
+    has_connection_with_torob = models.BooleanField(default=False)
+    show_all_category = models.BooleanField(default=False)
+    default_theme_id = models.IntegerField(null=True, blank=True)
+    is_custom_theme = models.BooleanField(default=False)
+    has_bulletin = models.BooleanField(default=False)
+    has_cooperation = models.BooleanField(default=False)
+    min_qty = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    only_has_media_products = models.BooleanField(default=False)
+    coupon_calculation_type = models.IntegerField(null=True, blank=True)
+    gift_card_use_type = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("تنظیمات سایت")
+        verbose_name_plural = _("تنظیمات سایت")
+
+
+class ThemeBase(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    lable_title = models.CharField(max_length=255, blank=True, default="")
+    category_count = models.IntegerField(null=True, blank=True)
+    description = models.TextField(blank=True, default="")
+    mobile_image = models.CharField(max_length=1024, blank=True, default="")
+    header_image = models.CharField(max_length=1024, blank=True, default="")
+    desktop_image = models.CharField(max_length=1024, blank=True, default="")
+    is_editable = models.BooleanField(default=False)
+    white_color = models.CharField(max_length=32, blank=True, default="")
+    white_hover_color = models.CharField(max_length=32, blank=True, default="")
+    primary1_color = models.CharField(max_length=32, blank=True, default="")
+    primary2_color = models.CharField(max_length=32, blank=True, default="")
+    secondary_color = models.CharField(max_length=32, blank=True, default="")
+    border_color = models.CharField(max_length=32, blank=True, default="")
+    cta_color = models.CharField(max_length=32, blank=True, default="")
+    cta_hover_color = models.CharField(max_length=32, blank=True, default="")
+    cta_disabled_color = models.CharField(max_length=32, blank=True, default="")
+    focus_color = models.CharField(max_length=32, blank=True, default="")
+    highlight_color = models.CharField(max_length=32, blank=True, default="")
+    alert_color = models.CharField(max_length=32, blank=True, default="")
+
+    class Meta:
+        abstract = True
+
+
+class Theme(ThemeBase):
+    theme_name = models.CharField(max_length=255)
+
+    class Meta:
+        verbose_name = _("قالب")
+        verbose_name_plural = _("قالب‌ها")
+
+
+class CustomTheme(ThemeBase):
+    custom_theme_name = models.CharField(max_length=255)
+
+    class Meta:
+        verbose_name = _("قالب سفارشی")
+        verbose_name_plural = _("قالب‌های سفارشی")
+
+
+class Page(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    name = models.CharField(max_length=255)
+    key = models.CharField(max_length=255, blank=True, default="")
+    type = models.CharField(max_length=128, blank=True, default="")
+    image_url = models.CharField(max_length=1024, blank=True, default="")
+    is_landing_page = models.BooleanField(default=False)
+
+
+class ThemePage(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    theme = models.ForeignKey(Theme, on_delete=models.CASCADE, related_name="page_links")
+    page = models.ForeignKey(Page, on_delete=models.CASCADE, related_name="theme_links")
+
+
+class CustomThemePage(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    custom_theme = models.ForeignKey(CustomTheme, on_delete=models.CASCADE, related_name="page_links")
+    page = models.ForeignKey(Page, on_delete=models.CASCADE, related_name="custom_theme_links")
+
+
+# -----------------------------------------------------------------------------
+# Shipping and locations
+# -----------------------------------------------------------------------------
+class Province(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    name = models.CharField(max_length=128)
+    country_id = models.IntegerField(null=True, blank=True)
+    latitude = models.DecimalField(max_digits=18, decimal_places=10, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=18, decimal_places=10, null=True, blank=True)
+
+
+class City(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    province = models.ForeignKey(Province, on_delete=models.CASCADE, related_name="cities")
+    name = models.CharField(max_length=128)
+    latitude = models.DecimalField(max_digits=18, decimal_places=10, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=18, decimal_places=10, null=True, blank=True)
+
+
+class ShippingMethodType(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    name = models.CharField(max_length=255)
+    key = models.CharField(max_length=128, blank=True, default="")
+    include_costs = models.BooleanField(default=False)
+
+
+class ShippingMethod(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    name = models.CharField(max_length=255)
+    type = models.ForeignKey(ShippingMethodType, null=True, blank=True, on_delete=models.SET_NULL, related_name="methods")
+    description = models.TextField(blank=True, default="")
+    icon = models.CharField(max_length=1024, blank=True, default="")
+    fixed_cost = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    variable_fee = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    is_dynamic_pricing = models.BooleanField(default=False)
+    requires_insurance = models.BooleanField(default=False)
+    insurance_cost = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    insurance_percentage = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    tax_percentage = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    tax_amount = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    source_dependent = models.BooleanField(default=False)
+
+
+class ShippingMethodLocation(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    shipping_method = models.ForeignKey(ShippingMethod, on_delete=models.CASCADE, related_name="locations")
+    province_id = models.BigIntegerField(null=True, blank=True)
+    city_id = models.BigIntegerField(null=True, blank=True)
