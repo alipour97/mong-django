@@ -1,0 +1,93 @@
+# ==============================================================================
+# .gitignore for Mong Store (Django Backend + Next.js Frontend)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Environment & Sensitive Configs
+# ------------------------------------------------------------------------------
+.env
+.env*.local
+!.env.example
+
+# ------------------------------------------------------------------------------
+# 2. Python & Virtual Environments
+# ------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Distribution / Packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ------------------------------------------------------------------------------
+# 3. Django Runtime, Databases & Logs
+# ------------------------------------------------------------------------------
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+static/
+logs/
+.samian_erp_token*
+
+# ------------------------------------------------------------------------------
+# 4. Next.js / Frontend Node.js
+# ------------------------------------------------------------------------------
+node_modules/
+mong_front/node_modules/
+.next/
+mong_front/.next/
+out/
+mong_front/out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.turbo/
+mong_front/.turbo/
+
+# ------------------------------------------------------------------------------
+# 5. Legacy & Decompiled Reference Archives
+# ------------------------------------------------------------------------------
+_src/
+
+# ------------------------------------------------------------------------------
+# 6. IDEs & Operating System Artifacts
+# ------------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
