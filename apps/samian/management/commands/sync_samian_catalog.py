@@ -65,7 +65,7 @@ class Command(BaseCommand):
             SamianDepartment(
                 samian_id=int(d["codingdepartment_id"]),
                 title=str(d.get("title") or "").strip(),
-                current_level=int(d["currentlevel"]) if d.get("currentlevel") is not None else None,
+                level=int(d["currentlevel"]) if d.get("currentlevel") is not None else 0,
                 department1=dept_paths.get(int(d["codingdepartment_id"]), ("", "", ""))[0],
                 department2=dept_paths.get(int(d["codingdepartment_id"]), ("", "", ""))[1],
                 department3=dept_paths.get(int(d["codingdepartment_id"]), ("", "", ""))[2],
@@ -77,7 +77,7 @@ class Command(BaseCommand):
             dept_objs,
             update_conflicts=True,
             unique_fields=["samian_id"],
-            update_fields=["title", "current_level", "department1", "department2", "department3", "updated_at"],
+            update_fields=["title", "level", "department1", "department2", "department3", "updated_at"],
         )
         self.stdout.write(self.style.SUCCESS(f"  ثبت {len(dept_objs)} دپارتمان در دیتابیس."))
 

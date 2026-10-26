@@ -272,7 +272,8 @@ class SamianProductColor(models.Model):
 
 class SamianBarcode(models.Model):
     samian_id = models.BigIntegerField(_("شناسه بارکد در سامیان"), unique=True, db_index=True)
-    barcode = models.CharField(_("بارکد (kbarcode)"), max_length=255, unique=True, db_index=True)
+    # Not unique: Samian has the same kbarcode on more than one barcodemain record.
+    barcode = models.CharField(_("بارکد (kbarcode)"), max_length=255, db_index=True)
     subcode = models.CharField(_("کد فرعی کالا"), max_length=128, blank=True, default="", db_index=True)
     samian_product = models.ForeignKey(
         SamianProduct, on_delete=models.SET_NULL, null=True, blank=True,
