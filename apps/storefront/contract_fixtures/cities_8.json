@@ -1,0 +1,347 @@
+{
+ "request": {
+  "method": "GET",
+  "base": "web",
+  "path": "ProvinceCity/GetAllCity/8",
+  "body": null
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": [
+    {
+     "id": 531,
+     "name": "ارجمند",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 532,
+     "name": "اسلامشهر",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 533,
+     "name": "اندیشه",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 534,
+     "name": "آبسرد",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 535,
+     "name": "آبعلی",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 536,
+     "name": "باغستان",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 537,
+     "name": "باقرشهر",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 538,
+     "name": "بومهن",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 539,
+     "name": "پاکدشت",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 540,
+     "name": "پردیس",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 541,
+     "name": "پیشوا",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 542,
+     "name": "تجریش",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 543,
+     "name": "تهران",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 544,
+     "name": "جوادآباد",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 545,
+     "name": "چهاردانگه",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 546,
+     "name": "حسن آباد",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 547,
+     "name": "دماوند",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 548,
+     "name": "رباط کریم",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 549,
+     "name": "رودهن",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 550,
+     "name": "ری",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 551,
+     "name": "شاهدشهر",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 552,
+     "name": "شریف آباد",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 553,
+     "name": "شهریار",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 554,
+     "name": "صالح آباد",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 555,
+     "name": "صباشهر",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 556,
+     "name": "صفادشت",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 557,
+     "name": "فردوسیه",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 558,
+     "name": "فرون آباد",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 559,
+     "name": "فشم",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 560,
+     "name": "فیروزکوه",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 561,
+     "name": "قدس",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 562,
+     "name": "قرچک",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 563,
+     "name": "کهریزک",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 564,
+     "name": "کیلان",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 565,
+     "name": "گلستان",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 566,
+     "name": "لواسان",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 567,
+     "name": "ملارد",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 568,
+     "name": "نسیم شهر",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 569,
+     "name": "نصیرآباد",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 570,
+     "name": "وحیدیه",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    },
+    {
+     "id": 571,
+     "name": "ورامین",
+     "provinceId": 8,
+     "latitude": null,
+     "longitude": null,
+     "provinceDto": null
+    }
+   ],
+   "totalPages": 0
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات مورد نیاز دریافت شد.",
+  "timestamp": 639286005041933093
+ }
+}

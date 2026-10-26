@@ -1,0 +1,10 @@
+{
+ "request": {
+  "method": "GET",
+  "base": "admin",
+  "path": "SearchEngine/category/%D8%B2%D9%86%D8%A7%D9%86%D9%87/index",
+  "body": null
+ },
+ "status": 200,
+ "response": 2
+}

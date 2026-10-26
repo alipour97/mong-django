@@ -1,0 +1,35 @@
+{
+ "request": {
+  "method": "POST",
+  "base": "web",
+  "path": "Category/GetSliderBannerSummaries",
+  "body": {
+   "items": [
+    52,
+    54,
+    51
+   ]
+  }
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": {
+    "banners": [
+     {
+      "id": 54,
+      "mediaUrl": "https://cdn.mong.ir/9/webgeneral/1740c94c-c917-4e58-bb8b-da2850402af3.webp",
+      "link": "/",
+      "displayPriority": 0,
+      "isBanner": true
+     }
+    ],
+    "sliders": []
+   },
+   "totalPages": 0
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات با موفقیت دریافت شد.",
+  "timestamp": 639285407479303214
+ }
+}

@@ -1,0 +1,134 @@
+{
+ "request": {
+  "method": "GET",
+  "base": "web",
+  "path": "PrimaryConfig/GetConfig/sortRowsConfig",
+  "body": null
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": {
+    "id": 60,
+    "key": "sortRowsConfig",
+    "value": [
+     {
+      "type": "banner",
+      "selectedIds": [
+       {
+        "id": 52,
+        "mediaUrl": "https://cdn.mong.ir/9/webgeneral/fd4c48ee-0c69-4cdf-9540-2e6137f511bc.webp"
+       },
+       {
+        "id": 54,
+        "mediaUrl": "https://cdn.mong.ir/9/webgeneral/cfd37f1d-fbc8-439c-8c65-7fa089fccfc4.webp"
+       },
+       {
+        "id": 51,
+        "mediaUrl": "https://cdn.mong.ir/9/webgeneral/442f700b-d663-491b-9b32-1c18fd0806d0.webp"
+       }
+      ],
+      "isActive": true,
+      "rowId": 1786356581520
+     },
+     {
+      "type": "category",
+      "selectedIds": [
+       {
+        "id": 23,
+        "mediaUrl": "https://cdn.mong.ir/9/webgeneral/d24f7161-20f2-488f-8c3a-7f1097b4722b.mp4",
+        "name": "شلوار"
+       },
+       {
+        "id": 33,
+        "mediaUrl": "https://cdn.mong.ir/9/webgeneral/357fe16a-e887-4775-aaaf-198c8c94897e.webp",
+        "name": "مانتو"
+       }
+      ],
+      "isActive": true,
+      "rowId": 1784009062378
+     },
+     {
+      "type": "category",
+      "selectedIds": [
+       {
+        "id": 34,
+        "mediaUrl": "https://cdn.mong.ir/9/webgeneral/3bb22480-5b9d-4836-9d1b-49d5871e4b58.webp",
+        "name": "كت"
+       },
+       {
+        "id": 17,
+        "mediaUrl": "https://cdn.mong.ir/9/webgeneral/47303430-0555-45e1-8db5-3c538a4b92c9.webp",
+        "name": "شوميز"
+       }
+      ],
+      "isActive": true,
+      "rowId": 1784984819089
+     },
+     {
+      "rowId": 1,
+      "type": "products",
+      "selectedIds": [],
+      "isActive": true
+     },
+     {
+      "type": "category",
+      "selectedIds": [
+       {
+        "id": 25,
+        "mediaUrl": "https://cdn.mong.ir/9/webgeneral/31b8c83e-a1fe-4e27-8f46-ce9356d475bd.webp",
+        "name": "دامن"
+       },
+       {
+        "id": 74,
+        "mediaUrl": "https://cdn.mong.ir/9/webgeneral/eadce452-6e6c-4148-ab89-aa05a3b3678a.webp",
+        "name": "كيف"
+       }
+      ],
+      "isActive": true,
+      "rowId": 1784009088904
+     },
+     {
+      "rowId": 2,
+      "type": "blog",
+      "selectedIds": [],
+      "isActive": false
+     },
+     {
+      "type": "style",
+      "selectedIds": [
+       {
+        "id": 10025,
+        "mediaUrl": "https://cdn.mong.ir/8585/webgeneral/8a51154e-88ea-4354-9c65-e0c37c0f40a3.webp",
+        "name": "تست استایل - حسن زاده"
+       },
+       {
+        "id": 10023,
+        "mediaUrl": "https://cdn.mong.ir/9/webgeneral/bf04bcea-0067-4559-8227-30e8ac838e45.webp",
+        "name": "تابستانه"
+       }
+      ],
+      "isActive": false,
+      "rowId": 1784021850085
+     },
+     {
+      "type": "collection",
+      "selectedIds": [
+       {
+        "id": 3624,
+        "mediaUrl": "https://cdn.mong.ir/9/webgeneral/b95b14de-d667-440f-aad0-bf756adac1ba.webp",
+        "name": "بلک فرایدی مانگ"
+       }
+      ],
+      "isActive": false,
+      "rowId": 1784024549972
+     }
+    ]
+   },
+   "totalPages": 0
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات با موفقیت دریافت شدند.",
+  "timestamp": 639285413719153557
+ }
+}

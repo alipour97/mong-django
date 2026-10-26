@@ -1,0 +1,20 @@
+{
+ "request": {
+  "method": "POST",
+  "base": "web",
+  "path": "Outfit/GetOutfitSummaries",
+  "body": {
+   "items": []
+  }
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": [],
+   "totalPages": 0
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات مورد نظر یافت نشد.",
+  "timestamp": 639285997920149390
+ }
+}

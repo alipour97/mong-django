@@ -1,0 +1,260 @@
+{
+ "request": {
+  "method": "GET",
+  "base": "admin",
+  "path": "SearchEngine/category/%D8%B2%D9%86%D8%A7%D9%86%D9%87/meta",
+  "body": null
+ },
+ "status": 200,
+ "response": {
+  "context": "https://schema.org/",
+  "type": "ItemList",
+  "name": "زنانه",
+  "description": "زنانه . جليقه . تيشرت . شوميز . پيراهن . تاپ . بافت . بلوز . شلوار . دامن . جين . وست . پالتو . مانتو . كت . پافر . باراني . جليقه . كاپشن . بافت . ست . شال . روسري . جوراب . كمربند . دستكش . كلاه . مقنعه . كيف . كفش . بلوز و دامن . كت و شلوار . بلوز و شلوار . تيشرت و شلوار . بامبر . تونيك . ژيله . ژاكت . ژيله و شلوار . دستمال گردن . كراپ",
+  "url": "/products-category/زنانه",
+  "numberOfItems": 40,
+  "itemListOrder": "https://schema.org/ItemListOrderAscending",
+  "itemListElement": [
+   {
+    "type": "ListItem",
+    "position": 1,
+    "name": "جليقه",
+    "url": "/products-category/بالاتنه-جلیقه"
+   },
+   {
+    "type": "ListItem",
+    "position": 2,
+    "name": "تيشرت",
+    "url": "/products-category/تیشرت"
+   },
+   {
+    "type": "ListItem",
+    "position": 3,
+    "name": "شوميز",
+    "url": "/products-category/شومیز"
+   },
+   {
+    "type": "ListItem",
+    "position": 4,
+    "name": "پيراهن",
+    "url": "/products-category/پیراهن"
+   },
+   {
+    "type": "ListItem",
+    "position": 5,
+    "name": "تاپ",
+    "url": "/products-category/تاپ"
+   },
+   {
+    "type": "ListItem",
+    "position": 6,
+    "name": "بافت",
+    "url": "/products-category/بالاتنه-بافت"
+   },
+   {
+    "type": "ListItem",
+    "position": 7,
+    "name": "بلوز",
+    "url": "/products-category/بلوز"
+   },
+   {
+    "type": "ListItem",
+    "position": 8,
+    "name": "شلوار",
+    "url": "/products-category/شلوار"
+   },
+   {
+    "type": "ListItem",
+    "position": 9,
+    "name": "دامن",
+    "url": "/products-category/دامن"
+   },
+   {
+    "type": "ListItem",
+    "position": 10,
+    "name": "جين",
+    "url": "/products-category/جین"
+   },
+   {
+    "type": "ListItem",
+    "position": 11,
+    "name": "وست",
+    "url": "/products-category/وست"
+   },
+   {
+    "type": "ListItem",
+    "position": 12,
+    "name": "پالتو",
+    "url": "/products-category/پالتو"
+   },
+   {
+    "type": "ListItem",
+    "position": 13,
+    "name": "مانتو",
+    "url": "/products-category/مانتو"
+   },
+   {
+    "type": "ListItem",
+    "position": 14,
+    "name": "كت",
+    "url": "/products-category/کت"
+   },
+   {
+    "type": "ListItem",
+    "position": 15,
+    "name": "پافر",
+    "url": "/products-category/پافر"
+   },
+   {
+    "type": "ListItem",
+    "position": 16,
+    "name": "باراني",
+    "url": "/products-category/بارانی"
+   },
+   {
+    "type": "ListItem",
+    "position": 17,
+    "name": "جليقه",
+    "url": "/products-category/روپوش-جلیقه"
+   },
+   {
+    "type": "ListItem",
+    "position": 18,
+    "name": "كاپشن",
+    "url": "/products-category/کاپشن"
+   },
+   {
+    "type": "ListItem",
+    "position": 19,
+    "name": "بافت",
+    "url": "/products-category/روپوش-بافت"
+   },
+   {
+    "type": "ListItem",
+    "position": 20,
+    "name": "ست",
+    "url": "/products-category/ست"
+   },
+   {
+    "type": "ListItem",
+    "position": 21,
+    "name": "شال",
+    "url": "/products-category/شال"
+   },
+   {
+    "type": "ListItem",
+    "position": 22,
+    "name": "روسري",
+    "url": "/products-category/روسری"
+   },
+   {
+    "type": "ListItem",
+    "position": 23,
+    "name": "جوراب",
+    "url": "/products-category/جوراب"
+   },
+   {
+    "type": "ListItem",
+    "position": 24,
+    "name": "كمربند",
+    "url": "/products-category/کمربند"
+   },
+   {
+    "type": "ListItem",
+    "position": 25,
+    "name": "دستكش",
+    "url": "/products-category/دستکش"
+   },
+   {
+    "type": "ListItem",
+    "position": 26,
+    "name": "كلاه",
+    "url": "/products-category/کلاه"
+   },
+   {
+    "type": "ListItem",
+    "position": 27,
+    "name": "مقنعه",
+    "url": "/products-category/مقنعه"
+   },
+   {
+    "type": "ListItem",
+    "position": 28,
+    "name": "كيف",
+    "url": "/products-category/کیف"
+   },
+   {
+    "type": "ListItem",
+    "position": 29,
+    "name": "كفش",
+    "url": "/products-category/كفش"
+   },
+   {
+    "type": "ListItem",
+    "position": 30,
+    "name": "بلوز و دامن",
+    "url": "/products-category/بلوز-و-دامن"
+   },
+   {
+    "type": "ListItem",
+    "position": 31,
+    "name": "كت و شلوار",
+    "url": "/products-category/كت-و-شلوار"
+   },
+   {
+    "type": "ListItem",
+    "position": 32,
+    "name": "بلوز و شلوار",
+    "url": "/products-category/بلوز-و-شلوار"
+   },
+   {
+    "type": "ListItem",
+    "position": 33,
+    "name": "تيشرت و شلوار",
+    "url": "/products-category/تيشرت-و-شلوار"
+   },
+   {
+    "type": "ListItem",
+    "position": 34,
+    "name": "بامبر",
+    "url": "/products-category/بامبر"
+   },
+   {
+    "type": "ListItem",
+    "position": 35,
+    "name": "تونيك",
+    "url": "/products-category/تونيك"
+   },
+   {
+    "type": "ListItem",
+    "position": 36,
+    "name": "ژيله",
+    "url": "/products-category/ژيله"
+   },
+   {
+    "type": "ListItem",
+    "position": 37,
+    "name": "ژاكت",
+    "url": "/products-category/ژاكت"
+   },
+   {
+    "type": "ListItem",
+    "position": 38,
+    "name": "ژيله و شلوار",
+    "url": "/products-category/ژيله-و-شلوار"
+   },
+   {
+    "type": "ListItem",
+    "position": 39,
+    "name": "دستمال گردن",
+    "url": "/products-category/دستمال-گردن"
+   },
+   {
+    "type": "ListItem",
+    "position": 40,
+    "name": "كراپ",
+    "url": "/products-category/كراپ"
+   }
+  ]
+ }
+}

@@ -1,0 +1,588 @@
+{
+ "request": {
+  "method": "GET",
+  "base": "web",
+  "path": "Product/GetFilterByCategoryId?id=2",
+  "body": null
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": {
+    "fromPrice": 5990000,
+    "toPrice": 138700000,
+    "filteredValues": [
+     {
+      "id": 2,
+      "hasColor": true,
+      "name": "سبز",
+      "value": "008000",
+      "parentId": 0
+     },
+     {
+      "id": 3,
+      "hasColor": true,
+      "name": "زرد",
+      "value": "FFFF00",
+      "parentId": 0
+     },
+     {
+      "id": 4,
+      "hasColor": true,
+      "name": "آبي",
+      "value": "0000FF",
+      "parentId": 0
+     },
+     {
+      "id": 5,
+      "hasColor": true,
+      "name": "قهوه اي",
+      "value": "8B4513",
+      "parentId": 0
+     },
+     {
+      "id": 6,
+      "hasColor": true,
+      "name": "مشكي",
+      "value": "000000",
+      "parentId": 0
+     },
+     {
+      "id": 7,
+      "hasColor": true,
+      "name": "كرم شكلاتي",
+      "value": "C8A97E",
+      "parentId": 0
+     },
+     {
+      "id": 8,
+      "hasColor": true,
+      "name": "كرم روشن",
+      "value": "FDF5E6",
+      "parentId": 0
+     },
+     {
+      "id": 9,
+      "hasColor": true,
+      "name": "يشمي",
+      "value": "00A86B",
+      "parentId": 0
+     },
+     {
+      "id": 10,
+      "hasColor": true,
+      "name": "سورمه اي",
+      "value": "000080",
+      "parentId": 0
+     },
+     {
+      "id": 11,
+      "hasColor": true,
+      "name": "مدادي",
+      "value": "808080",
+      "parentId": 0
+     },
+     {
+      "id": 12,
+      "hasColor": true,
+      "name": "قرمز",
+      "value": "FF0000",
+      "parentId": 0
+     },
+     {
+      "id": 14,
+      "hasColor": true,
+      "name": "مشكي سفيد",
+      "value": "000000;FFFFFF",
+      "parentId": 0
+     },
+     {
+      "id": 15,
+      "hasColor": true,
+      "name": "فيروزه اي",
+      "value": "40E0D0",
+      "parentId": 0
+     },
+     {
+      "id": 16,
+      "hasColor": true,
+      "name": "صورتي",
+      "value": "FFC0CB",
+      "parentId": 0
+     },
+     {
+      "id": 18,
+      "hasColor": true,
+      "name": "طوسي",
+      "value": "808080",
+      "parentId": 0
+     },
+     {
+      "id": 19,
+      "hasColor": true,
+      "name": "زرشكي",
+      "value": "800020",
+      "parentId": 0
+     },
+     {
+      "id": 20,
+      "hasColor": true,
+      "name": "شكلاتي",
+      "value": "7B3F00",
+      "parentId": 0
+     },
+     {
+      "id": 21,
+      "hasColor": true,
+      "name": "مشكي قرمز",
+      "value": "000000;FF0000",
+      "parentId": 0
+     },
+     {
+      "id": 23,
+      "hasColor": true,
+      "name": "سفيد",
+      "value": "FFFFFF",
+      "parentId": 0
+     },
+     {
+      "id": 24,
+      "hasColor": true,
+      "name": "سبز بنتوني",
+      "value": "808000",
+      "parentId": 0
+     },
+     {
+      "id": 26,
+      "hasColor": true,
+      "name": "بنفش",
+      "value": "800080",
+      "parentId": 0
+     },
+     {
+      "id": 28,
+      "hasColor": true,
+      "name": "سرخابي",
+      "value": "FF007F",
+      "parentId": 0
+     },
+     {
+      "id": 29,
+      "hasColor": true,
+      "name": "نارنجي",
+      "value": "FFA500",
+      "parentId": 0
+     },
+     {
+      "id": 32,
+      "hasColor": true,
+      "name": "خردلي",
+      "value": "FFDB58",
+      "parentId": 0
+     },
+     {
+      "id": 33,
+      "hasColor": true,
+      "name": "كرم",
+      "value": "FFFDD0",
+      "parentId": 0
+     },
+     {
+      "id": 35,
+      "hasColor": true,
+      "name": "آبي تيره",
+      "value": "00008B",
+      "parentId": 0
+     },
+     {
+      "id": 36,
+      "hasColor": true,
+      "name": "آبي كاربني",
+      "value": "003399",
+      "parentId": 0
+     },
+     {
+      "id": 39,
+      "hasColor": true,
+      "name": "زيتوني",
+      "value": "808000",
+      "parentId": 0
+     },
+     {
+      "id": 40,
+      "hasColor": true,
+      "name": "قهوه اي تيره",
+      "value": "5C4033",
+      "parentId": 0
+     },
+     {
+      "id": 41,
+      "hasColor": true,
+      "name": "آبي روشن",
+      "value": "ADD8E6",
+      "parentId": 0
+     },
+     {
+      "id": 42,
+      "hasColor": true,
+      "name": "شيري",
+      "value": "FAF9F6",
+      "parentId": 0
+     },
+     {
+      "id": 43,
+      "hasColor": true,
+      "name": "سورمه اي تيره",
+      "value": "000033",
+      "parentId": 0
+     },
+     {
+      "id": 45,
+      "hasColor": true,
+      "name": "خاكستري",
+      "value": "808080",
+      "parentId": 0
+     },
+     {
+      "id": 48,
+      "hasColor": true,
+      "name": "شتري",
+      "value": "C19A6B",
+      "parentId": 0
+     },
+     {
+      "id": 49,
+      "hasColor": true,
+      "name": "سدري",
+      "value": "9DC183",
+      "parentId": 0
+     },
+     {
+      "id": 54,
+      "hasColor": true,
+      "name": "سبز تيره",
+      "value": "006400",
+      "parentId": 0
+     },
+     {
+      "id": 55,
+      "hasColor": true,
+      "name": "ياسي",
+      "value": "C8A2C8",
+      "parentId": 0
+     },
+     {
+      "id": 57,
+      "hasColor": true,
+      "name": "استخواني",
+      "value": "E3DAC9",
+      "parentId": 0
+     },
+     {
+      "id": 58,
+      "hasColor": true,
+      "name": "كرم تيره",
+      "value": "D2B48C",
+      "parentId": 0
+     },
+     {
+      "id": 59,
+      "hasColor": true,
+      "name": "ليمويي",
+      "value": "FFF44F",
+      "parentId": 0
+     },
+     {
+      "id": 60,
+      "hasColor": true,
+      "name": "سبز روشن",
+      "value": "90EE90",
+      "parentId": 0
+     },
+     {
+      "id": 68,
+      "hasColor": true,
+      "name": "نسكافه اي",
+      "value": "C3A084",
+      "parentId": 0
+     },
+     {
+      "id": 81,
+      "hasColor": true,
+      "name": "آجري",
+      "value": "B22222",
+      "parentId": 0
+     },
+     {
+      "id": 97,
+      "hasColor": true,
+      "name": "آبي جين",
+      "value": "ededed",
+      "parentId": 0
+     },
+     {
+      "id": 276,
+      "hasColor": true,
+      "name": "سرمه  اي",
+      "value": "000080",
+      "parentId": 0
+     },
+     {
+      "id": 367,
+      "hasColor": true,
+      "name": "طوسي روشن",
+      "value": "ededed",
+      "parentId": 0
+     },
+     {
+      "id": 424,
+      "hasColor": true,
+      "name": "گلبهي",
+      "value": "ededed",
+      "parentId": 0
+     },
+     {
+      "id": 550,
+      "hasColor": false,
+      "name": "1",
+      "value": "1",
+      "parentId": 0
+     },
+     {
+      "id": 629,
+      "hasColor": false,
+      "name": "10",
+      "value": "10",
+      "parentId": 0
+     },
+     {
+      "id": 666,
+      "hasColor": false,
+      "name": "2",
+      "value": "2",
+      "parentId": 0
+     },
+     {
+      "id": 743,
+      "hasColor": false,
+      "name": "3",
+      "value": "3",
+      "parentId": 0
+     },
+     {
+      "id": 796,
+      "hasColor": false,
+      "name": "36",
+      "value": "36",
+      "parentId": 0
+     },
+     {
+      "id": 804,
+      "hasColor": false,
+      "name": "38",
+      "value": "38",
+      "parentId": 0
+     },
+     {
+      "id": 812,
+      "hasColor": false,
+      "name": "4",
+      "value": "4",
+      "parentId": 0
+     },
+     {
+      "id": 834,
+      "hasColor": false,
+      "name": "40",
+      "value": "40",
+      "parentId": 0
+     },
+     {
+      "id": 836,
+      "hasColor": false,
+      "name": "41",
+      "value": "41",
+      "parentId": 0
+     },
+     {
+      "id": 840,
+      "hasColor": false,
+      "name": "42",
+      "value": "42",
+      "parentId": 0
+     },
+     {
+      "id": 844,
+      "hasColor": false,
+      "name": "44",
+      "value": "44",
+      "parentId": 0
+     },
+     {
+      "id": 849,
+      "hasColor": false,
+      "name": "46",
+      "value": "46",
+      "parentId": 0
+     },
+     {
+      "id": 851,
+      "hasColor": false,
+      "name": "48",
+      "value": "48",
+      "parentId": 0
+     },
+     {
+      "id": 853,
+      "hasColor": false,
+      "name": "5",
+      "value": "5",
+      "parentId": 0
+     },
+     {
+      "id": 864,
+      "hasColor": false,
+      "name": "50",
+      "value": "50",
+      "parentId": 0
+     },
+     {
+      "id": 866,
+      "hasColor": false,
+      "name": "52",
+      "value": "52",
+      "parentId": 0
+     },
+     {
+      "id": 868,
+      "hasColor": false,
+      "name": "54",
+      "value": "54",
+      "parentId": 0
+     },
+     {
+      "id": 870,
+      "hasColor": false,
+      "name": "56",
+      "value": "56",
+      "parentId": 0
+     },
+     {
+      "id": 876,
+      "hasColor": false,
+      "name": "6",
+      "value": "6",
+      "parentId": 0
+     },
+     {
+      "id": 900,
+      "hasColor": false,
+      "name": "7",
+      "value": "7",
+      "parentId": 0
+     },
+     {
+      "id": 909,
+      "hasColor": false,
+      "name": "8",
+      "value": "8",
+      "parentId": 0
+     },
+     {
+      "id": 916,
+      "hasColor": false,
+      "name": "9",
+      "value": "9",
+      "parentId": 0
+     },
+     {
+      "id": 931,
+      "hasColor": false,
+      "name": "FreeS",
+      "value": "FreeS",
+      "parentId": 0
+     },
+     {
+      "id": 933,
+      "hasColor": false,
+      "name": "L",
+      "value": "L",
+      "parentId": 0
+     },
+     {
+      "id": 937,
+      "hasColor": false,
+      "name": "M",
+      "value": "M",
+      "parentId": 0
+     },
+     {
+      "id": 940,
+      "hasColor": false,
+      "name": "NoSize",
+      "value": "NoSize",
+      "parentId": 0
+     },
+     {
+      "id": 951,
+      "hasColor": false,
+      "name": "XL",
+      "value": "XL",
+      "parentId": 0
+     },
+     {
+      "id": 956,
+      "hasColor": false,
+      "name": "XXL",
+      "value": "XXL",
+      "parentId": 0
+     },
+     {
+      "id": 1421,
+      "hasColor": true,
+      "name": "سبز پسته اي",
+      "value": "ededed",
+      "parentId": 0
+     },
+     {
+      "id": 1550,
+      "hasColor": true,
+      "name": "كرم نچرال",
+      "value": "ededed",
+      "parentId": 0
+     }
+    ],
+    "brands": [
+     {
+      "title": "مانگ",
+      "id": 15
+     },
+     {
+      "title": "توليد ",
+      "id": 1
+     }
+    ],
+    "tags": [
+     {
+      "title": "کیف",
+      "parentId": null,
+      "parent": null,
+      "tags": null,
+      "id": 6
+     },
+     {
+      "title": "شال",
+      "parentId": null,
+      "parent": null,
+      "tags": null,
+      "id": 5
+     }
+    ]
+   },
+   "totalPages": 0
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات با موفقیت دریافت شدند.",
+  "timestamp": 639286004997180779
+ }
+}

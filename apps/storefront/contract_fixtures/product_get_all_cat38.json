@@ -1,0 +1,339 @@
+{
+ "request": {
+  "method": "POST",
+  "base": "web",
+  "path": "Product/GetAll",
+  "body": {
+   "pageNumber": 1,
+   "pageSize": 3,
+   "filteredCategoryIds": [
+    38
+   ]
+  }
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": [
+    {
+     "id": 51205,
+     "slug": "کاپشن-چرم-یقه-کشبافت",
+     "categoryId": 38,
+     "parentCategoryId": 72,
+     "brandId": 15,
+     "productName": "كاپشن چرم يقه كشبافت",
+     "longDescriptionHtml": null,
+     "shortDescriptionHtml": null,
+     "mainImages": [
+      {
+       "id": 31007,
+       "mediaUrl": "https://cdn.mong.ir/9/webgeneral/cc328093-0a88-4d45-a275-3b8a6a9888ba.webp",
+       "isVideo": false,
+       "alternative": "",
+       "tooltipTitle": ""
+      },
+      {
+       "id": 31008,
+       "mediaUrl": "https://cdn.mong.ir/9/webgeneral/1d600d04-a8e3-405e-a37d-696ffd647ac6.webp",
+       "isVideo": false,
+       "alternative": "",
+       "tooltipTitle": ""
+      }
+     ],
+     "product_Base_Price": 99870000.0,
+     "product_base_reduction": 0.0,
+     "productBaseVat": 0.0,
+     "reductionPercent": 0.0,
+     "price": 99870000.0,
+     "priceAfterReduction": 99870000,
+     "reductionPrice": 0.0,
+     "details": [
+      {
+       "id": 1,
+       "hasColor": true,
+       "fixedList": [
+        {
+         "id": 33,
+         "name": "كرم",
+         "value": "FFFDD0",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 6,
+         "name": "مشكي",
+         "value": "000000",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 19,
+         "name": "زرشكي",
+         "value": "800020",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 5,
+         "name": "قهوه اي",
+         "value": "8B4513",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 10,
+         "name": "سورمه اي",
+         "value": "000080",
+         "score": 0,
+         "displayPriority": 0
+        }
+       ],
+       "title": "رنگ",
+       "items": [
+        {
+         "id": 33,
+         "parentId": null,
+         "name": "كرم",
+         "value": "FFFDD0",
+         "images": [
+          {
+           "id": 31003,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/c3c6c354-b34c-4598-99f2-bdf6733dead7.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 31004,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/835bacb9-0f86-455f-8276-b6132875d544.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          }
+         ],
+         "price": 99870000.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 8.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 0
+        },
+        {
+         "id": 6,
+         "parentId": null,
+         "name": "مشكي",
+         "value": "000000",
+         "images": [
+          {
+           "id": 31001,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/bed1df03-5602-4fda-a741-9dbd153e2982.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 31002,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/3b8892a9-2be7-4331-b5ab-0ec20a372e91.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          }
+         ],
+         "price": 99870000.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 3.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 0
+        },
+        {
+         "id": 19,
+         "parentId": null,
+         "name": "زرشكي",
+         "value": "800020",
+         "images": [
+          {
+           "id": 30995,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/0b7d0241-ec69-49b1-b787-49c37a813945.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 30996,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/d47a5a02-1df1-4529-9d0c-0a5d6c8ad24f.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          }
+         ],
+         "price": 99870000.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 3.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 0
+        },
+        {
+         "id": 5,
+         "parentId": null,
+         "name": "قهوه اي",
+         "value": "8B4513",
+         "images": [
+          {
+           "id": 30999,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/e9fcbd25-8d67-479c-9155-5ade69c6fd24.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 31000,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/c18f0be7-1613-405e-8cee-c3bcef576f09.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          }
+         ],
+         "price": 99870000.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 3.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 0
+        },
+        {
+         "id": 10,
+         "parentId": null,
+         "name": "سورمه اي",
+         "value": "000080",
+         "images": [
+          {
+           "id": 30997,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/cc328093-0a88-4d45-a275-3b8a6a9888ba.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 30998,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/1d600d04-a8e3-405e-a37d-696ffd647ac6.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          }
+         ],
+         "price": 99870000.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 6.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 0
+        }
+       ],
+       "defaultItemId": null
+      },
+      {
+       "id": 2,
+       "hasColor": false,
+       "fixedList": [
+        {
+         "id": 931,
+         "name": "FreeS",
+         "value": "FreeS",
+         "score": 0,
+         "displayPriority": 0
+        }
+       ],
+       "title": "سایز",
+       "items": [
+        {
+         "id": 931,
+         "parentId": 5,
+         "name": "FreeS",
+         "value": "FreeS",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 3.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 255857
+        },
+        {
+         "id": 931,
+         "parentId": 19,
+         "name": "FreeS",
+         "value": "FreeS",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 3.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 255858
+        },
+        {
+         "id": 931,
+         "parentId": 6,
+         "name": "FreeS",
+         "value": "FreeS",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 3.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 255856
+        },
+        {
+         "id": 931,
+         "parentId": 10,
+         "name": "FreeS",
+         "value": "FreeS",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 6.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 255860
+        },
+        {
+         "id": 931,
+         "parentId": 33,
+         "name": "FreeS",
+         "value": "FreeS",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 8.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 255859
+        }
+       ],
+       "defaultItemId": null
+      }
+     ],
+     "selectedProductId": null,
+     "sortingWeight": null
+    }
+   ],
+   "totalPages": 1
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات با موفقیت دریافت شدند.",
+  "timestamp": 639286005694289366
+ }
+}

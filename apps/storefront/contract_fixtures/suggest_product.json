@@ -1,0 +1,21 @@
+{
+ "request": {
+  "method": "POST",
+  "base": "web",
+  "path": "Product/SuggestProduct",
+  "body": {
+   "categoryId": 38,
+   "productId": 51205
+  }
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": [],
+   "totalPages": 0
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات با موفقیت دریافت شدند.",
+  "timestamp": 639286004985608003
+ }
+}

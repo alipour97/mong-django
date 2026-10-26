@@ -1,0 +1,51 @@
+{
+ "request": {
+  "method": "GET",
+  "base": "web",
+  "path": "Setting/GetDefaultTheme",
+  "body": null
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": {
+    "pages": {
+     "category": {
+      "id": 2,
+      "key": "mong"
+     },
+     "productList": {
+      "id": 3,
+      "key": "mong"
+     },
+     "productDetail": {
+      "id": 4,
+      "key": "mong"
+     },
+     "landing": {
+      "id": 1,
+      "key": "mong"
+     }
+    },
+    "color": {
+     "white": "#fff",
+     "whiteHover": " #F5F5F5",
+     "primary1": "#131313",
+     "primary2": "#956CAF",
+     "secondary": "#A7A5A5",
+     "border": "#D2D2D2",
+     "cta": "#711F7E",
+     "ctaHover": "#591664",
+     "ctaDisabled": " #E3D2E5",
+     "focus": "#FF0000",
+     "highlight": null,
+     "alert": "red"
+    }
+   },
+   "totalPages": 0
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات با موفقیت دریافت شدند.",
+  "timestamp": 639286005031798190
+ }
+}

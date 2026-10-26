@@ -94,6 +94,9 @@ TIME_ZONE = "Asia/Tehran"
 USE_I18N = True
 USE_TZ = True
 
+# Public site address, used to turn local media paths into absolute URLs
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://samian.mong.ir")
+
 # Static files (CSS, JavaScript, Images)
 # Matching Nginx config: location /static-backend/ -> /mnt/sda2/mong_samian/static/
 STATIC_URL = "/static-backend/"

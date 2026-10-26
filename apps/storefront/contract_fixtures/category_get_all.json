@@ -1,0 +1,704 @@
+{
+ "request": {
+  "method": "GET",
+  "base": "web",
+  "path": "Category/GetAll",
+  "body": null
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": {
+    "categories": [
+     {
+      "slug": "زنانه",
+      "title": "زنانه",
+      "inMainPage": true,
+      "parentId": null,
+      "displayPriority": 0,
+      "isOnlineActive": true,
+      "longDescriptionHtml": "<p style=\"text-align: right;\"><span style=\"font-family: Regular;\">چند نکته درباره انتخاب مونولوگ برای تست بازیگری  sssssssssssssssssssssssssssssss                                                                              چند نکته درباره انتخاب مونولوگ برای تست بازیگری</span></p>",
+      "shortDescriptionHtml": "چند نکته درباره انتخاب مونولوگ برای تست بازیگری",
+      "categories": [
+       {
+        "slug": "بالاتنه",
+        "title": "بالاتنه",
+        "inMainPage": true,
+        "parentId": 2,
+        "displayPriority": 0,
+        "isOnlineActive": true,
+        "longDescriptionHtml": null,
+        "shortDescriptionHtml": null,
+        "categories": [
+         {
+          "slug": "بالاتنه-جلیقه",
+          "title": "جليقه",
+          "inMainPage": false,
+          "parentId": 70,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [
+           {
+            "title": "تگ تست ۲",
+            "parentId": null,
+            "parent": null,
+            "tags": null,
+            "id": 3
+           }
+          ],
+          "id": 15
+         },
+         {
+          "slug": "تیشرت",
+          "title": "تيشرت",
+          "inMainPage": true,
+          "parentId": 70,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 16
+         },
+         {
+          "slug": "شومیز",
+          "title": "شوميز",
+          "inMainPage": false,
+          "parentId": 70,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [
+           {
+            "id": 30880,
+            "isVideo": false,
+            "mediaUrl": "https://cdn.mong.ir/9/webgeneral/76956a41-88b5-452d-8fbb-4715d5dbe276.webp",
+            "alternative": "",
+            "tooltipTitle": ""
+           }
+          ],
+          "tags": [],
+          "id": 17
+         },
+         {
+          "slug": "پیراهن",
+          "title": "پيراهن",
+          "inMainPage": true,
+          "parentId": 70,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 18
+         },
+         {
+          "slug": "تاپ",
+          "title": "تاپ",
+          "inMainPage": false,
+          "parentId": 70,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 19
+         },
+         {
+          "slug": "بالاتنه-بافت",
+          "title": "بافت",
+          "inMainPage": false,
+          "parentId": 70,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 20
+         },
+         {
+          "slug": "بلوز",
+          "title": "بلوز",
+          "inMainPage": false,
+          "parentId": 70,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 21
+         },
+         {
+          "slug": "تونيك",
+          "title": "تونيك",
+          "inMainPage": true,
+          "parentId": 70,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 424
+         },
+         {
+          "slug": "كراپ",
+          "title": "كراپ",
+          "inMainPage": true,
+          "parentId": 70,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 519
+         }
+        ],
+        "products": null,
+        "mediaAttachments": [
+         {
+          "id": 12717,
+          "isVideo": true,
+          "mediaUrl": "https://cdn.mong.ir/9/webgeneral/7c068516-32c7-4741-8319-cd224c58b1e6.mp4",
+          "alternative": "",
+          "tooltipTitle": ""
+         }
+        ],
+        "tags": [],
+        "id": 70
+       },
+       {
+        "slug": "پايين-تنه",
+        "title": "پايين تنه",
+        "inMainPage": true,
+        "parentId": 2,
+        "displayPriority": 0,
+        "isOnlineActive": true,
+        "longDescriptionHtml": null,
+        "shortDescriptionHtml": null,
+        "categories": [
+         {
+          "slug": "شلوار",
+          "title": "شلوار",
+          "inMainPage": false,
+          "parentId": 71,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": "تست شلوار",
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [
+           {
+            "id": 30892,
+            "isVideo": false,
+            "mediaUrl": "https://cdn.mong.ir/9/webgeneral/f08459db-9d48-4bcc-a66a-a4860de16fed.webp",
+            "alternative": "",
+            "tooltipTitle": ""
+           }
+          ],
+          "tags": [],
+          "id": 23
+         },
+         {
+          "slug": "دامن",
+          "title": "دامن",
+          "inMainPage": true,
+          "parentId": 71,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [
+           {
+            "id": 30893,
+            "isVideo": false,
+            "mediaUrl": "https://cdn.mong.ir/9/webgeneral/19aad25a-3423-4bc1-8579-ea8e2525d3dc.webp",
+            "alternative": "",
+            "tooltipTitle": ""
+           }
+          ],
+          "tags": [],
+          "id": 25
+         },
+         {
+          "slug": "جین",
+          "title": "جين",
+          "inMainPage": true,
+          "parentId": 71,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [
+           {
+            "id": 12742,
+            "isVideo": false,
+            "mediaUrl": "https://cdn.mong.ir/9/webgeneral/b6d89910-db74-4cb2-9b81-b0e6a434c49f.webp",
+            "alternative": "",
+            "tooltipTitle": ""
+           }
+          ],
+          "tags": [],
+          "id": 26
+         }
+        ],
+        "products": null,
+        "mediaAttachments": [
+         {
+          "id": 11408,
+          "isVideo": false,
+          "mediaUrl": "https://cdn.mong.ir/9/webgeneral/fc0bb24c-541f-4b25-ad06-aedcf45f0a68.webp",
+          "alternative": "",
+          "tooltipTitle": ""
+         }
+        ],
+        "tags": [],
+        "id": 71
+       },
+       {
+        "slug": "روپوش",
+        "title": "روپوش",
+        "inMainPage": true,
+        "parentId": 2,
+        "displayPriority": 0,
+        "isOnlineActive": true,
+        "longDescriptionHtml": null,
+        "shortDescriptionHtml": null,
+        "categories": [
+         {
+          "slug": "وست",
+          "title": "وست",
+          "inMainPage": true,
+          "parentId": 72,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 30
+         },
+         {
+          "slug": "پالتو",
+          "title": "پالتو",
+          "inMainPage": false,
+          "parentId": 72,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [
+           {
+            "id": 12726,
+            "isVideo": false,
+            "mediaUrl": "https://cdn.mong.ir/9/webgeneral/dbed1072-9176-4e75-8362-1101b8671aa7.webp",
+            "alternative": "",
+            "tooltipTitle": ""
+           }
+          ],
+          "tags": [],
+          "id": 32
+         },
+         {
+          "slug": "مانتو",
+          "title": "مانتو",
+          "inMainPage": false,
+          "parentId": 72,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [
+           {
+            "id": 30887,
+            "isVideo": false,
+            "mediaUrl": "https://cdn.mong.ir/9/webgeneral/438ac5b3-b867-40c5-b434-3a17e817fe7a.webp",
+            "alternative": "",
+            "tooltipTitle": ""
+           }
+          ],
+          "tags": [],
+          "id": 33
+         },
+         {
+          "slug": "کت",
+          "title": "كت",
+          "inMainPage": false,
+          "parentId": 72,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [
+           {
+            "id": 30888,
+            "isVideo": false,
+            "mediaUrl": "https://cdn.mong.ir/9/webgeneral/f565625c-5709-4305-a34e-ce130a5d6d36.webp",
+            "alternative": "",
+            "tooltipTitle": ""
+           }
+          ],
+          "tags": [],
+          "id": 34
+         },
+         {
+          "slug": "پافر",
+          "title": "پافر",
+          "inMainPage": true,
+          "parentId": 72,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 35
+         },
+         {
+          "slug": "بارانی",
+          "title": "باراني",
+          "inMainPage": false,
+          "parentId": 72,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 36
+         },
+         {
+          "slug": "روپوش-جلیقه",
+          "title": "جليقه",
+          "inMainPage": true,
+          "parentId": 72,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 37
+         },
+         {
+          "slug": "کاپشن",
+          "title": "كاپشن",
+          "inMainPage": false,
+          "parentId": 72,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 38
+         },
+         {
+          "slug": "روپوش-بافت",
+          "title": "بافت",
+          "inMainPage": false,
+          "parentId": 72,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [
+           {
+            "id": 11822,
+            "isVideo": false,
+            "mediaUrl": "https://cdn.mong.ir/8585/webgeneral/8a51154e-88ea-4354-9c65-e0c37c0f40a3.webp",
+            "alternative": "",
+            "tooltipTitle": ""
+           }
+          ],
+          "tags": [],
+          "id": 39
+         },
+         {
+          "slug": "بامبر",
+          "title": "بامبر",
+          "inMainPage": true,
+          "parentId": 72,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 421
+         },
+         {
+          "slug": "ژيله",
+          "title": "ژيله",
+          "inMainPage": false,
+          "parentId": 72,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 439
+         },
+         {
+          "slug": "ژاكت",
+          "title": "ژاكت",
+          "inMainPage": true,
+          "parentId": 72,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 441
+         }
+        ],
+        "products": null,
+        "mediaAttachments": [
+         {
+          "id": 10712,
+          "isVideo": false,
+          "mediaUrl": "https://cdn.mong.ir/9/webgeneral/4c788ee7-911e-4feb-9f7c-6d56c76f6ece.webp",
+          "alternative": "",
+          "tooltipTitle": ""
+         }
+        ],
+        "tags": [],
+        "id": 72
+       },
+       {
+        "slug": "زنانه-کیف",
+        "title": "كيف",
+        "inMainPage": true,
+        "parentId": 2,
+        "displayPriority": 0,
+        "isOnlineActive": true,
+        "longDescriptionHtml": null,
+        "shortDescriptionHtml": null,
+        "categories": [
+         {
+          "slug": "کیف",
+          "title": "كيف",
+          "inMainPage": true,
+          "parentId": 74,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [
+           {
+            "id": 29190,
+            "isVideo": false,
+            "mediaUrl": "https://cdn.mong.ir/9/webgeneral/54965c52-58ce-4412-a7c7-484ac302f096.webp",
+            "alternative": "",
+            "tooltipTitle": ""
+           }
+          ],
+          "tags": [],
+          "id": 93
+         }
+        ],
+        "products": null,
+        "mediaAttachments": [
+         {
+          "id": 30885,
+          "isVideo": false,
+          "mediaUrl": "https://cdn.mong.ir/9/webgeneral/727474a2-60e5-4d58-887d-7f222b70bfe7.webp",
+          "alternative": "",
+          "tooltipTitle": ""
+         }
+        ],
+        "tags": [],
+        "id": 74
+       },
+       {
+        "slug": "ست",
+        "title": "ست",
+        "inMainPage": false,
+        "parentId": 2,
+        "displayPriority": 0,
+        "isOnlineActive": true,
+        "longDescriptionHtml": null,
+        "shortDescriptionHtml": null,
+        "categories": [
+         {
+          "slug": "بلوز-و-دامن",
+          "title": "بلوز و دامن",
+          "inMainPage": true,
+          "parentId": 78,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 284
+         },
+         {
+          "slug": "كت-و-شلوار",
+          "title": "كت و شلوار",
+          "inMainPage": true,
+          "parentId": 78,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 285
+         },
+         {
+          "slug": "بلوز-و-شلوار",
+          "title": "بلوز و شلوار",
+          "inMainPage": true,
+          "parentId": 78,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 286
+         },
+         {
+          "slug": "تيشرت-و-شلوار",
+          "title": "تيشرت و شلوار",
+          "inMainPage": true,
+          "parentId": 78,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 287
+         },
+         {
+          "slug": "ژيله-و-شلوار",
+          "title": "ژيله و شلوار",
+          "inMainPage": true,
+          "parentId": 78,
+          "displayPriority": 0,
+          "isOnlineActive": true,
+          "longDescriptionHtml": null,
+          "shortDescriptionHtml": null,
+          "categories": null,
+          "products": null,
+          "mediaAttachments": [],
+          "tags": [],
+          "id": 475
+         }
+        ],
+        "products": null,
+        "mediaAttachments": [],
+        "tags": [],
+        "id": 78
+       }
+      ],
+      "products": null,
+      "mediaAttachments": [
+       {
+        "id": 10806,
+        "isVideo": false,
+        "mediaUrl": "https://cdn.mong.ir/9/webgeneral/3aff39a8-0ccd-41dc-b18a-269a9a76b511.webp",
+        "alternative": "تست",
+        "tooltipTitle": "زنانه"
+       }
+      ],
+      "tags": [
+       {
+        "title": "تست 2",
+        "parentId": null,
+        "parent": null,
+        "tags": null,
+        "id": 4
+       },
+       {
+        "title": "تگ تست ۲",
+        "parentId": null,
+        "parent": null,
+        "tags": null,
+        "id": 3
+       }
+      ],
+      "id": 2
+     }
+    ],
+    "banners": [],
+    "sliders": []
+   },
+   "totalPages": 0
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات با موفقیت دریافت شدند.",
+  "timestamp": 639285406831359352
+ }
+}

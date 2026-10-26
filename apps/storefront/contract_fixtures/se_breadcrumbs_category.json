@@ -1,0 +1,27 @@
+{
+ "request": {
+  "method": "GET",
+  "base": "admin",
+  "path": "SearchEngine/category/%D8%B2%D9%86%D8%A7%D9%86%D9%87/breadcrumbs",
+  "body": null
+ },
+ "status": 200,
+ "response": {
+  "context": "https://schema.org/",
+  "type": "BreadcrumbList",
+  "itemListElement": [
+   {
+    "type": "ListItem",
+    "position": 1,
+    "name": "خانه",
+    "url": "/"
+   },
+   {
+    "type": "ListItem",
+    "position": 2,
+    "name": "زنانه",
+    "url": "/products-category/زنانه"
+   }
+  ]
+ }
+}

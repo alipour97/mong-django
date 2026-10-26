@@ -1,0 +1,21 @@
+{
+ "request": {
+  "method": "GET",
+  "base": "web",
+  "path": "Comment/GetByProductId/51205",
+  "body": null
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": {
+    "productComments": [],
+    "averageScore": null
+   },
+   "totalPages": 0
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات با موفقیت دریافت شد.",
+  "timestamp": 639286004994860773
+ }
+}

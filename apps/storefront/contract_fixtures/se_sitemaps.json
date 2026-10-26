@@ -1,0 +1,2800 @@
+{
+ "request": {
+  "method": "GET",
+  "base": "admin",
+  "path": "SearchEngine/SiteMaps",
+  "body": null
+ },
+ "status": 200,
+ "response": {
+  "blog": {
+   "entityType": "blog",
+   "lastCacheTime": "2026-10-26T02:34:30.5024509+00:00",
+   "items": []
+  },
+  "product": {
+   "entityType": "product",
+   "lastCacheTime": "2026-10-26T02:34:28.9395944+00:00",
+   "items": [
+    {
+     "urlLocation": "لينن-زارا-شلال-دوزي",
+     "lastModified": "2026-08-09T17:11:22.5366667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "آيدا-گارفيلد",
+     "lastModified": "2026-08-09T17:11:22.4966667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-ليوسل-دوجيب-تك-دكمه",
+     "lastModified": "2026-08-09T17:11:22.49+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-زيپي-سيوك",
+     "lastModified": "2026-08-09T17:11:22.48+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-ليوسل-قد85",
+     "lastModified": "2026-08-09T17:11:22.41+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دامن-هوران-913",
+     "lastModified": "2026-08-09T17:11:22.4033333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دامن-سوپر-كبري",
+     "lastModified": "2026-08-09T17:11:22.3966667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-وايد-كوتاه",
+     "lastModified": "2026-08-09T17:11:22.39+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "اوورال",
+     "lastModified": "2026-08-09T17:11:22.3833333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بلور-كراپ-فنريپ-جديد",
+     "lastModified": "2026-08-09T17:11:22.3766667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بلوز-يقه-گرد-فنريپ",
+     "lastModified": "2026-08-09T17:11:22.37+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "تاپ-يقه-گرد-فنريپ",
+     "lastModified": "2026-08-09T17:11:22.3633333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-دو-جيب-راه-راه-شيشه-اي",
+     "lastModified": "2026-08-09T17:11:22.3466667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "وست-منچستر-لينوسل",
+     "lastModified": "2026-08-09T17:11:22.3366667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "موج-2",
+     "lastModified": "2026-08-09T17:11:22.3266667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-لينن-دي-واش-كمر-چرم",
+     "lastModified": "2026-08-09T17:11:22.24+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كراپ-سيلك-زيپي",
+     "lastModified": "2026-08-09T17:11:22.2166667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دلنيا",
+     "lastModified": "2026-08-09T17:11:22.1966667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "درتا",
+     "lastModified": "2026-08-09T17:11:22.19+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ياسا",
+     "lastModified": "2026-08-09T17:11:22.17+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مهرسا",
+     "lastModified": "2026-08-09T17:11:22.1333333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-دمپا758",
+     "lastModified": "2026-08-09T17:11:22.1266667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوارکرپ-437",
+     "lastModified": "2026-08-09T17:11:22.12+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار662",
+     "lastModified": "2026-08-09T17:11:22.1166667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دامن-تليا",
+     "lastModified": "2026-08-09T17:11:22.1+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-كمر-پيلي",
+     "lastModified": "2026-08-09T17:11:22.0733333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-ويانا",
+     "lastModified": "2026-08-09T17:11:22.05+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-دو-جيب-تك-دكمه-هرمس",
+     "lastModified": "2026-08-09T17:11:22.0433333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دامن-دايار",
+     "lastModified": "2026-08-09T17:11:22.0366667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-ليوسل-آستين-بغل-دكمه",
+     "lastModified": "2026-08-09T17:11:22.02+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-ليوسل-كجراه-جيب-از-رو",
+     "lastModified": "2026-08-09T17:11:22.0133333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-از-بالا-گشاد-پري",
+     "lastModified": "2026-08-09T17:11:21.9733333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-یشيل",
+     "lastModified": "2026-08-09T17:11:21.95+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-كرپ-دمپا-گيپور",
+     "lastModified": "2026-08-09T17:11:21.8566667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كتان-لمه-پاپيون-سميرا",
+     "lastModified": "2026-08-09T17:11:21.8433333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-جين-جلو-دوخت",
+     "lastModified": "2026-08-09T17:11:21.8033333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ژواني",
+     "lastModified": "2026-08-09T17:11:21.7233333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مهري",
+     "lastModified": "2026-08-09T17:11:21.6233333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ژانيا-2",
+     "lastModified": "2026-08-09T17:11:21.6066667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "وست-جليقه-شلوار-راز",
+     "lastModified": "2026-08-09T17:11:21.6+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "روژبين",
+     "lastModified": "2026-08-09T17:11:21.5933333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "نغمه",
+     "lastModified": "2026-08-09T17:11:21.5766667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "تاپ-ترمه-بهار",
+     "lastModified": "2026-08-09T17:11:21.5633333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ست-پيراهن-و-كت-آوان",
+     "lastModified": "2026-08-09T17:11:21.5433333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ايلياز",
+     "lastModified": "2026-08-09T17:11:21.53+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "رستا",
+     "lastModified": "2026-08-09T17:11:21.5233333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "سحرگل",
+     "lastModified": "2026-08-09T17:11:21.5166667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "جين-وايد-90",
+     "lastModified": "2026-08-09T17:11:21.48+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "جين-وايد-استريت",
+     "lastModified": "2026-08-09T17:11:21.4733333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ايلدا-2",
+     "lastModified": "2026-08-09T17:11:21.4666667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ras",
+     "lastModified": "2026-08-09T17:11:21.4233333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "hobo",
+     "lastModified": "2026-08-09T17:11:21.42+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "رشا",
+     "lastModified": "2026-08-09T17:11:21.4133333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بالسا-طرح-برگي",
+     "lastModified": "2026-08-09T17:11:21.4066667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "breeze",
+     "lastModified": "2026-08-09T17:11:21.4+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "noeir",
+     "lastModified": "2026-08-09T17:11:21.3933333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "تونيك-يقه-ايستاده-آستين-كيمونو",
+     "lastModified": "2026-08-09T17:11:21.3833333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بلوز-موهر-يقه-هفت-خرجكار-كشباف",
+     "lastModified": "2026-08-09T17:11:21.3766667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مازراتي-بگ",
+     "lastModified": "2026-08-09T17:11:21.37+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كرپ-مجلسي-دانژه",
+     "lastModified": "2026-08-09T17:11:21.3466667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "تِدي-بنتون",
+     "lastModified": "2026-08-09T17:11:21.33+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "يقه-انگليسي-دو-دكمه-فوتر-جناقي",
+     "lastModified": "2026-08-09T17:11:21.2666667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "vela",
+     "lastModified": "2026-08-09T17:11:21.25+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "luma",
+     "lastModified": "2026-08-09T17:11:21.2333333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-adel-889",
+     "lastModified": "2026-08-09T17:11:21.1733333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "وست-فوتر-جناقي",
+     "lastModified": "2026-08-09T17:11:21.1+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دامن-اسرا-3",
+     "lastModified": "2026-08-09T17:11:21.0933333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-بزياق-دو-سگك",
+     "lastModified": "2026-08-09T17:11:21.0566667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-زيپي-پوست-موهر",
+     "lastModified": "2026-08-09T17:11:21.01+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-سولين",
+     "lastModified": "2026-08-09T17:11:21.0033333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "روما",
+     "lastModified": "2026-08-09T17:11:20.9966667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "باراني-سگك-دار-شنل-دار",
+     "lastModified": "2026-08-09T17:11:20.9766667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پريزاد",
+     "lastModified": "2026-08-09T17:11:20.95+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پليور-يقه-برگردان",
+     "lastModified": "2026-08-09T17:11:20.9333333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دايان-كوچك",
+     "lastModified": "2026-08-09T17:11:20.91+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "فرنيكا-كوچك",
+     "lastModified": "2026-08-09T17:11:20.9033333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دايان-بزرگ",
+     "lastModified": "2026-08-09T17:11:20.86+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "نايريكا-شنل",
+     "lastModified": "2026-08-09T17:11:20.85+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "فرنيكا-بزرگ",
+     "lastModified": "2026-08-09T17:11:20.8266667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "جليقه-جيمي-كِي",
+     "lastModified": "2026-08-09T17:11:20.82+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-لايوسل-بامبو-405",
+     "lastModified": "2026-08-09T17:11:20.8066667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-مورگان-پيلي-دار",
+     "lastModified": "2026-08-09T17:11:20.77+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-دو-جيب-شانتون",
+     "lastModified": "2026-08-09T17:11:20.73+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-بارولي",
+     "lastModified": "2026-08-09T17:11:20.71+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ساما",
+     "lastModified": "2026-08-09T17:11:20.6833333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "هورسا",
+     "lastModified": "2026-08-09T17:11:20.6766667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "رابين",
+     "lastModified": "2026-08-09T17:11:20.6566667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "اوديسه-دمسه2",
+     "lastModified": "2026-08-09T17:11:20.6233333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-لينن-ويسكوز-پشت-پيله",
+     "lastModified": "2026-08-09T17:11:20.61+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دامن-ريون-تك-پيله",
+     "lastModified": "2026-08-09T17:11:20.5966667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-لينن-تركيب-پشت-فيلتو",
+     "lastModified": "2026-08-09T17:11:20.58+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "آينور",
+     "lastModified": "2026-08-09T17:11:20.56+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-تنسل-بگ",
+     "lastModified": "2026-08-09T17:11:20.5433333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "تاپ-مهرانا",
+     "lastModified": "2026-08-09T17:11:20.54+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-لينن-شانتون",
+     "lastModified": "2026-08-09T17:11:20.5266667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-لينن-جيب-گلدوزي-پرنده",
+     "lastModified": "2026-08-09T17:11:20.5166667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-پِري-پشت-پيله",
+     "lastModified": "2026-08-09T17:11:20.5033333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ماهتا",
+     "lastModified": "2026-08-09T17:11:20.46+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "آيماه",
+     "lastModified": "2026-08-09T17:11:20.4566667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "روژناك",
+     "lastModified": "2026-08-09T17:11:20.44+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-افروز",
+     "lastModified": "2026-08-09T17:11:20.4333333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مهياس",
+     "lastModified": "2026-08-09T17:11:20.4166667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-بِزَياق-وسط-چرم",
+     "lastModified": "2026-08-09T17:11:20.3966667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-كريستال-پشت-مثلث",
+     "lastModified": "2026-08-09T17:11:20.39+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-پِري-فري-سايز",
+     "lastModified": "2026-08-09T17:11:20.3833333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ريحان-2",
+     "lastModified": "2026-08-09T17:11:20.3233333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "نونا-3",
+     "lastModified": "2026-08-09T17:11:20.29+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "سامبا-2",
+     "lastModified": "2026-08-09T17:11:20.2766667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-ليوسل-بامبو",
+     "lastModified": "2026-08-09T17:11:20.27+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-كتان",
+     "lastModified": "2026-08-09T17:11:20.24+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "آدريانا-نیو",
+     "lastModified": "2026-08-09T17:11:20.2366667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "گاباردين-قد-90-2",
+     "lastModified": "2026-08-09T17:11:20.22+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-گاباردین-بغل-چاکدار",
+     "lastModified": "2026-08-09T17:11:20.2066667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "جين-بگي",
+     "lastModified": "2026-08-09T17:11:20.1866667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-ساترن-730",
+     "lastModified": "2026-08-09T17:11:20.11+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "گاباردين-راسته-كمرسرخود-120",
+     "lastModified": "2026-08-09T17:11:20.05+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-جین-راسته-ترک",
+     "lastModified": "2026-08-09T17:11:20.03+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلواركمركش-كلاسيك-ييلديز-905",
+     "lastModified": "2026-08-09T17:11:20.0266667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "گاباردين-دمپا-4",
+     "lastModified": "2026-08-09T17:11:20.01+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مازراتي-1",
+     "lastModified": "2026-08-09T17:11:19.9966667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پشت-پليسه",
+     "lastModified": "2026-08-09T17:11:19.99+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "جين-دمپا-3",
+     "lastModified": "2026-08-09T17:11:19.9533333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-مازراتی-دمپا",
+     "lastModified": "2026-08-09T17:11:19.9466667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-كتان-نينو",
+     "lastModified": "2026-08-09T17:11:19.94+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-گاباردين848",
+     "lastModified": "2026-08-09T17:11:19.9366667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "سايدا-نیو",
+     "lastModified": "2026-08-09T17:11:19.9233333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "باليسا-new",
+     "lastModified": "2026-08-09T17:11:19.9166667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "نيلي1",
+     "lastModified": "2026-08-09T17:11:19.91+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "لينن-شادي",
+     "lastModified": "2026-08-09T17:11:19.9+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بلوز-يقه-خشتي-لاكرا-ويسكوز",
+     "lastModified": "2026-08-09T17:11:19.8933333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "تونيك-حلقه-كشباف-ويسكوز",
+     "lastModified": "2026-08-09T17:11:19.8866667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "تاپ-ويسكوز-يقه-خشتي-تَرك-دار",
+     "lastModified": "2026-08-09T17:11:19.88+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بلوز-يقه-هفت-آستين-كوتاه-ويسكوز",
+     "lastModified": "2026-08-09T17:11:19.8733333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مانتو-دادلی",
+     "lastModified": "2026-08-09T17:11:19.8433333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-دیبا",
+     "lastModified": "2026-08-09T17:11:19.6266667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-جين-زارا",
+     "lastModified": "2026-08-09T17:11:19.3933333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-لينن-4",
+     "lastModified": "2026-08-09T17:11:19.3633333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مانتو-لینن-ماکسی-اسلپ-آنزیم",
+     "lastModified": "2026-08-09T17:11:19.35+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مهروا-mehrva",
+     "lastModified": "2026-08-09T17:11:19.3366667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-لینن-نیو",
+     "lastModified": "2026-08-09T17:11:19.32+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-کارینا",
+     "lastModified": "2026-08-09T17:11:19.3066667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "اوديسه-دمسه",
+     "lastModified": "2026-08-09T17:11:19.2933333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مانتو-یقه-انگلیسی-دو-دکمه",
+     "lastModified": "2026-08-09T17:11:19.2733333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-آستردار-فريال-برجسته",
+     "lastModified": "2026-08-09T17:11:19.2666667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-دو-جيب-فوتر-اسپرت",
+     "lastModified": "2026-08-09T17:11:19.2533333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-لینن-اسلپ-کارینا",
+     "lastModified": "2026-08-09T17:11:19.2466667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-كرپ-از-بالا-گشاد-755",
+     "lastModified": "2026-08-09T17:11:19.2333333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-گاباردین-کمرمخمل-ونوس",
+     "lastModified": "2026-08-09T17:11:19.2133333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-لیندا3",
+     "lastModified": "2026-08-09T17:11:19.1766667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "توسكا",
+     "lastModified": "2026-08-09T17:11:19.17+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بافت-یقه-هفت-آکریل-پنبه",
+     "lastModified": "2026-08-09T17:11:19.16+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ولنتينا",
+     "lastModified": "2026-08-09T17:11:19.1533333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-راسته-765",
+     "lastModified": "2026-08-09T17:11:19.14+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مانتو-لینن-بامبو-یقه-ارشال-دیپلمات",
+     "lastModified": "2026-08-09T17:11:19.1333333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ست-شومیز-و-دامن",
+     "lastModified": "2026-08-02T14:52:30.0733333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دامن-و-شومیز-سویوک",
+     "lastModified": "2026-07-29T19:14:53.0533333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-گاباردين-جلو-دوخت-دار-711",
+     "lastModified": "2026-07-29T12:29:17.76+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مازراتي-قد-90",
+     "lastModified": "2026-07-28T12:53:03.39+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "سه-دكمه-خط-محو-155",
+     "lastModified": "2026-07-27T19:00:38.43+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "جين-كمركش-راسته-3",
+     "lastModified": "2026-07-27T19:00:38.4166667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شومیز-پِری-پلاس-زیر-تریکو",
+     "lastModified": "2026-07-27T19:00:37.34+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-lyo-460",
+     "lastModified": "2026-07-27T19:00:30.2533333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كوك-دوزي",
+     "lastModified": "2026-07-27T15:46:20.5766667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ژیله-استردار-امبوردی",
+     "lastModified": "2026-10-26T02:34:30.4791297+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-پوست",
+     "lastModified": "2026-10-26T02:34:30.4791299+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-کلاه-دار",
+     "lastModified": "2026-10-26T02:34:30.47913+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-فوتر-زیپی-جناقی",
+     "lastModified": "2026-10-26T02:34:30.4791302+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-دو-جیب-جیر",
+     "lastModified": "2026-10-26T02:34:30.4791305+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-پوست-راه-راه",
+     "lastModified": "2026-10-26T02:34:30.4791307+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پلیور-راه-راه-کد-155",
+     "lastModified": "2026-10-26T02:34:30.479131+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "سارافون-جودون-یقه-5-سانت",
+     "lastModified": "2026-10-26T02:34:30.4791312+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پلیور-استین-سه-ربع-کد-126",
+     "lastModified": "2026-10-26T02:34:30.4791314+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پاریس-2",
+     "lastModified": "2026-10-26T02:34:30.4791316+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "فوتر-کجراه-لندن",
+     "lastModified": "2026-10-26T02:34:30.4791319+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "فانیذ-ژاکارد",
+     "lastModified": "2026-10-26T02:34:30.4791321+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-یقه-برگردان-هرمس",
+     "lastModified": "2026-10-26T02:34:30.4791323+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-بزیاق-بغل-چاک-405",
+     "lastModified": "2026-10-26T02:34:30.4791324+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ژاکارد-d-استردار",
+     "lastModified": "2026-10-26T02:34:30.4791326+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-جین-دو-جیب-سایزبندی",
+     "lastModified": "2026-10-26T02:34:30.4791327+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-هرمس-پشت-چاک-یقه-انگلیسی",
+     "lastModified": "2026-10-26T02:34:30.4791329+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-هرمس-پیش-چاک-تمام-استر",
+     "lastModified": "2026-10-26T02:34:30.479133+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "وست-جین-ستاره",
+     "lastModified": "2026-10-26T02:34:30.4791332+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "جین-کثیف-دوزی",
+     "lastModified": "2026-10-26T02:34:30.4791334+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-مخمل-ترک",
+     "lastModified": "2026-10-26T02:34:30.4791335+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بارانی-کوتاه-سانتانا-4-دکمه",
+     "lastModified": "2026-10-26T02:34:30.4791337+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بامبر-جکت-sevia",
+     "lastModified": "2026-10-26T02:34:30.4791338+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بامبر-گیپوری",
+     "lastModified": "2026-10-26T02:34:30.4791341+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پلیور-تمام-زیپ",
+     "lastModified": "2026-10-26T02:34:30.4791342+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بلوز-یقه-گرد-استین-بلند-فنریپ-فول-لاکرا-زمستانی",
+     "lastModified": "2026-10-26T02:34:30.4791344+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پلیور-ژور",
+     "lastModified": "2026-10-26T02:34:30.4791346+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پلوشرت-کراپ-v-neck",
+     "lastModified": "2026-10-26T02:34:30.4791348+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پلیور-کراپ-نیم-زیپ",
+     "lastModified": "2026-10-26T02:34:30.479135+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بلوز-گپ-یقه-گرد-و-هفت-استین-پیله-179",
+     "lastModified": "2026-10-26T02:34:30.4791353+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "تونیک-جودون-فَلسی-179",
+     "lastModified": "2026-10-26T02:34:30.4791355+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دامن-موهر-0310002578",
+     "lastModified": "2026-10-26T02:34:30.4791358+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کراپ-موهر",
+     "lastModified": "2026-10-26T02:34:30.479136+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-دکمه",
+     "lastModified": "2026-10-26T02:34:30.4791361+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پافر-سه-زیپ-زارا",
+     "lastModified": "2026-10-26T02:34:30.4791363+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کاپشن-چرم-یقه-کشبافت",
+     "lastModified": "2026-10-26T02:34:30.4791364+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کتان-ترکیبی-جلو-زیپی",
+     "lastModified": "2026-10-26T02:34:30.4791372+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بامبر-جير-زارا",
+     "lastModified": "2026-08-09T17:26:46.5+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "سولنا",
+     "lastModified": "2026-08-09T17:11:22.5433333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ژيله-لايوسل",
+     "lastModified": "2026-08-09T17:11:22.53+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "1شلوار-كمر-پيلي",
+     "lastModified": "2026-08-09T17:11:22.5266667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-گيلاس",
+     "lastModified": "2026-08-09T17:11:22.52+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "1لينن-دو-جيب",
+     "lastModified": "2026-08-09T17:11:22.5133333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "لايوسل-جيب-فيلتاب",
+     "lastModified": "2026-08-09T17:11:22.51+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-ice-cream",
+     "lastModified": "2026-08-09T17:11:22.5033333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-لينن-جناقي",
+     "lastModified": "2026-08-09T17:11:22.46+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بامبر-پري",
+     "lastModified": "2026-08-09T17:11:22.4366667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-ليوسل-تك-دكمه",
+     "lastModified": "2026-08-09T17:11:22.4166667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دامن-سيلك-بغل-زيپ",
+     "lastModified": "2026-08-09T17:11:22.36+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-بلند-نواردار-اسپرت",
+     "lastModified": "2026-08-09T17:11:22.3533333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "جلو-بسته-هاوايي",
+     "lastModified": "2026-08-09T17:11:22.34+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "جلو-بسته-لينن",
+     "lastModified": "2026-08-09T17:11:22.33+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-يقه-مردانه-كرپ-مُدال-سيلك",
+     "lastModified": "2026-08-09T17:11:22.32+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "لينن-مغزي-دوزي",
+     "lastModified": "2026-08-09T17:11:22.3133333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "لينن-ريون-زارا",
+     "lastModified": "2026-08-09T17:11:22.3066667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-لينن-راه-راه",
+     "lastModified": "2026-08-09T17:11:22.3+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-كرپ-مرويجت",
+     "lastModified": "2026-08-09T17:11:22.2966667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دامن-شلواري-كاترين",
+     "lastModified": "2026-08-09T17:11:22.29+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-لينن-تركيبي",
+     "lastModified": "2026-08-09T17:11:22.2833333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "جليقه-ترلان",
+     "lastModified": "2026-08-09T17:11:22.2733333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "لينوسل-پاپيون",
+     "lastModified": "2026-08-09T17:11:22.2666667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "آيماز",
+     "lastModified": "2026-08-09T17:11:22.26+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "وست-سيلك-زيپ-دار",
+     "lastModified": "2026-08-09T17:11:22.21+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "تاپ-حلقه-اي-شيشه-اي",
+     "lastModified": "2026-08-09T17:11:22.2033333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "آدلا",
+     "lastModified": "2026-08-09T17:11:22.1833333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ميشا2",
+     "lastModified": "2026-08-09T17:11:22.1466667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "سيناز",
+     "lastModified": "2026-08-09T17:11:22.1433333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "سِت-تاپ-و-شلوار-سيلوانا",
+     "lastModified": "2026-08-09T17:11:22.1066667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-هرمس-يقه-برگردان",
+     "lastModified": "2026-08-09T17:11:22.0933333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-نويار",
+     "lastModified": "2026-08-09T17:11:22.09+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دامن-روشا",
+     "lastModified": "2026-08-09T17:11:22.0833333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "موج-لينن",
+     "lastModified": "2026-08-09T17:11:22.07+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "وست-مهان",
+     "lastModified": "2026-08-09T17:11:22.0633333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "3كت-ولنتينا",
+     "lastModified": "2026-08-09T17:11:22.0566667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-دايانا",
+     "lastModified": "2026-08-09T17:11:22.03+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-دايانا-ديپلمات",
+     "lastModified": "2026-08-09T17:11:22.0266667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "سِت-كت-و-شلوار-جانا",
+     "lastModified": "2026-08-09T17:11:22.0066667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مانتو-اسماء-2",
+     "lastModified": "2026-08-09T17:11:22+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "گل-يخ",
+     "lastModified": "2026-08-09T17:11:21.9933333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-جناقي-زيپي",
+     "lastModified": "2026-08-09T17:11:21.9866667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-جناقي-ست-كراپ",
+     "lastModified": "2026-08-09T17:11:21.9566667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-آسا",
+     "lastModified": "2026-08-09T17:11:21.9433333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-جناغي-ساسون-دار",
+     "lastModified": "2026-08-09T17:11:21.9366667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-جين-سافت",
+     "lastModified": "2026-08-09T17:11:21.93+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دامن-بِزَياق-پيله-دار",
+     "lastModified": "2026-08-09T17:11:21.9233333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-چهار-دكمه-ديپلمات",
+     "lastModified": "2026-08-09T17:11:21.92+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-ژاكارد-طرح-روبان",
+     "lastModified": "2026-08-09T17:11:21.9133333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-جين-گلدوزي",
+     "lastModified": "2026-08-09T17:11:21.8966667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-كراپ-دو-جيب",
+     "lastModified": "2026-08-09T17:11:21.8833333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-كراپ-ساتن-دكمه-صدفي",
+     "lastModified": "2026-08-09T17:11:21.8766667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-تك-دكمه-طلايي",
+     "lastModified": "2026-08-09T17:11:21.87+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-چاپي-جلو-منگوله",
+     "lastModified": "2026-08-09T17:11:21.8633333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-كريسمس",
+     "lastModified": "2026-08-09T17:11:21.85+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پرستو-new",
+     "lastModified": "2026-08-09T17:11:21.8366667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-كرپ-كج-راه-كمر-پيله-دار",
+     "lastModified": "2026-08-09T17:11:21.83+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-كوپرا-دو-بندي",
+     "lastModified": "2026-08-09T17:11:21.8266667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-كرپ-ميله-اي-بگ",
+     "lastModified": "2026-08-09T17:11:21.82+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-كنزو-مام-استايل",
+     "lastModified": "2026-08-09T17:11:21.8133333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-هرمس-آستين-گلدوزي-ستاره",
+     "lastModified": "2026-08-09T17:11:21.8066667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كرپ-كج-راه-يقه-گلدوزي",
+     "lastModified": "2026-08-09T17:11:21.7966667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-هرمس-دو-جيب-گلدوزي",
+     "lastModified": "2026-08-09T17:11:21.79+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-بزياق-پشت-دكمه-آستين-راه-راه",
+     "lastModified": "2026-08-09T17:11:21.7833333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-كرپ-كج-راه-تركيبي-گلدوزي",
+     "lastModified": "2026-08-09T17:11:21.7766667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-تك-گاباردين-بزياق",
+     "lastModified": "2026-08-09T17:11:21.76+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-ساتن-زارا-پايين-كش",
+     "lastModified": "2026-08-09T17:11:21.75+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-ساتن-زارا-فري-سايز",
+     "lastModified": "2026-08-09T17:11:21.74+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-ساتن-زارا-جلو-گره-اي",
+     "lastModified": "2026-08-09T17:11:21.73+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-آسو-پليكان",
+     "lastModified": "2026-08-09T17:11:21.72+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-دليار2",
+     "lastModified": "2026-08-09T17:11:21.7033333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-و-شلوار-دليار2",
+     "lastModified": "2026-08-09T17:11:21.6866667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "لارين",
+     "lastModified": "2026-08-09T17:11:21.68+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ميسا-طرح-موج",
+     "lastModified": "2026-08-09T17:11:21.6666667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ميسا-طرح-گل",
+     "lastModified": "2026-08-09T17:11:21.65+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "موكات4",
+     "lastModified": "2026-08-09T17:11:21.6433333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دلارا",
+     "lastModified": "2026-08-09T17:11:21.62+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ميشا",
+     "lastModified": "2026-08-09T17:11:21.61+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "نهاله",
+     "lastModified": "2026-08-09T17:11:21.5866667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "eva",
+     "lastModified": "2026-08-09T17:11:21.58+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "آرينا-45260",
+     "lastModified": "2026-08-09T17:11:21.57+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-ترمه-بهار",
+     "lastModified": "2026-08-09T17:11:21.5566667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "گلنوش",
+     "lastModified": "2026-08-09T17:11:21.55+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "خوشه-3",
+     "lastModified": "2026-08-09T17:11:21.5366667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "سوسن",
+     "lastModified": "2026-08-09T17:11:21.51+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "نونا-2",
+     "lastModified": "2026-08-09T17:11:21.4966667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "سلنا-ارگانزا",
+     "lastModified": "2026-08-09T17:11:21.46+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-آتريسا",
+     "lastModified": "2026-08-09T17:11:21.4533333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "گلرخ",
+     "lastModified": "2026-08-09T17:11:21.45+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "فرزان",
+     "lastModified": "2026-08-09T17:11:21.4433333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "رازلي",
+     "lastModified": "2026-08-09T17:11:21.4366667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "رويش",
+     "lastModified": "2026-08-09T17:11:21.43+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بلوز-فَنريپ-يقه-ايستاده",
+     "lastModified": "2026-08-09T17:11:21.39+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بلوز-موهر-يقه-ايستاده-خرجكار-كشباف",
+     "lastModified": "2026-08-09T17:11:21.3633333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "يقه-هفت-موهر-كشباف",
+     "lastModified": "2026-08-09T17:11:21.3566667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ندا",
+     "lastModified": "2026-08-09T17:11:21.35+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پافر-دو-دكمه",
+     "lastModified": "2026-08-09T17:11:21.3366667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-خزان",
+     "lastModified": "2026-08-09T17:11:21.3233333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ماهرو-2",
+     "lastModified": "2026-08-09T17:11:21.3166667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "لارا-4",
+     "lastModified": "2026-08-09T17:11:21.31+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بامبر-فوتر-دوتن-يقه-گرد",
+     "lastModified": "2026-08-09T17:11:21.3+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ليليوم-3",
+     "lastModified": "2026-08-09T17:11:21.2933333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ژيله-پرادا-بندينگ",
+     "lastModified": "2026-08-09T17:11:21.2866667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "جليقه-مخمل-پليسه",
+     "lastModified": "2026-08-09T17:11:21.28+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-مخمل-پليسه-2",
+     "lastModified": "2026-08-09T17:11:21.2733333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دلسا-3",
+     "lastModified": "2026-08-09T17:11:21.2266667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-بگ-اويشو",
+     "lastModified": "2026-08-09T17:11:21.22+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-جير-بغل-چاك",
+     "lastModified": "2026-08-09T17:11:21.21+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "فوتر-پانچ-بولوت",
+     "lastModified": "2026-08-09T17:11:21.1966667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بامبر-جكت-زيپي",
+     "lastModified": "2026-08-09T17:11:21.18+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-فوتر-كمر-كش-330",
+     "lastModified": "2026-08-09T17:11:21.1666667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "لاوين",
+     "lastModified": "2026-08-09T17:11:21.16+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "فوتر-رؤيا",
+     "lastModified": "2026-08-09T17:11:21.1533333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "فوتر-دوتُن-كوتاه-اُوِر",
+     "lastModified": "2026-08-09T17:11:21.1466667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-پاركا-مدل-زارا",
+     "lastModified": "2026-08-09T17:11:21.1333333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پليور-يقه-هفت-نواردار",
+     "lastModified": "2026-08-09T17:11:21.1166667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بنفشه-z",
+     "lastModified": "2026-08-09T17:11:21.11+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-مخمل-پليسه",
+     "lastModified": "2026-08-09T17:11:21.1066667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "هماگل",
+     "lastModified": "2026-08-09T17:11:21.09+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دامن-موهر",
+     "lastModified": "2026-08-09T17:11:21.0833333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "سانتا-بلند-شنل-پرچ-دار",
+     "lastModified": "2026-08-09T17:11:21.0766667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "فوتر-بلند-كمربند-پرچ-دار",
+     "lastModified": "2026-08-09T17:11:21.07+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-فوتر-پشت-دكمه",
+     "lastModified": "2026-08-09T17:11:21.0633333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-پاركا",
+     "lastModified": "2026-08-09T17:11:21.05+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دامن-پاراشوت",
+     "lastModified": "2026-08-09T17:11:21.0333333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "تريكو-چهارخانه-دو-دكمه",
+     "lastModified": "2026-08-09T17:11:21.0166667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-آرشيدا",
+     "lastModified": "2026-08-09T17:11:20.99+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-ونوسا-2",
+     "lastModified": "2026-08-09T17:11:20.9833333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پاركا",
+     "lastModified": "2026-08-09T17:11:20.97+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كايا",
+     "lastModified": "2026-08-09T17:11:20.9633333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "اوديسه-آيلار",
+     "lastModified": "2026-08-09T17:11:20.9433333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "سايدا2",
+     "lastModified": "2026-08-09T17:11:20.9266667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دامن-سيترا",
+     "lastModified": "2026-08-09T17:11:20.92+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ريتا",
+     "lastModified": "2026-08-09T17:11:20.9133333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بارانا",
+     "lastModified": "2026-08-09T17:11:20.8866667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-پروا-3",
+     "lastModified": "2026-08-09T17:11:20.87+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مه-وا",
+     "lastModified": "2026-08-09T17:11:20.8666667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "آروا",
+     "lastModified": "2026-08-09T17:11:20.8466667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ليدا",
+     "lastModified": "2026-08-09T17:11:20.84+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "سوي-را",
+     "lastModified": "2026-08-09T17:11:20.8333333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "طوبي",
+     "lastModified": "2026-08-09T17:11:20.8133333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-لينن-آنزيم-پاگن-دار",
+     "lastModified": "2026-08-09T17:11:20.7433333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-شيشه-اي",
+     "lastModified": "2026-08-09T17:11:20.7233333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "جليقه-بارولي",
+     "lastModified": "2026-08-09T17:11:20.7166667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-چينا",
+     "lastModified": "2026-08-09T17:11:20.7033333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-زير-تريكو",
+     "lastModified": "2026-08-09T17:11:20.6966667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-لينن-راه-راه-ايپك",
+     "lastModified": "2026-08-09T17:11:20.69+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ناريكا",
+     "lastModified": "2026-08-09T17:11:20.67+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "وست-زيپدار-لايوسل",
+     "lastModified": "2026-08-09T17:11:20.6633333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "گلاب",
+     "lastModified": "2026-08-09T17:11:20.65+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "لينن-بامبو-آيدين",
+     "lastModified": "2026-08-09T17:11:20.6366667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-جلو-گره-اي-پِري",
+     "lastModified": "2026-08-09T17:11:20.6166667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-لينن-اسلپ",
+     "lastModified": "2026-08-09T17:11:20.5733333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پيراهن-راه-راه-كمربند-كنفي",
+     "lastModified": "2026-08-09T17:11:20.5666667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بنيتا",
+     "lastModified": "2026-08-09T17:11:20.5566667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-راه-راه-پشت-پيلي-405",
+     "lastModified": "2026-08-09T17:11:20.55+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "آپريل3",
+     "lastModified": "2026-08-09T17:11:20.5333333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كراپ-لينن-تُرك",
+     "lastModified": "2026-08-09T17:11:20.5066667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مانتو-آستين-فكي-شلال",
+     "lastModified": "2026-08-09T17:11:20.4966667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شوميز-طرح-7-8-تُرك",
+     "lastModified": "2026-08-09T17:11:20.48+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-لينن-گلدوزي",
+     "lastModified": "2026-08-09T17:11:20.4666667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كراپ-وال-شلال-دوزي",
+     "lastModified": "2026-08-09T17:11:20.45+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-نيسا",
+     "lastModified": "2026-08-09T17:11:20.4433333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "هلا",
+     "lastModified": "2026-08-09T17:11:20.4033333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "آيجان2",
+     "lastModified": "2026-08-09T17:11:20.3066667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-ليوسل-بامبو",
+     "lastModified": "2026-08-09T17:11:20.26+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "لينن-ويسكوز-پشت-پيلي",
+     "lastModified": "2026-08-09T17:11:20.2533333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ژيله-كتان",
+     "lastModified": "2026-08-09T17:11:20.25+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "رامي-2",
+     "lastModified": "2026-08-09T17:11:19.9733333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-سوپر-كرپ-280",
+     "lastModified": "2026-08-09T17:11:19.96+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "فِرايا-2",
+     "lastModified": "2026-08-09T17:11:19.93+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "باراني-لوانا",
+     "lastModified": "2026-08-09T17:11:19.9033333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "الوانا",
+     "lastModified": "2026-08-09T17:11:19.86+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شومیز-مهیرا",
+     "lastModified": "2026-08-09T17:11:19.8366667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "آيلي",
+     "lastModified": "2026-08-09T17:11:19.5666667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-فلامینگو",
+     "lastModified": "2026-08-09T17:11:19.4066667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-پرادا-دیپلمات",
+     "lastModified": "2026-08-09T17:11:19.4+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شومیز-لیلیا",
+     "lastModified": "2026-08-09T17:11:19.3866667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شومیز-ماری",
+     "lastModified": "2026-08-09T17:11:19.38+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ست-کت-سارافون-کتان-لمه-ترنج",
+     "lastModified": "2026-08-09T17:11:19.3766667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "آيگل-طرح-برفي",
+     "lastModified": "2026-08-09T17:11:19.37+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مانتو-دخترانه-لينن-راه-راه-يقه-مردانه",
+     "lastModified": "2026-08-09T17:11:19.3566667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مانتو-اودیسه-شلال",
+     "lastModified": "2026-08-09T17:11:19.3433333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شومیز-بالیسا",
+     "lastModified": "2026-08-09T17:11:19.3+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كايلين",
+     "lastModified": "2026-08-09T17:11:19.2866667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پليورآستين-رگلان-bafino2",
+     "lastModified": "2026-08-09T17:11:19.28+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "تونیک-بافت-بلند",
+     "lastModified": "2026-08-09T17:11:19.26+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "اودیسه",
+     "lastModified": "2026-08-09T17:11:19.23+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شومیز-آیان-3",
+     "lastModified": "2026-08-09T17:11:19.1933333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-ژاکارد-یقه-گرد",
+     "lastModified": "2026-08-09T17:11:19.19+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مانتو-sorrel",
+     "lastModified": "2026-08-09T17:11:19.1833333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار-كتان-شش-جيب-كارگو",
+     "lastModified": "2026-08-09T17:11:19.1633333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بافت-تونیک-آستین-دکمه-دار",
+     "lastModified": "2026-08-09T17:11:19.1466667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-عروسکی-اودیسه",
+     "lastModified": "2026-08-09T17:11:19.1266667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ترمه-بهار",
+     "lastModified": "2026-08-09T08:39:11.8566667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "لایوسل-بلند-کمر-پیلی",
+     "lastModified": "2026-08-08T12:43:43.5833333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "وست-گیپور",
+     "lastModified": "2026-08-08T12:43:43.58+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پری-جلو-گره",
+     "lastModified": "2026-08-08T12:43:43.57+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "تاپ-پاپیون",
+     "lastModified": "2026-08-01T13:57:01.38+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-لایوسل-بغل-چاک",
+     "lastModified": "2026-08-01T09:22:29.33+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پلوشرت-و-شلوار",
+     "lastModified": "2026-08-01T09:22:29.3+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "لینن-زارا-استرایپ",
+     "lastModified": "2026-07-29T19:14:53.94+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-لینن-پشت-دکمه",
+     "lastModified": "2026-07-29T19:14:53.59+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-لینن-ریون-یقه-ارشال",
+     "lastModified": "2026-07-29T19:14:53.2366667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شومیز-یقه-هفت-جلو-پیله-دار-لینن-ژاکارد",
+     "lastModified": "2026-07-29T13:06:56.57+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "سارافون-لینن-طرح-دار-ایتالیایی",
+     "lastModified": "2026-07-29T12:35:30.2733333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ست-کت-لینن-و-شلوار-لیوسل-گلدوزی",
+     "lastModified": "2026-07-27T19:00:37.43+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پولو-شرت-شلوار-مُدال-سیلک",
+     "lastModified": "2026-07-27T19:00:37.3866667+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دامن-زنانه-هوران",
+     "lastModified": "2026-07-27T19:00:30.2933333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "سِت-ويرا",
+     "lastModified": "2026-07-27T15:46:23.8633333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "جلیقه-پازل",
+     "lastModified": "2026-07-27T15:46:23.4133333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بلوز-يقه-گِرد-آستين-بلند-فَنريپ",
+     "lastModified": "2026-07-27T15:46:21.29+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-مارينا-661",
+     "lastModified": "2026-07-27T15:46:20.66+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-تابستانی-لینن-کوک-دوزی",
+     "lastModified": "2026-07-27T09:33:43.1+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-تک-دکمه-کجراه-سر-استین-راه-راه",
+     "lastModified": "2026-07-27T09:33:43.0733333+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت-اسپرت-بزیاق-راه-راه-ریز",
+     "lastModified": "2026-07-27T09:33:40.81+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پری-جلو-پیچ",
+     "lastModified": "2026-10-26T02:34:30.4791819+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    }
+   ]
+  },
+  "category": {
+   "entityType": "category",
+   "lastCacheTime": "2026-10-26T02:34:30.4798859+00:00",
+   "items": [
+    {
+     "urlLocation": "بالاتنه-جلیقه",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "تیشرت",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شومیز",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پیراهن",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "تاپ",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بالاتنه-بافت",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بلوز",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شلوار",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دامن",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "جین",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "وست",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پالتو",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مانتو",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کت",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پافر",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بارانی",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "روپوش-جلیقه",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کاپشن",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "روپوش-بافت",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بالاتنه",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "پايين-تنه",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "روپوش",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "زنانه-کیف",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ست",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "شال",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "روسری",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "جوراب",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کمربند",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دستکش",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کلاه",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "مقنعه",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "کیف",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كفش",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بلوز-و-دامن",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كت-و-شلوار",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بلوز-و-شلوار",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "تيشرت-و-شلوار",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "بامبر",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "تونيك",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ژيله",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ژاكت",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "ژيله-و-شلوار",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "دستمال-گردن",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    },
+    {
+     "urlLocation": "كراپ",
+     "lastModified": "2026-10-26T02:34:29.5813182+00:00",
+     "changeFrequency": "daily",
+     "priority": 0.8
+    }
+   ]
+  }
+ }
+}

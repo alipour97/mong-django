@@ -1,0 +1,39 @@
+{
+ "request": {
+  "method": "GET",
+  "base": "web",
+  "path": "Category/GetBreadCrumbs/38",
+  "body": null
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": [
+    {
+     "position": 1,
+     "name": "خانه",
+     "url": "/"
+    },
+    {
+     "position": 2,
+     "name": "زنانه",
+     "url": "/products-category/زنانه"
+    },
+    {
+     "position": 3,
+     "name": "روپوش",
+     "url": "/products-category/روپوش"
+    },
+    {
+     "position": 4,
+     "name": "كاپشن",
+     "url": "/products-category/کاپشن"
+    }
+   ],
+   "totalPages": 0
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات با موفقیت ارسال شد.",
+  "timestamp": 639286004983246451
+ }
+}

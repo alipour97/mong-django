@@ -1,0 +1,298 @@
+{
+ "request": {
+  "method": "GET",
+  "base": "web",
+  "path": "ProvinceCity/GetAllProvince",
+  "body": null
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": [
+    {
+     "id": 1,
+     "name": "اردبیل",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 2,
+     "name": "اصفهان",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 3,
+     "name": "البرز",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 4,
+     "name": "ایلام",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 5,
+     "name": "آذربایجان شرقی",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 6,
+     "name": "آذربایجان غربی",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 7,
+     "name": "بوشهر",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 8,
+     "name": "تهران",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 9,
+     "name": "چهارمحال وبختیاری",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 10,
+     "name": "خراسان جنوبی",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 11,
+     "name": "خراسان رضوی",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 12,
+     "name": "خراسان شمالی",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 13,
+     "name": "خوزستان",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 14,
+     "name": "زنجان",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 15,
+     "name": "سمنان",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 16,
+     "name": "سیستان وبلوچستان",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 17,
+     "name": "فارس",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 18,
+     "name": "قزوین",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 19,
+     "name": "قم",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 20,
+     "name": "کردستان",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 21,
+     "name": "کرمان",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 22,
+     "name": "کرمانشاه",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 23,
+     "name": "کهگیلویه وبویراحمد",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 24,
+     "name": "گلستان",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 25,
+     "name": "گیلان",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 26,
+     "name": "لرستان",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 27,
+     "name": "مازندران",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 28,
+     "name": "مرکزی",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 29,
+     "name": "هرمزگان",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 30,
+     "name": "همدان",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    },
+    {
+     "id": 31,
+     "name": "یزد",
+     "countryId": 1,
+     "latitude": null,
+     "longitude": null,
+     "countryDto": null,
+     "cityDtOs": null
+    }
+   ],
+   "totalPages": 0
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات مورد نیاز دریافت شد.",
+  "timestamp": 639286005039488604
+ }
+}

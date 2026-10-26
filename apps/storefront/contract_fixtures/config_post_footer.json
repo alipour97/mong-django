@@ -1,0 +1,26 @@
+{
+ "request": {
+  "method": "POST",
+  "base": "web",
+  "path": "PrimaryConfig/Get",
+  "body": {
+   "key": "footerConfig"
+  }
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": [
+    {
+     "id": 1,
+     "key": "footerConfig",
+     "value": "{\"checkBoxes\":{\"address\":true,\"phoneNumbers\":true,\"socialMedias\":true,\"showFaq\":true,\"showSupport\":true,\"showNewsLetter\":true,\"showCooperation\":true,\"showTermOfUse\":true,\"undefined\":true,\"showDepartment\":true,\"showContactUs\":true,\"showAboutus\":true,\"showContactus\":true},\"enamad\":\"<a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=88828&Code=a1KQyjJLRscFJugVIfsf'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=88828&Code=a1KQyjJLRscFJugVIfsf' alt='' style='cursor:pointer' code='a1KQyjJLRscFJugVIfsf'></a>\",\"extraScripts\":\"\"}"
+    }
+   ],
+   "totalPages": 0
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات با موفقیت دریافت شدند.",
+  "timestamp": 639286004868953484
+ }
+}

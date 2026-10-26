@@ -1,0 +1,52 @@
+{
+ "request": {
+  "method": "POST",
+  "base": "web",
+  "path": "Category/GetCategorySummaries",
+  "body": {
+   "items": [
+    23,
+    33
+   ]
+  }
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": [
+    {
+     "id": 23,
+     "title": "شلوار",
+     "slug": "شلوار",
+     "medias": [
+      {
+       "id": 30892,
+       "isVideo": false,
+       "mediaUrl": "https://cdn.mong.ir/9/webgeneral/f08459db-9d48-4bcc-a66a-a4860de16fed.webp",
+       "alternative": "",
+       "tooltipTitle": ""
+      }
+     ]
+    },
+    {
+     "id": 33,
+     "title": "مانتو",
+     "slug": "مانتو",
+     "medias": [
+      {
+       "id": 30887,
+       "isVideo": false,
+       "mediaUrl": "https://cdn.mong.ir/9/webgeneral/438ac5b3-b867-40c5-b434-3a17e817fe7a.webp",
+       "alternative": "",
+       "tooltipTitle": ""
+      }
+     ]
+    }
+   ],
+   "totalPages": 0
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات با موفقیت دریافت شدند.",
+  "timestamp": 639285407479573526
+ }
+}

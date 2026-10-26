@@ -1,0 +1,1260 @@
+{
+ "request": {
+  "method": "POST",
+  "base": "web",
+  "path": "Product/GetAll",
+  "body": {
+   "pageNumber": 2,
+   "pageSize": 3,
+   "filteredCategoryIds": [
+    2
+   ],
+   "sortCriteriaId": 4,
+   "isInStock": true
+  }
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": [
+    {
+     "id": 5121,
+     "slug": "تونيك-حلقه-كشباف-ويسكوز",
+     "categoryId": 424,
+     "parentCategoryId": 70,
+     "brandId": 15,
+     "productName": "تونيك حلقه كشباف ويسكوز",
+     "longDescriptionHtml": null,
+     "shortDescriptionHtml": null,
+     "mainImages": [
+      {
+       "id": 28232,
+       "mediaUrl": "https://cdn.mong.ir/9/webgeneral/6c5e61f9-a564-4e3a-ba80-52cb5eb73df5.webp",
+       "isVideo": false,
+       "alternative": "",
+       "tooltipTitle": ""
+      },
+      {
+       "id": 28233,
+       "mediaUrl": "https://cdn.mong.ir/9/webgeneral/cda8b0dc-b756-47ef-b2a0-b8c05cd41a0d.webp",
+       "isVideo": false,
+       "alternative": "",
+       "tooltipTitle": ""
+      }
+     ],
+     "product_Base_Price": 12800000.0,
+     "product_base_reduction": 21.953,
+     "productBaseVat": 0.0,
+     "reductionPercent": 21.95,
+     "price": 12800000.0,
+     "priceAfterReduction": 9990000,
+     "reductionPrice": 2810000.0,
+     "details": [
+      {
+       "id": 1,
+       "hasColor": true,
+       "fixedList": [
+        {
+         "id": 33,
+         "name": "كرم",
+         "value": "FFFDD0",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 6,
+         "name": "مشكي",
+         "value": "000000",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 12,
+         "name": "قرمز",
+         "value": "FF0000",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 23,
+         "name": "سفيد",
+         "value": "FFFFFF",
+         "score": 0,
+         "displayPriority": 0
+        }
+       ],
+       "title": "رنگ",
+       "items": [
+        {
+         "id": 33,
+         "parentId": null,
+         "name": "كرم",
+         "value": "FFFDD0",
+         "images": [
+          {
+           "id": 28229,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/6c5e61f9-a564-4e3a-ba80-52cb5eb73df5.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 28230,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/cda8b0dc-b756-47ef-b2a0-b8c05cd41a0d.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 28231,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/a6ae403d-73e1-421b-aa99-00c9c86ae3d9.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          }
+         ],
+         "price": 12800000.0,
+         "reduction": 21.953,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 0
+        },
+        {
+         "id": 6,
+         "parentId": null,
+         "name": "مشكي",
+         "value": "000000",
+         "images": [
+          {
+           "id": 29549,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/f23f198a-1afc-4afb-9f6a-021e72ccbc58.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 29550,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/6bef3a90-1f59-40ad-abaa-49f30276ef71.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 29956,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/f3de41f1-ba6b-480f-884a-ce56ee2abe36.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          }
+         ],
+         "price": 12800000.0,
+         "reduction": 21.953,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 0
+        },
+        {
+         "id": 12,
+         "parentId": null,
+         "name": "قرمز",
+         "value": "FF0000",
+         "images": [
+          {
+           "id": 29346,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/0c179dcf-35da-4d77-b5d9-f1e660a4b1ac.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 29347,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/827713e3-8b2f-48bb-8b7a-a3b3745e985d.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 29955,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/672d784d-1b26-4530-be83-1eae8be634f8.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          }
+         ],
+         "price": 12800000.0,
+         "reduction": 21.953,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 0
+        },
+        {
+         "id": 23,
+         "parentId": null,
+         "name": "سفيد",
+         "value": "FFFFFF",
+         "images": [
+          {
+           "id": 29345,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/12601cd0-b019-4896-a63a-8f5cbea4d2ce.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 29953,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/b46b1c4c-7e89-4adf-8318-96c0bfad15ff.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 29954,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/26c6d6ff-d461-4ead-8a4f-5edd512e3686.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          }
+         ],
+         "price": 12800000.0,
+         "reduction": 21.953,
+         "discount": 0,
+         "mojodi": 3.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 0
+        }
+       ],
+       "defaultItemId": null
+      },
+      {
+       "id": 2,
+       "hasColor": false,
+       "fixedList": [
+        {
+         "id": 931,
+         "name": "FreeS",
+         "value": "FreeS",
+         "score": 0,
+         "displayPriority": 0
+        }
+       ],
+       "title": "سایز",
+       "items": [
+        {
+         "id": 931,
+         "parentId": 33,
+         "name": "FreeS",
+         "value": "FreeS",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 239959
+        },
+        {
+         "id": 931,
+         "parentId": 23,
+         "name": "FreeS",
+         "value": "FreeS",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 3.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 46874
+        },
+        {
+         "id": 931,
+         "parentId": 12,
+         "name": "FreeS",
+         "value": "FreeS",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 239960
+        },
+        {
+         "id": 931,
+         "parentId": 6,
+         "name": "FreeS",
+         "value": "FreeS",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 46877
+        }
+       ],
+       "defaultItemId": null
+      }
+     ],
+     "selectedProductId": null,
+     "sortingWeight": null
+    },
+    {
+     "id": 47842,
+     "slug": "تاپ-مهرانا",
+     "categoryId": 19,
+     "parentCategoryId": 70,
+     "brandId": 1,
+     "productName": "تاپ مهرانا",
+     "longDescriptionHtml": null,
+     "shortDescriptionHtml": null,
+     "mainImages": [
+      {
+       "id": 28757,
+       "mediaUrl": "https://cdn.mong.ir/9/webgeneral/78b97fc8-8c1e-4263-b256-947eb8afe5d3.webp",
+       "isVideo": false,
+       "alternative": "",
+       "tooltipTitle": ""
+      },
+      {
+       "id": 28758,
+       "mediaUrl": "https://cdn.mong.ir/9/webgeneral/6108643e-4309-441c-bb48-591e046ce20f.webp",
+       "isVideo": false,
+       "alternative": "",
+       "tooltipTitle": ""
+      }
+     ],
+     "product_Base_Price": 19870000.0,
+     "product_base_reduction": 49.723,
+     "productBaseVat": 0.0,
+     "reductionPercent": 49.72,
+     "price": 19870000.0,
+     "priceAfterReduction": 9990000,
+     "reductionPrice": 9880000.0,
+     "details": [
+      {
+       "id": 1,
+       "hasColor": true,
+       "fixedList": [
+        {
+         "id": 2,
+         "name": "سبز",
+         "value": "008000",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 6,
+         "name": "مشكي",
+         "value": "000000",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 29,
+         "name": "نارنجي",
+         "value": "FFA500",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 28,
+         "name": "سرخابي",
+         "value": "FF007F",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 68,
+         "name": "نسكافه اي",
+         "value": "C3A084",
+         "score": 0,
+         "displayPriority": 0
+        }
+       ],
+       "title": "رنگ",
+       "items": [
+        {
+         "id": 2,
+         "parentId": null,
+         "name": "سبز",
+         "value": "008000",
+         "images": [
+          {
+           "id": 28751,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/cc877320-34cb-44d3-b41d-1d8dbbeadfed.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          }
+         ],
+         "price": 19870000.0,
+         "reduction": 49.723,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 0
+        },
+        {
+         "id": 6,
+         "parentId": null,
+         "name": "مشكي",
+         "value": "000000",
+         "images": [
+          {
+           "id": 28749,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/6a5badbd-fe34-49d4-a292-a737a98c5b4c.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 28750,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/363cc283-dfcc-4106-80b9-350ce5b6f8f7.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          }
+         ],
+         "price": 19870000.0,
+         "reduction": 49.723,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 0
+        },
+        {
+         "id": 29,
+         "parentId": null,
+         "name": "نارنجي",
+         "value": "FFA500",
+         "images": [
+          {
+           "id": 28755,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/3469dd6f-8419-43f7-a325-d9db96b45743.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 28756,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/f077e8c0-8109-43e2-910f-aa2401f28bf2.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          }
+         ],
+         "price": 19870000.0,
+         "reduction": 49.723,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 0
+        },
+        {
+         "id": 28,
+         "parentId": null,
+         "name": "سرخابي",
+         "value": "FF007F",
+         "images": [
+          {
+           "id": 28752,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/560ed25d-093d-4a80-9b73-9c01af5d1bef.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          }
+         ],
+         "price": 19870000.0,
+         "reduction": 49.723,
+         "discount": 0,
+         "mojodi": 1.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 0
+        },
+        {
+         "id": 68,
+         "parentId": null,
+         "name": "نسكافه اي",
+         "value": "C3A084",
+         "images": [
+          {
+           "id": 28753,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/78b97fc8-8c1e-4263-b256-947eb8afe5d3.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 28754,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/6108643e-4309-441c-bb48-591e046ce20f.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          }
+         ],
+         "price": 19870000.0,
+         "reduction": 49.723,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 0
+        }
+       ],
+       "defaultItemId": null
+      },
+      {
+       "id": 2,
+       "hasColor": false,
+       "fixedList": [
+        {
+         "id": 550,
+         "name": "1",
+         "value": "1",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 666,
+         "name": "2",
+         "value": "2",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 743,
+         "name": "3",
+         "value": "3",
+         "score": 0,
+         "displayPriority": 0
+        }
+       ],
+       "title": "سایز",
+       "items": [
+        {
+         "id": 550,
+         "parentId": 6,
+         "name": "1",
+         "value": "1",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 241760
+        },
+        {
+         "id": 550,
+         "parentId": 28,
+         "name": "1",
+         "value": "1",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 241751
+        },
+        {
+         "id": 550,
+         "parentId": 29,
+         "name": "1",
+         "value": "1",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 241762
+        },
+        {
+         "id": 550,
+         "parentId": 68,
+         "name": "1",
+         "value": "1",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 241752
+        },
+        {
+         "id": 550,
+         "parentId": 2,
+         "name": "1",
+         "value": "1",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 241748
+        },
+        {
+         "id": 666,
+         "parentId": 68,
+         "name": "2",
+         "value": "2",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 241757
+        },
+        {
+         "id": 666,
+         "parentId": 6,
+         "name": "2",
+         "value": "2",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 241755
+        },
+        {
+         "id": 666,
+         "parentId": 29,
+         "name": "2",
+         "value": "2",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 241756
+        },
+        {
+         "id": 666,
+         "parentId": 2,
+         "name": "2",
+         "value": "2",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 241749
+        },
+        {
+         "id": 666,
+         "parentId": 28,
+         "name": "2",
+         "value": "2",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 241761
+        },
+        {
+         "id": 743,
+         "parentId": 6,
+         "name": "3",
+         "value": "3",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 241754
+        },
+        {
+         "id": 743,
+         "parentId": 68,
+         "name": "3",
+         "value": "3",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 241753
+        },
+        {
+         "id": 743,
+         "parentId": 2,
+         "name": "3",
+         "value": "3",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 241750
+        },
+        {
+         "id": 743,
+         "parentId": 28,
+         "name": "3",
+         "value": "3",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 1.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 241759
+        },
+        {
+         "id": 743,
+         "parentId": 29,
+         "name": "3",
+         "value": "3",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 241758
+        }
+       ],
+       "defaultItemId": null
+      }
+     ],
+     "selectedProductId": null,
+     "sortingWeight": null
+    },
+    {
+     "id": 34799,
+     "slug": "مازراتي-1",
+     "categoryId": 23,
+     "parentCategoryId": 71,
+     "brandId": 15,
+     "productName": "مازراتي 1",
+     "longDescriptionHtml": null,
+     "shortDescriptionHtml": null,
+     "mainImages": [
+      {
+       "id": 29679,
+       "mediaUrl": "https://cdn.mong.ir/9/webgeneral/1c41b32d-1089-4d0e-b0f3-6b30009d6f01.webp",
+       "isVideo": false,
+       "alternative": "",
+       "tooltipTitle": ""
+      },
+      {
+       "id": 29680,
+       "mediaUrl": "https://cdn.mong.ir/9/webgeneral/328f9b24-fb84-4d39-8454-f955586e6c58.webp",
+       "isVideo": false,
+       "alternative": "",
+       "tooltipTitle": ""
+      }
+     ],
+     "product_Base_Price": 11800000.0,
+     "product_base_reduction": 0.0,
+     "productBaseVat": 0.0,
+     "reductionPercent": 0.0,
+     "price": 11800000.0,
+     "priceAfterReduction": 11800000,
+     "reductionPrice": 0.0,
+     "details": [
+      {
+       "id": 1,
+       "hasColor": true,
+       "fixedList": [
+        {
+         "id": 33,
+         "name": "كرم",
+         "value": "FFFDD0",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 16,
+         "name": "صورتي",
+         "value": "FFC0CB",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 68,
+         "name": "نسكافه اي",
+         "value": "C3A084",
+         "score": 0,
+         "displayPriority": 0
+        }
+       ],
+       "title": "رنگ",
+       "items": [
+        {
+         "id": 33,
+         "parentId": null,
+         "name": "كرم",
+         "value": "FFFDD0",
+         "images": [
+          {
+           "id": 29873,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/0b38e111-2be9-4872-a7ad-b709ff0e8b9b.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          }
+         ],
+         "price": 11800000.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 1.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 0
+        },
+        {
+         "id": 16,
+         "parentId": null,
+         "name": "صورتي",
+         "value": "FFC0CB",
+         "images": [
+          {
+           "id": 30021,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/223d72e0-9351-4cf7-9477-10f1decdf7dd.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 30022,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/a8d702c0-f63d-4e86-ad8a-7d09602f94aa.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 30023,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/6accbb6b-a57b-4780-97fb-ec43f793266d.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          }
+         ],
+         "price": 11800000.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 0
+        },
+        {
+         "id": 68,
+         "parentId": null,
+         "name": "نسكافه اي",
+         "value": "C3A084",
+         "images": [
+          {
+           "id": 29677,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/1c41b32d-1089-4d0e-b0f3-6b30009d6f01.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          },
+          {
+           "id": 29678,
+           "isVideo": false,
+           "mediaUrl": "https://cdn.mong.ir/9/webgeneral/328f9b24-fb84-4d39-8454-f955586e6c58.webp",
+           "alternative": "",
+           "tooltipTitle": ""
+          }
+         ],
+         "price": 11800000.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 0
+        }
+       ],
+       "defaultItemId": null
+      },
+      {
+       "id": 2,
+       "hasColor": false,
+       "fixedList": [
+        {
+         "id": 834,
+         "name": "40",
+         "value": "40",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 840,
+         "name": "42",
+         "value": "42",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 844,
+         "name": "44",
+         "value": "44",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 849,
+         "name": "46",
+         "value": "46",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 851,
+         "name": "48",
+         "value": "48",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 864,
+         "name": "50",
+         "value": "50",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 866,
+         "name": "52",
+         "value": "52",
+         "score": 0,
+         "displayPriority": 0
+        },
+        {
+         "id": 868,
+         "name": "54",
+         "value": "54",
+         "score": 0,
+         "displayPriority": 0
+        }
+       ],
+       "title": "سایز",
+       "items": [
+        {
+         "id": 834,
+         "parentId": 33,
+         "name": "40",
+         "value": "40",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159543
+        },
+        {
+         "id": 840,
+         "parentId": 68,
+         "name": "42",
+         "value": "42",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159597
+        },
+        {
+         "id": 840,
+         "parentId": 16,
+         "name": "42",
+         "value": "42",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159587
+        },
+        {
+         "id": 840,
+         "parentId": 33,
+         "name": "42",
+         "value": "42",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159544
+        },
+        {
+         "id": 844,
+         "parentId": 68,
+         "name": "44",
+         "value": "44",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159598
+        },
+        {
+         "id": 844,
+         "parentId": 33,
+         "name": "44",
+         "value": "44",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159545
+        },
+        {
+         "id": 844,
+         "parentId": 16,
+         "name": "44",
+         "value": "44",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159588
+        },
+        {
+         "id": 849,
+         "parentId": 68,
+         "name": "46",
+         "value": "46",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159599
+        },
+        {
+         "id": 849,
+         "parentId": 16,
+         "name": "46",
+         "value": "46",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159589
+        },
+        {
+         "id": 849,
+         "parentId": 33,
+         "name": "46",
+         "value": "46",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159546
+        },
+        {
+         "id": 851,
+         "parentId": 16,
+         "name": "48",
+         "value": "48",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159590
+        },
+        {
+         "id": 851,
+         "parentId": 68,
+         "name": "48",
+         "value": "48",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159600
+        },
+        {
+         "id": 851,
+         "parentId": 33,
+         "name": "48",
+         "value": "48",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 1.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159547
+        },
+        {
+         "id": 864,
+         "parentId": 16,
+         "name": "50",
+         "value": "50",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159591
+        },
+        {
+         "id": 864,
+         "parentId": 33,
+         "name": "50",
+         "value": "50",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159548
+        },
+        {
+         "id": 864,
+         "parentId": 68,
+         "name": "50",
+         "value": "50",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159601
+        },
+        {
+         "id": 866,
+         "parentId": 33,
+         "name": "52",
+         "value": "52",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159549
+        },
+        {
+         "id": 866,
+         "parentId": 68,
+         "name": "52",
+         "value": "52",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159602
+        },
+        {
+         "id": 868,
+         "parentId": 33,
+         "name": "54",
+         "value": "54",
+         "images": null,
+         "price": 0.0,
+         "reduction": 0.0,
+         "discount": 0,
+         "mojodi": 0.0,
+         "barcode": "",
+         "displayPriority": 0,
+         "productVariantId": 159550
+        }
+       ],
+       "defaultItemId": null
+      }
+     ],
+     "selectedProductId": null,
+     "sortingWeight": null
+    }
+   ],
+   "totalPages": 70
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات با موفقیت دریافت شدند.",
+  "timestamp": 639286005702052943
+ }
+}

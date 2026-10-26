@@ -1,0 +1,39 @@
+{
+ "request": {
+  "method": "POST",
+  "base": "web",
+  "path": "Collection/GetCollectionSummaries",
+  "body": {
+   "items": []
+  }
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": [
+    {
+     "id": 3624,
+     "title": "بلک فرایدی مانگ",
+     "inMainPage": false,
+     "reduction": 0.0,
+     "beginningDate": "1404/08/30 20:30",
+     "endDate": "1405/09/10 23:59",
+     "displayPriority": 0,
+     "medias": [
+      {
+       "id": 13181,
+       "isVideo": false,
+       "mediaUrl": "https://cdn.mong.ir/9/webgeneral/b95b14de-d667-440f-aad0-bf756adac1ba.webp",
+       "alternative": "",
+       "tooltipTitle": ""
+      }
+     ]
+    }
+   ],
+   "totalPages": 0
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات با موفقیت دریافت شدند.",
+  "timestamp": 639285997916506352
+ }
+}

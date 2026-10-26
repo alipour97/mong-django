@@ -1,0 +1,46 @@
+{
+ "request": {
+  "method": "GET",
+  "base": "web",
+  "path": "Product/GetById/999999999",
+  "body": null
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": {
+    "id": 0,
+    "slug": null,
+    "longDescriptionHtml": null,
+    "shortDescriptionHtml": null,
+    "barcode": "",
+    "categoryId": 0,
+    "parentCategoryId": null,
+    "brandId": null,
+    "productName": null,
+    "ProductName_En": null,
+    "mainImages": null,
+    "productSizeGuid": null,
+    "product_Base_Price": 0,
+    "product_base_reduction": 0,
+    "productBaseVat": 0,
+    "reductionPercent": 0,
+    "price": 0,
+    "priceAfterReduction": 0,
+    "reductionPrice": 0,
+    "details": null,
+    "description": null,
+    "shortDesc": null,
+    "commentCount": 0,
+    "promotionLabel": null,
+    "productFeatures": null,
+    "breadcrumbs": null,
+    "tags": null
+   },
+   "totalPages": 0
+  },
+  "statusCode": 404,
+  "statusMessage": "اطلاعات مورد نظر یافت نشد.",
+  "timestamp": 639286004963994537
+ }
+}

@@ -1,0 +1,55 @@
+{
+ "request": {
+  "method": "GET",
+  "base": "web",
+  "path": "SortCriteria/GetAll",
+  "body": null
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": [
+    {
+     "id": 1,
+     "sortKeyFa": "پربازدیدترین"
+    },
+    {
+     "id": 2,
+     "sortKeyFa": "جدیدترین"
+    },
+    {
+     "id": 3,
+     "sortKeyFa": "پرفروش ترین"
+    },
+    {
+     "id": 4,
+     "sortKeyFa": "ارزان ترین"
+    },
+    {
+     "id": 5,
+     "sortKeyFa": "گران ترین"
+    },
+    {
+     "id": 6,
+     "sortKeyFa": "پیشنهاد خریداران"
+    },
+    {
+     "id": 7,
+     "sortKeyFa": "منتخب"
+    },
+    {
+     "id": 8,
+     "sortKeyFa": "بیشترین تخفیف"
+    },
+    {
+     "id": 9,
+     "sortKeyFa": "کمترین تخفیف"
+    }
+   ],
+   "totalPages": 1
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات با موفقیت دریافت شدند.",
+  "timestamp": 639286005029501759
+ }
+}

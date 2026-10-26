@@ -1,0 +1,27 @@
+{
+ "request": {
+  "method": "GET",
+  "base": "web",
+  "path": "Outfit/GetById/1",
+  "body": null
+ },
+ "status": 404,
+ "response": {
+  "result": {
+   "data": {
+    "id": 0,
+    "title": null,
+    "medias": null,
+    "description": null,
+    "categoryId": null,
+    "labelTitle": null,
+    "startDate": null,
+    "expirationDate": null
+   },
+   "totalPages": 0
+  },
+  "statusCode": 404,
+  "statusMessage": "اطلاعات مورد نیاز یافت نشد.",
+  "timestamp": 639286007587129943
+ }
+}

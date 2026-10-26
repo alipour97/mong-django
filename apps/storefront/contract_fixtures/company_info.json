@@ -1,0 +1,40 @@
+{
+ "request": {
+  "method": "GET",
+  "base": "web",
+  "path": "CompanyInfo/GetCompanyInfo",
+  "body": null
+ },
+ "status": 200,
+ "response": {
+  "result": {
+   "data": {
+    "name": "مانگ",
+    "description": "",
+    "address": "",
+    "phoneNumbers": [],
+    "postalCode": "",
+    "keywords": [],
+    "webSiteLogo": {
+     "url": "https://cdn.mong.ir/8585/webgeneral/347ce954-647b-478b-b704-8c1d534b53dd.webp",
+     "mediaId": 10539,
+     "fileMediaId": 10250,
+     "alternative": "",
+     "tooltipTitle": ""
+    },
+    "favicon": {
+     "url": "https://cdn.mong.ir/8585/webgeneral/06ff48e8-29d7-4c2c-a887-9127e747374e.ico",
+     "mediaId": 10538,
+     "fileMediaId": 10251,
+     "alternative": "",
+     "tooltipTitle": ""
+    },
+    "minQty": 1.0
+   },
+   "totalPages": 0
+  },
+  "statusCode": 200,
+  "statusMessage": "اطلاعات با موفقیت دریافت شدند.",
+  "timestamp": 639286003331889525
+ }
+}

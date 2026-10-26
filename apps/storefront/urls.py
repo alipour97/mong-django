@@ -1,55 +1,52 @@
 """
-URLs for Storefront API (samian.mong.ir / api/v1/...)
+URLs for the storefront API (samian.mong.ir/api/v1/...), mirroring api.mong.ir.
+SearchEngine/* lived on adminapi.mong.ir in the legacy system; both frontend
+base URLs point here for now.
 """
 from django.urls import path, re_path
-from .views import (
-    PrimaryConfigGetConfigView,
-    CompanyInfoView,
-    CategoryGetAllView,
-    CategoryGetByIdView,
-    ProductGetAllView,
-    ProductGetSelectedProductsView,
-    ProductGetByIdView,
-    SettingGetSettingView,
-    SliderGetAllView,
-    BannerGetAllView,
-    SearchEngineMetaView,
-    SearchEngineBreadcrumbsView,
-    SearchEngineIndexView,
-    SearchEngineSiteMapsView,
-    CategoryGetSliderBannerSummariesView,
-    CategoryGetCategorySummariesView,
-    CollectionGetCollectionSummariesView,
-    OutfitGetOutfitSummariesView,
-)
+
+from . import views as v
 
 urlpatterns = [
-    # Primary Configs (Layout, Metadata, Section Sort Orders)
-    path("PrimaryConfig/GetConfig/<str:key>", PrimaryConfigGetConfigView.as_view(), name="primary-config-get"),
-    path("PrimaryConfig/Get", PrimaryConfigGetConfigView.as_view(), name="primary-config-get-post"),
+    # Configs, company, theme
+    path("PrimaryConfig/GetConfig/<str:key>", v.PrimaryConfigGetConfigView.as_view()),
+    path("PrimaryConfig/Get", v.PrimaryConfigGetConfigView.as_view()),
+    path("CompanyInfo/GetCompanyInfo", v.CompanyInfoView.as_view()),
+    path("Setting/GetDefaultTheme", v.SettingGetDefaultThemeView.as_view()),
+    path("SortCriteria/GetAll", v.SortCriteriaGetAllView.as_view()),
 
-    # Company Info & Settings
-    path("CompanyInfo/GetCompanyInfo", CompanyInfoView.as_view(), name="company-info"),
-    path("Setting/GetSetting", SettingGetSettingView.as_view(), name="setting-get"),
+    # Categories
+    path("Category/GetAll", v.CategoryGetAllView.as_view()),
+    path("Category/GetById/<int:category_id>", v.CategoryGetByIdView.as_view()),
+    path("Category/GetBreadCrumbs/<int:category_id>", v.CategoryGetBreadCrumbsView.as_view()),
+    path("Category/GetSliderBannerSummaries", v.CategoryGetSliderBannerSummariesView.as_view()),
+    path("Category/GetCategorySummaries", v.CategoryGetCategorySummariesView.as_view()),
 
-    # Catalog & Products
-    path("Category/GetAll", CategoryGetAllView.as_view(), name="category-get-all"),
-    path("Category/GetById/<int:category_id>", CategoryGetByIdView.as_view(), name="category-get-by-id"),
-    path("Category/GetSliderBannerSummaries", CategoryGetSliderBannerSummariesView.as_view(), name="category-get-slider-banner-summaries"),
-    path("Category/GetCategorySummaries", CategoryGetCategorySummariesView.as_view(), name="category-get-category-summaries"),
-    path("Collection/GetCollectionSummaries", CollectionGetCollectionSummariesView.as_view(), name="collection-get-collection-summaries"),
-    path("Outfit/GetOutfitSummaries", OutfitGetOutfitSummariesView.as_view(), name="outfit-get-outfit-summaries"),
-    path("Product/GetAll", ProductGetAllView.as_view(), name="product-get-all"),
-    path("Product/GetSelectedProducts", ProductGetSelectedProductsView.as_view(), name="product-get-selected"),
-    path("Product/GetById/<int:product_id>", ProductGetByIdView.as_view(), name="product-get-by-id"),
+    # Collections and outfits
+    path("Collection/GetCollectionSummaries", v.CollectionGetCollectionSummariesView.as_view()),
+    path("Collection/GetAll", v.CollectionGetAllView.as_view()),
+    path("Collection/GetById/<int:collection_id>", v.CollectionGetByIdView.as_view()),
+    path("Outfit/GetOutfitSummaries", v.OutfitGetOutfitSummariesView.as_view()),
+    path("Outfit/GetAll", v.OutfitGetAllView.as_view()),
+    path("Outfit/GetById/<int:outfit_id>", v.OutfitGetByIdView.as_view()),
+    path("Outfit/GetProductsById/<int:outfit_id>", v.OutfitGetProductsByIdView.as_view()),
 
-    # Media Banners & Sliders
-    path("Slider/GetAll", SliderGetAllView.as_view(), name="slider-get-all"),
-    path("Banner/GetAll", BannerGetAllView.as_view(), name="banner-get-all"),
+    # Products
+    path("Product/GetAll", v.ProductGetAllView.as_view()),
+    path("Product/Search", v.ProductSearchView.as_view()),
+    path("Product/GetSelectedProducts", v.ProductGetSelectedProductsView.as_view()),
+    path("Product/GetById/<int:product_id>", v.ProductGetByIdView.as_view()),
+    path("Product/SuggestProduct", v.ProductSuggestView.as_view()),
+    path("Product/GetFilterByCategoryId", v.ProductGetFilterByCategoryView.as_view()),
+    path("Comment/GetByProductId/<int:product_id>", v.CommentGetByProductIdView.as_view()),
 
-    # SEO & SearchEngine
-    path("SearchEngine/SiteMaps", SearchEngineSiteMapsView.as_view(), name="searchengine-sitemaps"),
-    re_path(r"^SearchEngine/(?P<entity_type>[^/]+)/(?P<slug>.+)/meta$", SearchEngineMetaView.as_view(), name="searchengine-meta"),
-    re_path(r"^SearchEngine/(?P<entity_type>[^/]+)/(?P<slug>.+)/breadcrumbs$", SearchEngineBreadcrumbsView.as_view(), name="searchengine-breadcrumbs"),
-    re_path(r"^SearchEngine/(?P<entity_type>[^/]+)/(?P<slug>.+)/index$", SearchEngineIndexView.as_view(), name="searchengine-index"),
+    # Locations
+    path("ProvinceCity/GetAllProvince", v.ProvinceGetAllView.as_view()),
+    path("ProvinceCity/GetAllCity/<int:province_id>", v.CityGetAllView.as_view()),
+
+    # SEO
+    path("SearchEngine/SiteMaps", v.SearchEngineSiteMapsView.as_view()),
+    re_path(r"^SearchEngine/(?P<entity_type>[^/]+)/(?P<slug>.+)/meta$", v.SearchEngineMetaView.as_view()),
+    re_path(r"^SearchEngine/(?P<entity_type>[^/]+)/(?P<slug>.+)/breadcrumbs$", v.SearchEngineBreadcrumbsView.as_view()),
+    re_path(r"^SearchEngine/(?P<entity_type>[^/]+)/(?P<slug>.+)/index$", v.SearchEngineIndexView.as_view()),
 ]
