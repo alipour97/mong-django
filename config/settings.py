@@ -99,6 +99,13 @@ USE_TZ = True
 
 # Public site address, used to turn local media paths into absolute URLs
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://samian.mong.ir")
+# Where /img/ and /cdn/ are served from; set to a CDN address to move images there.
+PUBLIC_MEDIA_BASE_URL = os.getenv("PUBLIC_MEDIA_BASE_URL", PUBLIC_BASE_URL)
+# URL path of the pre-built images. nginx serves /img/ statically (deploy/nginx/);
+# until that block is installed use /api/img, which nginx already passes to Django.
+PUBLIC_IMG_PATH = os.getenv("PUBLIC_IMG_PATH", "/img").rstrip("/")
+# Local mirror of the legacy cdn.mong.ir files
+LEGACY_CDN_ROOT = os.getenv("LEGACY_CDN_ROOT", "/mnt/sda2/cdn.samian.mong.ir/public_html/wwwroot")
 
 # Static files (CSS, JavaScript, Images)
 # Matching Nginx config: location /static-backend/ -> /mnt/sda2/mong_samian/static/

@@ -42,6 +42,8 @@ from apps.website.models import (
     ThemePage,
 )
 
+from apps.website import images as site_images
+
 from . import catalog
 from .envelope import MSG_FETCHED, MSG_FETCHED_ONE, MSG_NOT_FOUND, MSG_NOT_FOUND_REQUIRED, MSG_SENT, iso, jalali, not_found, ok, server_error
 
@@ -70,15 +72,16 @@ class PrimaryConfigGetConfigView(PublicView):
         pc = PrimaryConfig.objects.filter(key=key, is_deleted=False).first()
         if not pc:
             return server_error()
+        raw = site_images.rewrite_media_in_text(pc.value)
         try:
-            value = json.loads(pc.value) if pc.value else None
+            value = json.loads(raw) if raw else None
         except json.JSONDecodeError:
-            value = pc.value
+            value = raw
         return ok({"id": pc.id, "key": pc.key, "value": value})
 
     def post(self, request, key: str = ""):
         key = key or request.data.get("key", "")
-        rows = [{"id": pc.id, "key": pc.key, "value": pc.value} for pc in PrimaryConfig.objects.filter(key=key, is_deleted=False)]
+        rows = [{"id": pc.id, "key": pc.key, "value": site_images.rewrite_media_in_text(pc.value)} for pc in PrimaryConfig.objects.filter(key=key, is_deleted=False)]
         return ok(rows)
 
 
@@ -90,7 +93,7 @@ def _company_media(record_id: int) -> dict | None:
         return None
     file_media = FileMedia.objects.filter(url=att.media_url, is_deleted=False).values_list("id", flat=True).first()
     return {
-        "url": att.media_url, "mediaId": att.id, "fileMediaId": file_media,
+        "url": site_images.site_media_url(att.media_url), "mediaId": att.id, "fileMediaId": file_media,
         "alternative": att.alternative, "tooltipTitle": att.tooltip_title,
     }
 
@@ -181,7 +184,7 @@ class CategoryGetSliderBannerSummariesView(PublicView):
         ids = _ids(request)
         found = Banner.objects.filter(id__in=ids, is_deleted=False, is_active=True).in_bulk()
         banners = [
-            {"id": b.id, "mediaUrl": b.media_url, "link": b.link, "displayPriority": b.display_priority, "isBanner": b.is_banner}
+            {"id": b.id, "mediaUrl": site_images.site_media_url(b.media_url), "link": b.link, "displayPriority": b.display_priority, "isBanner": b.is_banner}
             for b in (found[i] for i in ids if i in found)
         ]
         return ok({"banners": banners, "sliders": []}, message=MSG_FETCHED_ONE)

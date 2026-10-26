@@ -9,7 +9,8 @@ Sources:
 Rules:
 - Price and stock come from Samian for products linked to it. Products not yet
   linked fall back to the website price and the last legacy stock snapshot.
-- Images: Samian gallery first, website media as fallback.
+- Images: Samian gallery first, website media as fallback; both served as
+  pre-built WebP from /img/ (apps/website/images.py) once build_images ran.
 - Stock is the sum over settings.STOREFRONT_STOCK_WAREHOUSE_IDS (the shops), minus
   SiteSetting.min_qty kept back per variant.
 - Listing only shows products of settings.STOREFRONT_BRAND_IDS in an online
@@ -35,7 +36,7 @@ from apps.samian.models import (
     SamianProduct,
     SamianProductColor,
 )
-from apps.samian.services.image_download import IMAGE_EXTENSIONS, local_image_url
+from apps.website import images as site_images
 from apps.website.models import (
     Brand,
     Category,
@@ -91,7 +92,7 @@ def media_dict(att: MediaAttachment) -> dict:
     return {
         "id": att.id,
         "isVideo": att.is_video,
-        "mediaUrl": absolute_url(att.media_url),
+        "mediaUrl": absolute_url(site_images.site_media_url(att.media_url)),
         "alternative": att.alternative,
         "tooltipTitle": att.tooltip_title,
     }
@@ -304,9 +305,11 @@ class ProductBundle:
             imgs = []
             for idx, item in enumerate(color.colorsgalery or []):
                 fp = item.get("filePath", "") if isinstance(item, dict) else ""
-                if not fp or Path(fp).suffix.lower() not in IMAGE_EXTENSIONS:
+                if not fp or Path(fp).suffix.lower() not in site_images.IMAGE_EXT:
                     continue
-                url = local_image_url(color.productmain_id, fp) or f"/api/samian/media/{color.samian_id}/{idx}/"
+                key = site_images.samian_key(color.productmain_id, fp)
+                # Built nightly by build_images; until then the original through the proxy.
+                url = site_images.public_url(key) if site_images.is_built(key) else f"/api/samian/media/{color.samian_id}/{idx}/"
                 imgs.append({
                     "id": color.samian_id * 100 + idx,
                     "mediaUrl": absolute_url(url),
