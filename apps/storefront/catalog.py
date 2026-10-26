@@ -10,8 +10,10 @@ Rules:
 - Price and stock come from Samian for products linked to it. Products not yet
   linked fall back to the website price and the last legacy stock snapshot.
 - Images: Samian gallery first, website media as fallback.
-- Listing only shows products in an online category, and (when
-  SiteSetting.only_has_media_products is on) only products that have images.
+- Stock is the sum over settings.STOREFRONT_STOCK_WAREHOUSE_IDS (the shops).
+- Listing only shows products of settings.STOREFRONT_BRAND_IDS in an online
+  category, and (when SiteSetting.only_has_media_products is on) only products
+  that have images.
 """
 from __future__ import annotations
 
@@ -22,7 +24,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.cache import cache
-from django.db.models import Q, Sum
+from django.db.models import Avg, Q, Sum
 from django.utils import timezone
 
 from apps.samian.models import (
@@ -48,7 +50,7 @@ from apps.website.models import (
     SiteSetting,
 )
 
-LISTING_CACHE_KEY = "storefront:listing:v1"
+LISTING_CACHE_KEY = "storefront:listing:v3"
 LISTING_CACHE_TTL = 120
 TREE_CACHE_KEY = "storefront:category-tree:v1"
 TREE_CACHE_TTL = 300
@@ -70,6 +72,11 @@ def absolute_url(url: str) -> str:
     if url.startswith("/"):
         return settings.PUBLIC_BASE_URL.rstrip("/") + url
     return url
+
+
+def round_price(rial) -> int:
+    """Discounted prices are rounded to 1,000 toman (10,000 rial) like the legacy site."""
+    return int((float(rial) + 5000) // 10000 * 10000)
 
 
 def none_if_blank(text: str | None):
@@ -264,7 +271,10 @@ class ProductBundle:
         barcodes = {v.barcode for vs in b.variants.values() for v in vs if v.barcode}
         if barcodes:
             rows = (
-                SamianInventory.objects.filter(samian_barcode__barcode__in=barcodes)
+                SamianInventory.objects.filter(
+                    samian_barcode__barcode__in=barcodes,
+                    warehouse_id__in=settings.STOREFRONT_STOCK_WAREHOUSE_IDS,
+                )
                 .values("samian_barcode__barcode")
                 .annotate(total=Sum("qty"))
             )
@@ -280,9 +290,9 @@ class ProductBundle:
         return b
 
     def _load_images(self, ids):
-        spk_to_pid = {sp.pk: pid for pid, sp in self.samian.items()}
-        for color in SamianProductColor.objects.filter(samian_product_id__in=spk_to_pid.keys(), has_gallery=True).order_by("samian_id"):
-            pid = spk_to_pid[color.samian_product_id]
+        pmid_to_pid = {sp.samian_id: pid for pid, sp in self.samian.items()}
+        for color in SamianProductColor.objects.filter(productmain_id__in=pmid_to_pid.keys(), has_gallery=True).order_by("samian_id"):
+            pid = pmid_to_pid[color.productmain_id]
             imgs = []
             for idx, item in enumerate(color.colorsgalery or []):
                 fp = item.get("filePath", "") if isinstance(item, dict) else ""
@@ -314,11 +324,11 @@ class ProductBundle:
             base = sp.sale_price
             final = self.list_price.get(sp.pk)
             if final and final < base:
-                return Pricing(float(base), round((base - final) * 100 / base, 2), int(final))
+                return Pricing(float(base), round((base - final) * 100 / base, 3), round_price(final))
             return Pricing(float(base), 0.0, int(base))
         base = money(p.price)
         reduction = money(p.reduction)
-        after = int(base * (100 - reduction) / 100) if reduction else int(base)
+        after = round_price(base * (100 - reduction) / 100) if reduction else int(base)
         return Pricing(base, reduction, after)
 
     def variant_stock(self, pid: int, v: ProductVariant) -> float:
@@ -480,7 +490,9 @@ def listing_rows() -> list[ListingRow]:
     only_media = bool(setting and setting.only_has_media_products)
 
     ids = list(
-        Product.objects.filter(is_deleted=False, is_active=True, category_id__in=tree.nodes.keys()).values_list("id", flat=True)
+        Product.objects.filter(
+            is_deleted=False, is_active=True, category_id__in=tree.nodes.keys(), brand_id__in=settings.STOREFRONT_BRAND_IDS
+        ).values_list("id", flat=True)
     )
     if only_media:
         # The legacy site listed products that have a gallery per color; Samian galleries count too.
@@ -494,6 +506,10 @@ def listing_rows() -> list[ListingRow]:
         ids = [i for i in ids if i in with_media]
 
     bundle = ProductBundle.load(ids, with_images=False)
+    scores = dict(
+        ProductComment.objects.filter(product_id__in=ids, is_deleted=False, is_active=True)
+        .values("product_id").annotate(avg=Avg("score")).values_list("product_id", "avg")
+    )
     rows = []
     for pid, p in bundle.products.items():
         pr = bundle.pricing(pid)
@@ -504,7 +520,7 @@ def listing_rows() -> list[ListingRow]:
             price_after=pr.after, reduction=pr.reduction, in_stock=bundle.in_stock(pid),
             color_ids=frozenset(v.color_id for v in bundle.variants.get(pid, []) if v.color_id),
             created=p.created, view_count=p.view_count, sales_count=p.sales_count,
-            buyer_score=float(p.buyer_score_average or 0),
+            buyer_score=float(scores.get(pid) or 0),
         ))
     cache.set(LISTING_CACHE_KEY, rows, LISTING_CACHE_TTL)
     return rows
@@ -514,17 +530,17 @@ def _newest(r):
     return (-(r.created.timestamp() if r.created else 0), r.id)
 
 
-# sortCriteriaId -> ascending sort key
+# sortCriteriaId -> ascending sort key; ties fall back to newest like the legacy site
 SORT_KEYS = {
-    1: lambda r: (-r.view_count, r.id),    # پربازدیدترین
-    2: _newest,                            # جدیدترین (also the default)
-    3: lambda r: (-r.sales_count, r.id),   # پرفروش ترین
-    4: lambda r: (r.price_after, r.id),    # ارزان ترین
-    5: lambda r: (-r.price_after, r.id),   # گران ترین
-    6: lambda r: (-r.buyer_score, r.id),   # پیشنهاد خریداران
-    7: _newest,                            # منتخب
-    8: lambda r: (-r.reduction, r.id),     # بیشترین تخفیف
-    9: lambda r: (r.reduction, r.id),      # کمترین تخفیف
+    1: lambda r: (-r.view_count, *_newest(r)),    # پربازدیدترین
+    2: _newest,                                   # جدیدترین (also the default)
+    3: lambda r: (-r.sales_count, *_newest(r)),   # پرفروش ترین
+    4: lambda r: (r.price_after, *_newest(r)),    # ارزان ترین
+    5: lambda r: (-r.price_after, *_newest(r)),   # گران ترین
+    6: lambda r: (-r.buyer_score, *_newest(r)),   # پیشنهاد خریداران (approved comment scores)
+    7: _newest,                                   # منتخب
+    8: lambda r: (-r.reduction, *_newest(r)),     # بیشترین تخفیف
+    9: lambda r: (r.reduction, *_newest(r)),      # کمترین تخفیف
 }
 SORT_CRITERIA = [
     {"id": 1, "sortKeyFa": "پربازدیدترین"}, {"id": 2, "sortKeyFa": "جدیدترین"},
