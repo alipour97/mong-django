@@ -36,13 +36,15 @@ class Command(BaseCommand):
         with transaction.atomic():
             ProductSamianLink.objects.filter(method=ProductSamianLink.Method.EXACT_CODE).delete()
             links = []
+            seen_product_ids: set[int] = set()
             for sp in SamianProduct.objects.all().only("samian_id", "subcode", "name"):
-                candidates = [pid for pid in by_code.get((sp.subcode or "").strip(), []) if pid not in manual]
+                candidates = [pid for pid in by_code.get((sp.subcode or "").strip(), []) if pid not in manual and pid not in seen_product_ids]
                 if len(candidates) == 1:
                     links.append(ProductSamianLink(
                         product_id=candidates[0], samian_product_id=sp.samian_id,
                         method=ProductSamianLink.Method.EXACT_CODE,
                     ))
+                    seen_product_ids.add(candidates[0])
                 elif len(candidates) > 1:
                     ambiguous.append((sp, candidates))
                 else:

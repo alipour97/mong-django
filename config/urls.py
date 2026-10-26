@@ -14,11 +14,16 @@ def health_check(request):
         "erp": "Samian ERP (Development Port 8087)",
     })
 
+from django.views.static import serve
+from django.urls import re_path
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/health/", health_check, name="health-check"),
     path("api/samian/", include("apps.samian.urls")),
     path("api/v1/", include("apps.storefront.urls")),
+    re_path(r"^cdn/(?P<path>.*)$", serve, {"document_root": "/mnt/sda2/cdn.samian.mong.ir/public_html/wwwroot"}),
+    re_path(r"^api/cdn/(?P<path>.*)$", serve, {"document_root": "/mnt/sda2/cdn.samian.mong.ir/public_html/wwwroot"}),
 ]
 
 if settings.DEBUG:

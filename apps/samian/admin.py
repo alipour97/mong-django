@@ -13,6 +13,8 @@ from .models import (
     SamianCustomer,
     SamianSalesTransaction,
     SamianSalesRow,
+    SamianPriceList,
+    SamianPriceListItem,
     SamianSyncLog,
 )
 
@@ -26,23 +28,23 @@ class SamianBrandAdmin(admin.ModelAdmin):
 
 @admin.register(SamianDepartment)
 class SamianDepartmentAdmin(admin.ModelAdmin):
-    list_display = ("samian_id", "title", "current_level", "department1", "department2", "department3")
+    list_display = ("samian_id", "title", "level", "department1", "department2", "department3")
     search_fields = ("title", "department1", "department2", "department3")
-    list_filter = ("current_level",)
+    list_filter = ("level",)
 
 
 @admin.register(SamianWarehouse)
 class SamianWarehouseAdmin(admin.ModelAdmin):
-    list_display = ("samian_id", "title", "department_id", "is_active")
-    search_fields = ("title",)
-    list_filter = ("is_active",)
+    list_display = ("samian_id", "title", "department_name", "is_active", "is_commercial")
+    search_fields = ("title", "department_name")
+    list_filter = ("is_active", "is_commercial")
 
 
 @admin.register(SamianProduct)
 class SamianProductAdmin(admin.ModelAdmin):
-    list_display = ("samian_id", "subcode", "name", "brand_name", "department_name", "season_code", "is_active", "is_saleable")
+    list_display = ("samian_id", "subcode", "name", "brand_name", "department_name", "season_code", "sale_price", "is_active")
     search_fields = ("samian_id", "subcode", "name", "brand_name")
-    list_filter = ("is_active", "is_saleable", "season_code")
+    list_filter = ("is_active", "is_saleable", "season_code", "sex")
 
 
 @admin.register(SamianProductColor)
@@ -54,22 +56,23 @@ class SamianProductColorAdmin(admin.ModelAdmin):
 
 @admin.register(SamianBarcode)
 class SamianBarcodeAdmin(admin.ModelAdmin):
-    list_display = ("samian_id", "barcode", "subcode", "productmain_id", "size_name", "color_name", "sale_price", "is_active")
-    search_fields = ("barcode", "subcode", "size_name", "color_name")
+    list_display = ("samian_id", "barcode", "subcode", "productmain_id", "size", "color", "sale_price", "is_active")
+    search_fields = ("barcode", "subcode", "size", "color")
     list_filter = ("is_active",)
 
 
 @admin.register(SamianInventory)
 class SamianInventoryAdmin(admin.ModelAdmin):
-    list_display = ("samian_id", "barcode", "barcodemain_id", "warehouse_id", "count", "updated_at_samian")
-    search_fields = ("barcode", "barcodemain_id")
+    list_display = ("barcodemain_id", "warehouse_id", "warehouse", "qty", "qty_reserved", "source_updated_at")
+    search_fields = ("barcodemain_id",)
     list_filter = ("warehouse_id",)
 
 
 @admin.register(SamianCustomer)
 class SamianCustomerAdmin(admin.ModelAdmin):
-    list_display = ("samian_id", "first_name", "last_name", "cellphone", "national_code")
-    search_fields = ("first_name", "last_name", "cellphone", "national_code")
+    list_display = ("samian_id", "first_name", "last_name", "mobile", "club_level", "wallet_balance")
+    search_fields = ("first_name", "last_name", "mobile", "national_code")
+    list_filter = ("club_level", "is_active")
 
 
 class SamianSalesRowInline(admin.TabularInline):
@@ -80,7 +83,7 @@ class SamianSalesRowInline(admin.TabularInline):
 
 @admin.register(SamianSalesTransaction)
 class SamianSalesTransactionAdmin(admin.ModelAdmin):
-    list_display = ("samian_id", "transaction_code", "transaction_date", "total_amount", "net_amount", "status", "store_order_id")
+    list_display = ("samian_id", "transaction_code", "transaction_date", "report_date", "total_amount", "net_amount", "status", "store_order_id")
     search_fields = ("transaction_code", "transaction_unique_id", "customer_samian_id")
     list_filter = ("status", "warehouse_id")
     inlines = [SamianSalesRowInline]
@@ -88,8 +91,23 @@ class SamianSalesTransactionAdmin(admin.ModelAdmin):
 
 @admin.register(SamianSalesRow)
 class SamianSalesRowAdmin(admin.ModelAdmin):
-    list_display = ("samian_id", "transaction_samian_id", "barcode", "item_name", "quantity", "unit_price", "line_revenue")
+    list_display = ("samian_id", "transaction_samian_id", "barcode", "item_name", "quantity", "unit_price", "line_revenue", "report_date")
     search_fields = ("barcode", "item_name", "transaction_samian_id")
+    list_filter = ("is_return",)
+
+
+@admin.register(SamianPriceList)
+class SamianPriceListAdmin(admin.ModelAdmin):
+    list_display = ("samian_id", "name", "is_active", "valid_from", "valid_to")
+    list_filter = ("is_active",)
+    search_fields = ("name",)
+
+
+@admin.register(SamianPriceListItem)
+class SamianPriceListItemAdmin(admin.ModelAdmin):
+    list_display = ("samian_product", "price_list_name", "list_price", "discount_percent", "final_price")
+    search_fields = ("price_list_name",)
+    raw_id_fields = ("samian_product", "price_list")
 
 
 @admin.register(SamianSyncLog)

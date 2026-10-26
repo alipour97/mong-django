@@ -99,3 +99,49 @@ class SamianInventoryPreviewView(APIView):
             return Response({"count": len(stocks), "results": stocks})
         except Exception as exc:
             return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class SamianMediaProxyView(APIView):
+    """
+    Stream product photos directly from Samian ERP to frontend UI.
+    URL: /api/samian/media/<int:color_id>/<int:photo_idx>/
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, color_id: int, photo_idx: int = 0):
+        import requests
+        from django.http import HttpResponse, Http404
+
+        try:
+            color = SamianProductColor.objects.get(samian_id=color_id)
+        except SamianProductColor.DoesNotExist:
+            raise Http404("Color record not found")
+
+        gallery = color.colorsgalery
+        if not gallery or photo_idx >= len(gallery):
+            raise Http404("Photo index not found in gallery")
+
+        file_item = gallery[photo_idx]
+        file_path = file_item.get("filePath") if isinstance(file_item, dict) else None
+        if not file_path:
+            raise Http404("File path missing")
+
+        cfg = get_samian_settings()
+        # Clean target URL: dev server port 8087
+        raw_base = cfg.base_url.rstrip("/")
+        if raw_base.endswith("/v2"):
+            raw_base = raw_base[:-3]
+
+        target_url = f"{raw_base}/{file_path.lstrip('/')}"
+
+        try:
+            resp = requests.get(target_url, timeout=12)
+            if resp.status_code == 200:
+                content_type = resp.headers.get("Content-Type", "image/jpeg")
+                response = HttpResponse(resp.content, content_type=content_type)
+                response["Cache-Control"] = "public, max-age=86400"
+                return response
+            return HttpResponse(f"Upstream status: {resp.status_code}", status=resp.status_code)
+        except Exception as exc:
+            return HttpResponse(f"Media fetch failed: {exc}", status=502)
+

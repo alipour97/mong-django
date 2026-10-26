@@ -8,6 +8,8 @@ from .views import (
     CategoryGetAllView,
     CategoryGetByIdView,
     ProductGetAllView,
+    ProductGetSelectedProductsView,
+    ProductGetByIdView,
     SettingGetSettingView,
     SliderGetAllView,
     BannerGetAllView,
@@ -15,6 +17,10 @@ from .views import (
     SearchEngineBreadcrumbsView,
     SearchEngineIndexView,
     SearchEngineSiteMapsView,
+    CategoryGetSliderBannerSummariesView,
+    CategoryGetCategorySummariesView,
+    CollectionGetCollectionSummariesView,
+    OutfitGetOutfitSummariesView,
 )
 
 urlpatterns = [
@@ -29,7 +35,13 @@ urlpatterns = [
     # Catalog & Products
     path("Category/GetAll", CategoryGetAllView.as_view(), name="category-get-all"),
     path("Category/GetById/<int:category_id>", CategoryGetByIdView.as_view(), name="category-get-by-id"),
+    path("Category/GetSliderBannerSummaries", CategoryGetSliderBannerSummariesView.as_view(), name="category-get-slider-banner-summaries"),
+    path("Category/GetCategorySummaries", CategoryGetCategorySummariesView.as_view(), name="category-get-category-summaries"),
+    path("Collection/GetCollectionSummaries", CollectionGetCollectionSummariesView.as_view(), name="collection-get-collection-summaries"),
+    path("Outfit/GetOutfitSummaries", OutfitGetOutfitSummariesView.as_view(), name="outfit-get-outfit-summaries"),
     path("Product/GetAll", ProductGetAllView.as_view(), name="product-get-all"),
+    path("Product/GetSelectedProducts", ProductGetSelectedProductsView.as_view(), name="product-get-selected"),
+    path("Product/GetById/<int:product_id>", ProductGetByIdView.as_view(), name="product-get-by-id"),
 
     # Media Banners & Sliders
     path("Slider/GetAll", SliderGetAllView.as_view(), name="slider-get-all"),

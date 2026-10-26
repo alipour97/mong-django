@@ -1,0 +1,17 @@
+# Mong Samian ERP Sync Schedule
+# These entries are merged into the host crontab alongside LEBAZAI jobs.
+# To re-install after edits, manually append to: crontab -e
+#
+# Times chosen to avoid collision with LEBAZAI's Samian jobs (02:30 full, 13:40 prices).
+
+# Combined price + barcodes + inventory: every 15 min during business hours
+*/15 9-22 * * * cd /mnt/sda2/mong_samian && flock -n /tmp/mong_sync.lock /mnt/sda2/mong_samian/.venv/bin/python manage.py sync_samian_erp >> /mnt/sda2/mong_samian/logs/sync.log 2>&1
+
+# Full sweep (not incremental): daily at 2:45 AM
+45 2 * * * cd /mnt/sda2/mong_samian && flock -n /tmp/mong_sync_full.lock /mnt/sda2/mong_samian/.venv/bin/python manage.py sync_samian_erp --full >> /mnt/sda2/mong_samian/logs/sync_full.log 2>&1
+
+# Full catalog (products, brands, departments, colors): daily at 3:15 AM
+15 3 * * * cd /mnt/sda2/mong_samian && flock -n /tmp/mong_sync_catalog.lock /mnt/sda2/mong_samian/.venv/bin/python manage.py sync_samian_catalog >> /mnt/sda2/mong_samian/logs/sync_catalog.log 2>&1
+
+# Download product images from Samian to local storage: daily at 3:30 AM
+30 3 * * * cd /mnt/sda2/mong_samian && flock -n /tmp/mong_sync_images.lock /mnt/sda2/mong_samian/.venv/bin/python manage.py sync_samian_images >> /mnt/sda2/mong_samian/logs/sync_images.log 2>&1
