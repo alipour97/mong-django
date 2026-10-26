@@ -167,93 +167,86 @@ def _warehouse_pks() -> dict[int, int]:
 def sync_barcodes(
     client: SamianClient | None = None,
     *,
-    take_count: int = 500,
+    take_count: int = 5000,
     max_records: int | None = None,
     batch_size: int = DEFAULT_BATCH_SIZE,
     stdout=None,
 ) -> dict[str, Any]:
-    """Sync barcodes from /v2/product/barcodemain into SamianBarcode."""
+    """
+    Sync barcodes from /v2/product/barcodemain into SamianBarcode.
+
+    barcodemain has no brand field, so every barcode is read (keyset paging on
+    barcodemain_id, ~3s per 5000) and only those of locally synced products
+    (the website brands) are kept. Barcodes of other products are removed.
+    """
     client = client or get_samian_client()
     log = _log_start(SamianSyncLog.Action.SYNC_BARCODES)
+    total = synced = 0
     try:
         product_pk_by_id = dict(SamianProduct.objects.values_list("samian_id", "pk"))
-        total = synced = requests_made = 0
-        skip = 0
+        kept_ids: set[int] = set()
+        instances: list[SamianBarcode] = []
 
-        while True:
-            remaining = None if max_records is None else max_records - total
-            if remaining is not None and remaining <= 0:
+        def flush():
+            for batch in _chunks(instances, batch_size):
+                SamianBarcode.objects.bulk_create(
+                    batch,
+                    update_conflicts=True,
+                    unique_fields=["samian_id"],
+                    update_fields=[
+                        "barcode", "subcode", "samian_product", "productmain_id",
+                        "color", "color_en", "size", "season_code",
+                        "material_desc", "sku_code", "buy_price", "sale_price",
+                        "end_user_price", "is_active", "sale_status_id",
+                        "sale_status", "updated_at",
+                    ],
+                )
+            instances.clear()
+
+        for item in client.iter_keyset("product/barcodemain", key="barcodemain_id", take_count=take_count):
+            if max_records is not None and total >= max_records:
                 break
-            actual_take = take_count if remaining is None else min(take_count, remaining)
-
-            page = extract_records(
-                client.manual_request(
-                    "product/barcodemain",
-                    params={
-                        "skip": skip,
-                        "takeCount": actual_take,
-                        "sort": "barcodemain_id",
-                        "sortType": "asc",
-                    },
+            total += 1
+            pmid = _int(item.get("productmain_id"))
+            sid = _int(item.get("barcodemain_id") or item.get("id"))
+            if not sid or pmid not in product_pk_by_id:
+                continue
+            kept_ids.add(sid)
+            instances.append(
+                SamianBarcode(
+                    samian_id=sid,
+                    barcode=_s(item.get("kbarcode"), 255),
+                    subcode=_s(item.get("k_bar_code"), 128),
+                    samian_product_id=product_pk_by_id[pmid],
+                    productmain_id=pmid,
+                    color=_s(item.get("__colorinfo_id_value") or item.get("colornew"), 255),
+                    color_en=_s(item.get("colornewen"), 255),
+                    size=_s(item.get("__sizeinfo_id_value") or item.get("sizenew"), 128),
+                    season_code=_s(item.get("seasoncodenew"), 64),
+                    material_desc=_s(item.get("materialdesc"), 255),
+                    sku_code=_s(item.get("skucode"), 128),
+                    buy_price=_money(item.get("barcodebuyprice")),
+                    sale_price=_money(item.get("barcodesaleprice")),
+                    end_user_price=_money_or_none(item.get("enduserprice")),
+                    is_active=bool(item.get("isactive", True)),
+                    sale_status_id=_int(item.get("salestatus_id")),
+                    sale_status=_s(item.get("__salestatus_id_value"), 128),
                 )
             )
-            requests_made += 1
-            if not page:
-                break
-            total += len(page)
+            synced += 1
+            if len(instances) >= batch_size:
+                flush()
+            if stdout and total % 50000 == 0:
+                stdout.write(f"  بارکد: {total} خوانده شد، {synced} نگه داشته شد...")
+        flush()
 
-            instances = []
-            for item in page:
-                sid = _int(item.get("barcodemain_id") or item.get("id"))
-                if not sid:
-                    continue
-                pmid = _int(item.get("productmain_id"))
-                instances.append(
-                    SamianBarcode(
-                        samian_id=sid,
-                        barcode=_s(item.get("kbarcode"), 255),
-                        subcode=_s(item.get("k_bar_code"), 128),
-                        samian_product_id=product_pk_by_id.get(pmid),
-                        productmain_id=pmid,
-                        color=_s(item.get("__colorinfo_id_value") or item.get("colornew"), 255),
-                        color_en=_s(item.get("colornewen"), 255),
-                        size=_s(item.get("__sizeinfo_id_value") or item.get("sizenew"), 128),
-                        season_code=_s(item.get("seasoncodenew"), 64),
-                        material_desc=_s(item.get("materialdesc"), 255),
-                        sku_code=_s(item.get("skucode"), 128),
-                        buy_price=_money(item.get("barcodebuyprice")),
-                        sale_price=_money(item.get("barcodesaleprice")),
-                        end_user_price=_money_or_none(item.get("enduserprice")),
-                        is_active=bool(item.get("isactive", True)),
-                        sale_status_id=_int(item.get("salestatus_id")),
-                        sale_status=_s(item.get("__salestatus_id_value"), 128),
-                    )
-                )
+        pruned = 0
+        if max_records is None:
+            stale = list(set(SamianBarcode.objects.values_list("samian_id", flat=True)) - kept_ids)
+            for chunk in _chunks(stale, 500):
+                pruned += SamianBarcode.objects.filter(samian_id__in=chunk).delete()[1].get("samian.SamianBarcode", 0)
 
-            if instances:
-                for batch in _chunks(instances, batch_size):
-                    SamianBarcode.objects.bulk_create(
-                        batch,
-                        update_conflicts=True,
-                        unique_fields=["samian_id"],
-                        update_fields=[
-                            "barcode", "subcode", "samian_product", "productmain_id",
-                            "color", "color_en", "size", "season_code",
-                            "material_desc", "sku_code", "buy_price", "sale_price",
-                            "end_user_price", "is_active", "sale_status_id",
-                            "sale_status", "updated_at",
-                        ],
-                    )
-            synced += len(instances)
-
-            if stdout and requests_made % 20 == 0:
-                stdout.write(f"  بارکد: {requests_made} درخواست، {synced} ردیف...")
-
-            if len(page) < actual_take:
-                break
-            skip += actual_take
-
-        return _log_finish(log, total=total, synced=synced, details={"requests": requests_made})
+        return _log_finish(log, total=total, synced=synced, details={"pruned": pruned})
 
     except Exception as exc:
         logger.exception("sync_barcodes failed")
@@ -392,6 +385,7 @@ def sync_inventory(
     """
     client = client or get_samian_client()
     log = _log_start(SamianSyncLog.Action.SYNC_INVENTORY)
+    total = synced = 0
     try:
         filters = None
         mark = None
@@ -404,98 +398,67 @@ def sync_inventory(
                 full = True
 
         warehouse_pks = _warehouse_pks()
-        barcode_pk_cache: dict[int, int] = {}
+        # Only barcodes of the website brands are stored, so other stock rows are skipped.
+        barcode_pks = dict(SamianBarcode.objects.values_list("samian_id", "pk"))
         seen_keys: set[tuple[int, int]] = set()
-        total = synced = skipped = requests_made = 0
-        skip = 0
+        total = synced = skipped = 0
+        instances: list[SamianInventory] = []
 
-        while True:
-            remaining = None if max_records is None else max_records - total
-            if remaining is not None and remaining <= 0:
+        def flush():
+            for batch in _chunks(instances, batch_size):
+                SamianInventory.objects.bulk_create(
+                    batch,
+                    update_conflicts=True,
+                    unique_fields=["samian_barcode", "warehouse_id"],
+                    update_fields=[
+                        "barcodemain_id", "warehouse",
+                        "samian_warehouse", "qty", "qty_reserved",
+                        "source_updated_at",
+                    ],
+                )
+            instances.clear()
+
+        # wm/stock ignores filters on id, so it is paged with skip (about 30k rows, 6 pages).
+        for item in client.iter_paginated(
+            "wm/stock", take_count=take_count, sort="barcodemain_id", sort_type="asc",
+            extra_params={"filters": filters} if filters else None,
+        ):
+            if max_records is not None and total >= max_records:
                 break
-            actual_take = take_count if remaining is None else min(take_count, remaining)
-
-            params: dict[str, Any] = {
-                "skip": skip,
-                "takeCount": actual_take,
-                "sort": "barcodemain_id",
-                "sortType": "asc",
-            }
-            if filters:
-                params["filters"] = filters
-
-            page = extract_records(
-                client.manual_request("wm/stock", params=params, timeout=120)
+            total += 1
+            barcodemain_id = _int(item.get("barcodemain_id"))
+            warehouse_id = _int(item.get("warehouse_id"))
+            barcode_pk = barcode_pks.get(barcodemain_id)
+            if barcode_pk is None or warehouse_id is None:
+                skipped += 1
+                continue
+            key = (barcodemain_id, warehouse_id)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            instances.append(
+                SamianInventory(
+                    samian_barcode_id=barcode_pk,
+                    barcodemain_id=barcodemain_id,
+                    samian_warehouse_id=warehouse_pks.get(warehouse_id),
+                    warehouse_id=warehouse_id,
+                    warehouse=_s(item.get("__warehouse_id_value"), 255),
+                    qty=_dec(item.get("mojodi")),
+                    qty_reserved=_dec(item.get("mojodireserve")),
+                    source_updated_at=_dt(item.get("updatedate")),
+                )
             )
-            requests_made += 1
-            if not page:
-                break
-            total += len(page)
-
-            needed_barcode_ids = {_int(i.get("barcodemain_id")) for i in page} - {None}
-            missing_ids = needed_barcode_ids - barcode_pk_cache.keys()
-            if missing_ids:
-                barcode_pk_cache.update(
-                    SamianBarcode.objects.filter(samian_id__in=missing_ids).values_list("samian_id", "pk")
-                )
-
-            instances: list[SamianInventory] = []
-            for item in page:
-                barcodemain_id = _int(item.get("barcodemain_id"))
-                warehouse_id = _int(item.get("warehouse_id"))
-                if barcodemain_id is None or warehouse_id is None:
-                    skipped += 1
-                    continue
-
-                barcode_pk = barcode_pk_cache.get(barcodemain_id)
-                if not barcode_pk:
-                    skipped += 1
-                    continue
-
-                key = (barcodemain_id, warehouse_id)
-                if key in seen_keys:
-                    continue
-                seen_keys.add(key)
-
-                instances.append(
-                    SamianInventory(
-                        samian_barcode_id=barcode_pk,
-                        barcodemain_id=barcodemain_id,
-                        samian_warehouse_id=warehouse_pks.get(warehouse_id),
-                        warehouse_id=warehouse_id,
-                        warehouse=_s(item.get("__warehouse_id_value"), 255),
-                        qty=_dec(item.get("mojodi")),
-                        qty_reserved=_dec(item.get("mojodireserve")),
-                        source_updated_at=_dt(item.get("updatedate")),
-                    )
-                )
-
-            if instances:
-                for batch in _chunks(instances, batch_size):
-                    SamianInventory.objects.bulk_create(
-                        batch,
-                        update_conflicts=True,
-                        unique_fields=["samian_barcode", "warehouse_id"],
-                        update_fields=[
-                            "barcodemain_id", "warehouse",
-                            "samian_warehouse", "qty", "qty_reserved",
-                            "source_updated_at",
-                        ],
-                    )
-            synced += len(instances)
-
-            if stdout and requests_made % 5 == 0:
-                stdout.write(f"  موجودی: {requests_made} درخواست، {synced} ردیف بروزرسانی شد...")
-
-            if len(page) < actual_take:
-                break
-            skip += actual_take
+            synced += 1
+            if len(instances) >= batch_size:
+                flush()
+            if stdout and total % 50000 == 0:
+                stdout.write(f"  موجودی: {total} ردیف خوانده شد، {synced} ذخیره شد...")
+        flush()
 
         result = _log_finish(
             log, total=total, synced=synced,
             details={
                 "skipped_unknown_barcode": skipped,
-                "requests": requests_made,
                 "mode": "full" if full else "incremental",
                 "since": timezone.localtime(mark).isoformat() if mark else None,
             },

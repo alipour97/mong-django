@@ -1,5 +1,8 @@
 """
 Management command: sync product master list from Samian ERP to SamianProduct.
+
+Only products of settings.SAMIAN_BRAND_IDS are fetched (keyset paging on
+productmain_id). Products of other brands left from earlier syncs are removed.
 """
 from __future__ import annotations
 
@@ -7,7 +10,10 @@ import logging
 import time
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from apps.samian import CatalogService, get_samian_client
+from django.conf import settings
+
+from apps.samian import get_samian_client
+from apps.samian.client import brand_filter
 from apps.samian.models import SamianProduct, SamianSyncLog
 
 logger = logging.getLogger(__name__)
@@ -26,8 +32,8 @@ class Command(BaseCommand):
         parser.add_argument(
             "--take-count",
             type=int,
-            default=100,
-            help="تعداد رکورد در هر صفحه API (پیش‌فرض: ۱۰۰)",
+            default=5000,
+            help="تعداد رکورد در هر صفحه API (پیش‌فرض: ۵۰۰۰)",
         )
         parser.add_argument(
             "--max-records",
@@ -38,7 +44,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         batch_size = options.get("batch_size", 500)
-        take_count = options.get("take_count", 100)
+        take_count = options.get("take_count", 5000)
         max_records = options.get("max_records")
 
         self.stdout.write(self.style.NOTICE("شروع همگام‌سازی محصولات سامین..."))
@@ -48,19 +54,25 @@ class Command(BaseCommand):
             status=SamianSyncLog.Status.RUNNING,
         )
 
-        catalog = CatalogService()
+        client = get_samian_client()
         t0 = time.time()
         read_count = 0
         upserted_count = 0
         batch: list[SamianProduct] = []
 
         try:
-            for item in catalog.iter_products(take_count=take_count, max_records=max_records):
+            seen_ids: set[int] = set()
+            for item in client.iter_keyset(
+                "product/productmain", key="productmain_id", take_count=take_count, filters=brand_filter()
+            ):
+                if max_records is not None and read_count >= max_records:
+                    break
                 read_count += 1
                 samian_id = item.get("productmain_id") or item.get("id")
                 if not samian_id:
                     continue
 
+                seen_ids.add(int(samian_id))
                 prod = SamianProduct(
                     samian_id=int(samian_id),
                     subcode=str(item.get("k_bar_code") or "").strip(),
@@ -105,12 +117,19 @@ class Command(BaseCommand):
                 )
                 upserted_count += len(batch)
 
+            pruned = 0
+            if settings.SAMIAN_BRAND_IDS and max_records is None:
+                stale = list(set(SamianProduct.objects.values_list("samian_id", flat=True)) - seen_ids)
+                for i in range(0, len(stale), 500):
+                    pruned += SamianProduct.objects.filter(samian_id__in=stale[i:i + 500]).delete()[1].get("samian.SamianProduct", 0)
+                self.stdout.write(f"  حذف {pruned} رکورد مربوط به برندهای دیگر")
+
             duration = time.time() - t0
             sync_log.status = SamianSyncLog.Status.SUCCESS
             sync_log.finished_at = timezone.now()
             sync_log.records_read = read_count
             sync_log.records_upserted = upserted_count
-            sync_log.details = {"duration_seconds": round(duration, 2)}
+            sync_log.details = {"duration_seconds": round(duration, 2), "pruned": pruned}
             sync_log.save()
 
             self.stdout.write(self.style.SUCCESS(

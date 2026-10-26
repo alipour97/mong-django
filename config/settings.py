@@ -77,6 +77,9 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
+        # WAL lets the site read while a sync writes; timeout waits for locks instead of failing.
+        # Temporary: production should run on PostgreSQL (see TODO.md).
+        "OPTIONS": {"timeout": 30, "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;"},
     }
 }
 
@@ -180,3 +183,14 @@ DADEHFA_DB = {
     "USER": os.getenv("DADEHFA_DB_USER", ""),
     "PASSWORD": os.getenv("DADEHFA_DB_PASSWORD", ""),
 }
+
+# Only these Samian brands belong to the Mong website (مانگ, توليد). Syncs skip everything else.
+SAMIAN_BRAND_IDS = [int(x) for x in os.getenv("SAMIAN_BRAND_IDS", "140430,14041").split(",") if x.strip()]
+
+# Storefront rules carried over from the legacy site:
+# - listing shows only these website brands (website.Brand ids for مانگ, توليد)
+# - stock is the sum of the online-sale branches: مرواريد(3) گلسار(2) ستارخان شيراز(26) زيگورات(28) پارك سنتر اهواز(29)
+STOREFRONT_BRAND_IDS = [int(x) for x in os.getenv("STOREFRONT_BRAND_IDS", "15,1").split(",") if x.strip()]
+STOREFRONT_STOCK_WAREHOUSE_IDS = [
+    int(x) for x in os.getenv("STOREFRONT_STOCK_WAREHOUSE_IDS", "2,3,26,28,29").split(",") if x.strip()
+]

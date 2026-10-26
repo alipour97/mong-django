@@ -7,7 +7,7 @@ import logging
 import time
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from apps.samian import CatalogService, MediaService
+from apps.samian import MediaService, get_samian_client
 from apps.samian.models import SamianProduct, SamianProductColor, SamianSyncLog
 
 logger = logging.getLogger(__name__)
@@ -26,8 +26,8 @@ class Command(BaseCommand):
         parser.add_argument(
             "--take-count",
             type=int,
-            default=100,
-            help="تعداد رکورد در هر صفحه API (پیش‌فرض: ۱۰۰)",
+            default=5000,
+            help="تعداد رکورد در هر صفحه API (پیش‌فرض: ۵۰۰۰)",
         )
         parser.add_argument(
             "--max-records",
@@ -38,7 +38,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         batch_size = options.get("batch_size", 500)
-        take_count = options.get("take_count", 100)
+        take_count = options.get("take_count", 5000)
         max_records = options.get("max_records")
 
         self.stdout.write(self.style.NOTICE("شروع همگام‌سازی رنگ‌ها و گالری‌های سامین..."))
@@ -48,19 +48,23 @@ class Command(BaseCommand):
             status=SamianSyncLog.Status.RUNNING,
         )
 
-        catalog = CatalogService()
+        client = get_samian_client()
         media = MediaService()
+        # colors have no brand field and ignore keyset filters: read all with skip, keep those of synced products
+        product_pks = dict(SamianProduct.objects.values_list("samian_id", "pk"))
         t0 = time.time()
         read_count = 0
         upserted_count = 0
         batch: list[SamianProductColor] = []
 
         try:
-            for item in catalog.iter_colors(take_count=take_count, max_records=max_records):
+            for item in client.iter_paginated("product/colors", take_count=take_count, sort="id", sort_type="asc"):
+                if max_records is not None and read_count >= max_records:
+                    break
                 read_count += 1
                 color_id = item.get("id")
                 productmain_id = item.get("productmain_id")
-                if not color_id or not productmain_id:
+                if not color_id or int(productmain_id or 0) not in product_pks:
                     continue
 
                 gallery_items = media.parse_gallery(item.get("colorsgalery"))
@@ -75,6 +79,7 @@ class Command(BaseCommand):
 
                 color_obj = SamianProductColor(
                     samian_id=int(color_id),
+                    samian_product_id=product_pks[int(productmain_id)],
                     productmain_id=int(productmain_id),
                     colorinfo_id=int(item["colorinfo_id"]) if item.get("colorinfo_id") else None,
                     color_name=str(item.get("__colorinfo_id_value") or "").strip(),
@@ -90,7 +95,7 @@ class Command(BaseCommand):
                         update_conflicts=True,
                         unique_fields=["samian_id"],
                         update_fields=[
-                            "productmain_id", "colorinfo_id", "color_name",
+                            "samian_product", "productmain_id", "colorinfo_id", "color_name",
                             "colorsgalery", "has_gallery", "subcode_hint", "updated_at",
                         ],
                     )
@@ -104,7 +109,7 @@ class Command(BaseCommand):
                     update_conflicts=True,
                     unique_fields=["samian_id"],
                     update_fields=[
-                        "productmain_id", "colorinfo_id", "color_name",
+                        "samian_product", "productmain_id", "colorinfo_id", "color_name",
                         "colorsgalery", "has_gallery", "subcode_hint", "updated_at",
                     ],
                 )

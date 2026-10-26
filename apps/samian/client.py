@@ -347,6 +347,65 @@ class SamianClient:
 
             skip += take_count
 
+    def iter_keyset(
+        self,
+        endpoint: str,
+        *,
+        key: str,
+        take_count: int = 5000,
+        filters: list | None = None,
+        after: int = 0,
+        timeout: int = 120,
+    ) -> Iterator[dict[str, Any]]:
+        """
+        Yield every record of a list endpoint ordered by `key`, paging with
+        `key > last` instead of skip. Samian gets slower with every skipped
+        row (2.6s per page at skip=30000), keyset pages cost the same throughout.
+
+        Only for endpoints that honor filters on `key` (productmain,
+        barcodemain). product/colors and wm/stock ignore them and keep
+        returning the first page; a page that does not move forward raises.
+
+        `filters` uses the Samian filter syntax, e.g.
+        [["codingbrand_id","=",1],"or",["codingbrand_id","=",2]]; it is
+        combined with the keyset condition using "and".
+        """
+        last = after
+        while True:
+            cond = [key, ">", last]
+            query = [filters, "and", cond] if filters else [cond]
+            payload = self.manual_request(
+                endpoint,
+                params={
+                    "takeCount": take_count,
+                    "sort": key,
+                    "sortType": "asc",
+                    "filters": json.dumps(query, ensure_ascii=False, separators=(",", ":")),
+                },
+                timeout=timeout,
+            )
+            items = extract_records(payload)
+            if not items:
+                return
+            if items[-1][key] <= last:
+                raise SamianAPIError(f"{endpoint} ignored the keyset filter on {key}; use iter_paginated")
+            yield from items
+            last = items[-1][key]
+            if len(items) < take_count:
+                return
+
+
+def brand_filter(field: str = "codingbrand_id") -> list | None:
+    """Samian filter matching the brands in settings.SAMIAN_BRAND_IDS (None = all brands)."""
+    from django.conf import settings
+
+    query: list = []
+    for brand_id in getattr(settings, "SAMIAN_BRAND_IDS", []):
+        if query:
+            query.append("or")
+        query.append([field, "=", brand_id])
+    return query or None
+
 
 def get_samian_client(
     base_url: str | None = None,
