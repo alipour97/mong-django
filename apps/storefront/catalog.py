@@ -10,7 +10,8 @@ Rules:
 - Price and stock come from Samian for products linked to it. Products not yet
   linked fall back to the website price and the last legacy stock snapshot.
 - Images: Samian gallery first, website media as fallback.
-- Stock is the sum over settings.STOREFRONT_STOCK_WAREHOUSE_IDS (the shops).
+- Stock is the sum over settings.STOREFRONT_STOCK_WAREHOUSE_IDS (the shops), minus
+  SiteSetting.min_qty kept back per variant.
 - Listing only shows products of settings.STOREFRONT_BRAND_IDS in an online
   category, and (when SiteSetting.only_has_media_products is on) only products
   that have images.
@@ -50,7 +51,7 @@ from apps.website.models import (
     SiteSetting,
 )
 
-LISTING_CACHE_KEY = "storefront:listing:v3"
+LISTING_CACHE_KEY = "storefront:listing:v6"
 LISTING_CACHE_TTL = 120
 TREE_CACHE_KEY = "storefront:category-tree:v1"
 TREE_CACHE_TTL = 300
@@ -236,12 +237,19 @@ class ProductBundle:
     samian_images: dict[int, dict[str, list[dict]]] = field(default_factory=dict)  # product id -> color -> images
     main_media: dict[int, list[dict]] = field(default_factory=dict)
     color_media: dict[int, dict[int, list[dict]]] = field(default_factory=dict)  # product id -> fv id -> images
+    only_media: bool = False  # SiteSetting.only_has_media_products: hide colors that have no images
+    min_qty: float = 0.0  # SiteSetting.min_qty: safety stock per variant that is never offered online
 
     @classmethod
     def load(cls, product_ids, *, with_images: bool = True) -> "ProductBundle":
         ids = list(dict.fromkeys(product_ids))
         products = Product.objects.filter(id__in=ids).select_related("category", "brand").in_bulk()
-        b = cls(products=products)
+        setting = SiteSetting.objects.filter(is_deleted=False).first()
+        b = cls(
+            products=products,
+            only_media=bool(with_images and setting and setting.only_has_media_products),
+            min_qty=float(setting.min_qty) if setting else 0.0,
+        )
         if not products:
             return b
 
@@ -333,9 +341,11 @@ class ProductBundle:
 
     def variant_stock(self, pid: int, v: ProductVariant) -> float:
         if pid in self.samian:
-            return self.stock_by_barcode.get(v.barcode, 0.0)
-        # Not linked to Samian yet: last stock known by the legacy site.
-        return money(v.legacy_qty)
+            qty = self.stock_by_barcode.get(v.barcode, 0.0)
+        else:
+            # Not linked to Samian yet: last stock known by the legacy site.
+            qty = money(v.legacy_qty)
+        return max(0.0, qty - self.min_qty)
 
     def has_images(self, pid: int) -> bool:
         return bool(self.samian_images.get(pid) or self.main_media.get(pid) or self.color_media.get(pid))
@@ -351,13 +361,22 @@ class ProductBundle:
     def color_images(self, pid: int, fv) -> list[dict]:
         return self.samian_images.get(pid, {}).get(norm(fv.name)) or self.color_media.get(pid, {}).get(fv.id) or []
 
+    def visible_variants(self, pid: int) -> list[ProductVariant]:
+        """Variants the site shows: with a color, and (like the legacy site) only colors that have images."""
+        out = []
+        for v in self.variants.get(pid, []):
+            if not v.color:
+                continue
+            if self.only_media and not self.color_images(pid, v.color):
+                continue
+            out.append(v)
+        return out
+
     def details(self, pid: int, pricing: Pricing, *, with_barcode: bool) -> list[dict]:
         colors: dict[int, dict] = {}
         sizes_fixed: dict[int, dict] = {}
         size_items = []
-        for v in self.variants.get(pid, []):
-            if not v.color:
-                continue
+        for v in self.visible_variants(pid):
             qty = self.variant_stock(pid, v)
             c = colors.get(v.color_id)
             if c is None:
@@ -381,11 +400,12 @@ class ProductBundle:
                 })
         if not colors:
             return []
-        # Colors with more stock first, as the legacy site did; sizes follow their color.
-        order = sorted(colors, key=lambda cid: (-colors[cid]["mojodi"], cid))
+        # Legacy order: sizes by stock (desc), then color id, then variant id;
+        # colors in the order they first appear in that list.
+        size_items.sort(key=lambda item: (-item["mojodi"], item["parentId"], item["productVariantId"]))
+        order = list(dict.fromkeys(item["parentId"] for item in size_items))
+        order += sorted(cid for cid in colors if cid not in order)
         colors = {cid: colors[cid] for cid in order}
-        rank = {cid: i for i, cid in enumerate(order)}
-        size_items.sort(key=lambda item: rank[item["parentId"]])
         fixed_colors = [
             {"id": c["id"], "name": c["name"], "value": c["value"], "score": 0, "displayPriority": c["displayPriority"]}
             for c in colors.values()
@@ -398,7 +418,7 @@ class ProductBundle:
         ]
 
     def in_stock(self, pid: int) -> bool:
-        return any(self.variant_stock(pid, v) > 0 for v in self.variants.get(pid, []))
+        return any(self.variant_stock(pid, v) > 0 for v in self.visible_variants(pid))
 
     def list_item(self, pid: int) -> dict:
         p = self.products[pid]
@@ -505,7 +525,7 @@ def listing_rows() -> list[ListingRow]:
         )
         ids = [i for i in ids if i in with_media]
 
-    bundle = ProductBundle.load(ids, with_images=False)
+    bundle = ProductBundle.load(ids)
     scores = dict(
         ProductComment.objects.filter(product_id__in=ids, is_deleted=False, is_active=True)
         .values("product_id").annotate(avg=Avg("score")).values_list("product_id", "avg")
@@ -518,7 +538,7 @@ def listing_rows() -> list[ListingRow]:
         rows.append(ListingRow(
             id=pid, title=norm(p.title), category_id=p.category_id, brand_id=p.brand_id,
             price_after=pr.after, reduction=pr.reduction, in_stock=bundle.in_stock(pid),
-            color_ids=frozenset(v.color_id for v in bundle.variants.get(pid, []) if v.color_id),
+            color_ids=frozenset(v.color_id for v in bundle.visible_variants(pid)),
             created=p.created, view_count=p.view_count, sales_count=p.sales_count,
             buyer_score=float(scores.get(pid) or 0),
         ))

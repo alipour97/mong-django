@@ -91,3 +91,7 @@ _src/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# SQLite WAL files
+db.sqlite3-shm
+db.sqlite3-wal
