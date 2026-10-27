@@ -420,12 +420,13 @@ class ProductGetFilterByCategoryView(PublicView):
 
 class CommentGetByProductIdView(PublicView):
     def get(self, request, product_id: int):
-        comments = ProductComment.objects.filter(product_id=product_id, is_deleted=False, is_active=True).order_by("-id")
+        # Approved ones (status 1); imported rows have is_active off even when approved.
+        comments = ProductComment.objects.filter(product_id=product_id, is_deleted=False, status=1).order_by("-id")
         data = [
             {
                 "id": c.id, "lastModifiedBy": None, "comment": c.comment, "score": float(c.score),
                 "isAdminComment": c.is_admin_comment, "parentId": c.parent_id, "commenterId": c.commenter_id,
-                "isBuyer": c.is_buyer, "commenterFullName": "", "productId": c.product_id, "isActive": c.is_active,
+                "isBuyer": c.is_buyer, "commenterFullName": "", "productId": c.product_id, "isActive": True,
                 "isAnonymous": c.is_anonymous, "parent": None, "productComments": [], "productCommentLikes": [],
                 "title": c.title, "commentMedias": [], "created": iso(c.created),
             }
@@ -520,7 +521,7 @@ class SearchEngineMetaView(PublicView):
         images = bundle.main_images(p.id)
         category = p.category.title if p.category else ""
         parts = [category, p.title, p.short_desc, f"قیمت {_toman(pr.after)} تومان"]
-        reviews = ProductComment.objects.filter(product=p, is_deleted=False, is_active=True).count()
+        reviews = ProductComment.objects.filter(product=p, is_deleted=False, status=1).count()
         url = f"/products-item/{p.slug}"
         return Response({
             "context": "https://schema.org/",

@@ -11,7 +11,7 @@ from apps.storefront import views as storefront
 
 from apps.website.models import MediaAttachment
 
-from .views import auth, categories, dashboard, gallery, products, tags
+from .views import auth, banners, categories, collections, comments, dashboard, gallery, products, tags
 
 urlpatterns = [
     path("Auth/login", auth.LoginView.as_view()),
@@ -20,6 +20,23 @@ urlpatterns = [
     path("Auth/GetProfile", auth.ProfileView.as_view()),
 
     path("Dashboard/Date", dashboard.DateView.as_view()),
+
+    path("ProductComment/RecentComments", comments.RecentView.as_view()),
+    path("ProductComment/GetFilteredComments", comments.FilteredView.as_view()),
+    path("ProductComment/GetCommentStatusCounts", comments.StatusCountsView.as_view()),
+    path("ProductComment/GetCommentDetailWithMedia/<int:comment_id>", comments.DetailView.as_view()),
+    path("ProductComment/UpdateStatus/<int:comment_id>", comments.UpdateStatusView.as_view()),
+
+    path("Banner/GetBannerById", banners.ByIdView.as_view()),
+    path("Banner/GetAllBanners", banners.AllView.as_view()),
+    path("Banner/AddOrUpdateBanner", banners.SaveView.as_view()),
+    path("Banner/DeleteBanner", banners.DeleteView.as_view()),
+    path("Banner/ToggleBannerActivation", banners.ToggleView.as_view()),
+
+    path("Collection", collections.CreateView.as_view()),
+    path("Collection/All", collections.AllView.as_view()),
+    path("Collection/SoftDelete/<int:collection_id>", collections.DeleteView.as_view()),
+    path("Collection/<int:collection_id>", collections.DetailView.as_view()),
 
     path("Category/All", categories.AllView.as_view()),
     path("Category/GetParents", categories.ParentsView.as_view()),

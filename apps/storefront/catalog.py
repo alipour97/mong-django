@@ -505,7 +505,7 @@ class ProductBundle:
     def full_detail(self, pid: int) -> dict:
         p = self.products[pid]
         pr = self.pricing(pid)
-        comments = ProductComment.objects.filter(product_id=pid, is_deleted=False, is_active=True).count()
+        comments = ProductComment.objects.filter(product_id=pid, is_deleted=False, status=1).count()
         tags = tags_for(ProductTag, "product_id", [pid]).get(pid, [])
         sp = self.samian.get(pid)
         return {
@@ -582,7 +582,7 @@ def listing_rows() -> list[ListingRow]:
 
     bundle = ProductBundle.load(ids)
     scores = dict(
-        ProductComment.objects.filter(product_id__in=ids, is_deleted=False, is_active=True)
+        ProductComment.objects.filter(product_id__in=ids, is_deleted=False, status=1)
         .values("product_id").annotate(avg=Avg("score")).values_list("product_id", "avg")
     )
     sold = sold_by_samian_product()
