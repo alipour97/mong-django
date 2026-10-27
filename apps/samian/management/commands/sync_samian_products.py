@@ -14,7 +14,7 @@ from django.conf import settings
 
 from apps.samian import get_samian_client
 from apps.samian.client import brand_filter
-from apps.samian.models import SamianProduct, SamianSyncLog
+from apps.samian.models import SamianDepartment, SamianProduct, SamianSyncLog
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,7 @@ class Command(BaseCommand):
         upserted_count = 0
         batch: list[SamianProduct] = []
 
+        department_pks = dict(SamianDepartment.objects.values_list("samian_id", "pk"))
         try:
             seen_ids: set[int] = set()
             for item in client.iter_keyset(
@@ -81,6 +82,8 @@ class Command(BaseCommand):
                     description=str(item.get("k_desc") or "").strip(),
                     brand_name=str(item.get("__codingbrand_id_value") or "").strip(),
                     department_name=str(item.get("__codingdepartment_id_value") or "").strip(),
+                    department_id=int(item["codingdepartment_id"]) if item.get("codingdepartment_id") else None,
+                    samian_department_id=department_pks.get(int(item["codingdepartment_id"])) if item.get("codingdepartment_id") else None,
                     season=str(item.get("seasonused") or "").strip(),
                     style=str(item.get("stylenew") or "").strip(),
                     is_active=bool(item.get("isactive", True)),
@@ -96,7 +99,7 @@ class Command(BaseCommand):
                         unique_fields=["samian_id"],
                         update_fields=[
                             "subcode", "name", "name_en", "description",
-                            "brand_name", "department_name", "season",
+                            "brand_name", "department_name", "department_id", "samian_department", "season",
                             "style", "is_active", "is_saleable", "updated_at",
                         ],
                     )
@@ -111,7 +114,7 @@ class Command(BaseCommand):
                     unique_fields=["samian_id"],
                     update_fields=[
                         "subcode", "name", "name_en", "description",
-                        "brand_name", "department_name", "season",
+                        "brand_name", "department_name", "department_id", "samian_department", "season",
                         "style", "is_active", "is_saleable", "updated_at",
                     ],
                 )
