@@ -199,6 +199,8 @@ class SamianProduct(models.Model):
     sale_price = models.BigIntegerField(_("قیمت فروش (ریال)"), null=True, blank=True, db_index=True)
     price_synced_at = models.DateTimeField(_("آخرین سینک قیمت"), null=True, blank=True)
 
+    # onlinestoresizehelp: the size chart image (file path on Samian), read by sync_samian_size_help.
+    size_help_path = models.CharField(_("جدول سایز (فایل در سامیان)"), max_length=512, blank=True, default="")
     create_date = models.DateTimeField(_("تاریخ ایجاد در سامیان"), null=True, blank=True, db_index=True)
 
     raw_data = models.JSONField(_("داده خام سامیان"), default=dict, blank=True)

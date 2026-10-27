@@ -21,7 +21,7 @@ import requests
 from django.core.management.base import BaseCommand
 
 from apps.samian.config import get_samian_settings
-from apps.samian.models import SamianProductColor
+from apps.samian.models import SamianProduct, SamianProductColor
 from apps.website import images
 from apps.website.models import Banner, MediaAttachment, PrimaryConfig
 
@@ -40,6 +40,10 @@ def collect_jobs() -> dict[str, tuple[str, str]]:
             fp = item.get("filePath", "") if isinstance(item, dict) else ""
             if fp and Path(fp).suffix.lower() in images.IMAGE_EXT:
                 jobs[images.samian_key(color.productmain_id, fp)] = ("samian", f"{base}/{fp.lstrip('/')}")
+
+    for pmid, fp in SamianProduct.objects.exclude(size_help_path="").values_list("samian_id", "size_help_path"):
+        if Path(fp).suffix.lower() in images.IMAGE_EXT:
+            jobs[images.samian_key(pmid, fp)] = ("samian", f"{base}/{fp.lstrip('/')}")
 
     urls = set(MediaAttachment.objects.filter(is_deleted=False).values_list("media_url", flat=True))
     urls |= set(Banner.objects.filter(is_deleted=False).values_list("media_url", flat=True))

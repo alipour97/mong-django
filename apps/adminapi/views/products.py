@@ -10,6 +10,7 @@ is gone (photos come from Samian); size guides come with the gallery step.
          &hasShortDescription=&pageNumber=&pageSize=
     GET  Products/GetProductLables
     GET  Products/GetDetailProduct/{id}
+    POST Products/SetImageVisibility {key, hidden}   (new: hide a Samian photo on the site)
     POST Products/UpdateSlug {productId, slug, hasManualSlug}
     POST Products/ValidateSlug?slug=&productId=
     GET  Products/ShowInTrob?productId=&show=      (no productId: every product)
@@ -26,6 +27,7 @@ from apps.storefront import catalog
 from apps.website import slugs
 from apps.website.models import (
     Collection,
+    HiddenImage,
     MediaAttachment,
     Product,
     ProductCollection,
@@ -165,7 +167,8 @@ class LabelsView(AdminView):
 
 class DetailView(AdminView):
     def get(self, request, product_id: int):
-        bundle = catalog.ProductBundle.load([product_id])
+        # Hidden photos are included and marked (isHidden) so they can be shown again.
+        bundle = catalog.ProductBundle.load([product_id], include_hidden=True)
         p = bundle.products.get(product_id)
         if not p or p.is_deleted:
             return fail(NOT_FOUND, 404)
@@ -256,6 +259,24 @@ class TorobView(AdminView):
             return ok({"result": True})
         if not Product.objects.filter(id=pid).update(show_torob=show):
             return fail(NOT_FOUND, 404)
+        return ok({"result": True})
+
+
+class ImageVisibilityView(AdminView):
+    """
+    POST Products/SetImageVisibility {"key", "hidden"} — hide a Samian photo on the site, or show it again.
+    New endpoint (the old panel uploaded its own photos); key comes with each photo of GetDetailProduct.
+    """
+
+    def post(self, request):
+        key = (request.data.get("key") or "").strip()
+        if not key.startswith("s/"):
+            return fail("شناسه‌ی عکس معتبر نیست.", 400)
+        if to_bool(request.data.get("hidden")):
+            HiddenImage.objects.get_or_create(key=key, defaults={"hidden_by": request.user.username})
+        else:
+            HiddenImage.objects.filter(key=key).delete()
+        index.clear()
         return ok({"result": True})
 
 

@@ -16,7 +16,7 @@ from apps.storefront import catalog
 from apps.website.models import Product, ProductComment
 
 CACHE_KEY = "adminapi:product-rows:v1"
-CACHE_TTL = 120
+CACHE_TTL = 600  # edits in the admin clear it (clear())
 
 
 @dataclass

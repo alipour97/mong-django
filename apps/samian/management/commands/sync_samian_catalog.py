@@ -110,6 +110,10 @@ class Command(BaseCommand):
         self.stdout.write("\n۵. فراخوانی دستور همگام‌سازی رنگ‌ها و گالری...")
         call_command("sync_samian_product_colors", max_records=max_records)
 
+        # 5b. Size charts (onlinestoresizehelp)
+        self.stdout.write("\n۵ب. جدول سایز کالاها...")
+        call_command("sync_samian_size_help")
+
         # 6. Color table and sizes
         self.stdout.write("\n۶. جدول رنگ‌ها و سایزها...")
         call_command("sync_samian_colors_sizes")

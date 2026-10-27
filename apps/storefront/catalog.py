@@ -52,6 +52,7 @@ from apps.website.models import (
     ProductComment,
     ProductSamianLink,
     ProductTag,
+    HiddenImage,
     SelectedProduct,
     SiteSetting,
     online_warehouse_ids,
@@ -60,7 +61,7 @@ from apps.website.models import (
 # مانگ and توليد are one brand for customers: every product is shown as Mong.
 MONG_BRAND = {"id": 15, "title": "مانگ"}
 
-LISTING_CACHE_KEY = "storefront:listing:v10"
+LISTING_CACHE_KEY = "storefront:listing:v11"
 LISTING_CACHE_TTL = 120
 TREE_CACHE_KEY = "storefront:category-tree:v1"
 TREE_CACHE_TTL = 300
@@ -290,7 +291,8 @@ class ProductBundle:
     min_qty: float = 0.0  # SiteSetting.min_qty: safety stock per variant that is never offered online
 
     @classmethod
-    def load(cls, product_ids, *, with_images: bool = True) -> "ProductBundle":
+    def load(cls, product_ids, *, with_images: bool = True, include_hidden: bool = False) -> "ProductBundle":
+        """include_hidden: also the photos hidden in the admin, marked isHidden (for the admin's product page)."""
         ids = list(dict.fromkeys(product_ids))
         products = Product.objects.filter(id__in=ids).select_related("category", "brand").in_bulk()
         setting = SiteSetting.objects.filter(is_deleted=False).first()
@@ -342,11 +344,12 @@ class ProductBundle:
         }
 
         if with_images:
-            b._load_images(ids)
+            b._load_images(ids, include_hidden)
         return b
 
-    def _load_images(self, ids):
+    def _load_images(self, ids, include_hidden: bool = False):
         pmid_to_pid = {sp.samian_id: pid for pid, sp in self.samian.items()}
+        hidden = set(HiddenImage.objects.values_list("key", flat=True))
         for color in SamianProductColor.objects.filter(productmain_id__in=pmid_to_pid.keys(), has_gallery=True).order_by("samian_id"):
             pid = pmid_to_pid[color.productmain_id]
             imgs = []
@@ -355,6 +358,8 @@ class ProductBundle:
                 if not fp or Path(fp).suffix.lower() not in site_images.IMAGE_EXT:
                     continue
                 key = site_images.samian_key(color.productmain_id, fp)
+                if key in hidden and not include_hidden:
+                    continue
                 # Built nightly by build_images; until then the original through the proxy.
                 url = site_images.public_url(key) if site_images.is_built(key) else f"/api/samian/media/{color.samian_id}/{idx}/"
                 imgs.append({
@@ -363,6 +368,7 @@ class ProductBundle:
                     "isVideo": False,
                     "alternative": "",
                     "tooltipTitle": "",
+                    **({"key": key, "isHidden": key in hidden} if include_hidden else {}),
                 })
             if imgs:
                 self.samian_images.setdefault(pid, {}).setdefault(color.colorinfo_id, []).extend(imgs)
@@ -475,6 +481,27 @@ class ProductBundle:
             "sortingWeight": None,
         }
 
+    def size_guide(self, pid: int) -> dict | None:
+        """The size chart: Samian's (onlinestoresizehelp), else one set in the admin for the product, else for its category."""
+        sp = self.samian.get(pid)
+        if sp and sp.size_help_path:
+            key = site_images.samian_key(sp.samian_id, sp.size_help_path)
+            if site_images.is_built(key):
+                return {"id": 0, "isVideo": False, "mediaUrl": absolute_url(site_images.public_url(key)),
+                        "alternative": "راهنمای سایز", "tooltipTitle": ""}
+        guide = MediaAttachment.objects.filter(
+            table=MediaAttachment.Table.PRODUCTS, record_id=pid, is_product_guid=True, is_deleted=False,
+        ).order_by("-id").first()
+        p = self.products[pid]
+        if guide is None and p.category_id:
+            chain = [c.id for c in reversed(category_tree().ancestors(p.category_id))]
+            by_cat = {
+                a.record_id: a for a in MediaAttachment.objects.filter(
+                    table=MediaAttachment.Table.CATEGORIES, record_id__in=chain, is_product_guid=True, is_deleted=False)
+            }
+            guide = next((by_cat[c] for c in chain if c in by_cat), None)
+        return media_dict(guide) if guide else None
+
     def full_detail(self, pid: int) -> dict:
         p = self.products[pid]
         pr = self.pricing(pid)
@@ -493,7 +520,7 @@ class ProductBundle:
             "productName": p.title,
             "ProductName_En": none_if_blank(sp.name_en if sp else ""),
             "mainImages": self.main_images(pid),
-            "productSizeGuid": none_if_blank(p.size_guide),
+            "productSizeGuid": self.size_guide(pid),
             "product_Base_Price": pr.base,
             "product_base_reduction": pr.reduction,
             "productBaseVat": money(p.vat),
@@ -566,6 +593,8 @@ def listing_rows() -> list[ListingRow]:
     for pid, p in bundle.products.items():
         pr = bundle.pricing(pid)
         if pr.after <= 0:
+            continue
+        if only_media and not bundle.has_images(pid):  # e.g. every photo hidden in the admin
             continue
         rows.append(ListingRow(
             id=pid, title=norm(p.title), category_id=p.category_id,

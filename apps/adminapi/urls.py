@@ -29,6 +29,7 @@ urlpatterns = [
     path("Products/GetFilters", products.FiltersView.as_view()),
     path("Products/GetProductLables", products.LabelsView.as_view()),
     path("Products/GetDetailProduct/<int:product_id>", products.DetailView.as_view()),
+    path("Products/SetImageVisibility", products.ImageVisibilityView.as_view()),
     path("Products/UpdateSlug", products.UpdateSlugView.as_view()),
     path("Products/ValidateSlug", products.ValidateSlugView.as_view()),
     path("Products/ShowInTrob", products.TorobView.as_view()),

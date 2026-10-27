@@ -898,3 +898,21 @@ class CustomerFavoriteProduct(LegacyMixin):
 
     def __str__(self) -> str:
         return f"{self.customer_id} ♥ {self.product_id}"
+
+class HiddenImage(models.Model):
+    """
+    A Samian photo the admin chose not to show on the site (bad shot, wrong
+    color...). Keyed like the built images (images.samian_key), so it stays
+    hidden however often the gallery is synced.
+    """
+
+    key = models.CharField(max_length=255, unique=True)
+    hidden_by = models.CharField(_("پنهان‌شده توسط"), max_length=150, blank=True, default="")
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("عکس پنهان")
+        verbose_name_plural = _("عکس‌های پنهان")
+
+    def __str__(self) -> str:
+        return self.key
