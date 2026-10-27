@@ -15,6 +15,7 @@ from django.conf import settings
 from apps.samian import get_samian_client
 from apps.samian.client import brand_filter
 from apps.samian.models import SamianDepartment, SamianProduct, SamianSyncLog
+from apps.samian.services.erp_sync import _dt as _parse_dt
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,7 @@ class Command(BaseCommand):
                     brand_name=str(item.get("__codingbrand_id_value") or "").strip(),
                     department_name=str(item.get("__codingdepartment_id_value") or "").strip(),
                     department_id=int(item["codingdepartment_id"]) if item.get("codingdepartment_id") else None,
+                    create_date=_parse_dt(item.get("createdate")),
                     samian_department_id=department_pks.get(int(item["codingdepartment_id"])) if item.get("codingdepartment_id") else None,
                     season=str(item.get("seasonused") or "").strip(),
                     style=str(item.get("stylenew") or "").strip(),
@@ -99,7 +101,7 @@ class Command(BaseCommand):
                         unique_fields=["samian_id"],
                         update_fields=[
                             "subcode", "name", "name_en", "description",
-                            "brand_name", "department_name", "department_id", "samian_department", "season",
+                            "brand_name", "department_name", "department_id", "samian_department", "create_date", "season",
                             "style", "is_active", "is_saleable", "updated_at",
                         ],
                     )
@@ -114,7 +116,7 @@ class Command(BaseCommand):
                     unique_fields=["samian_id"],
                     update_fields=[
                         "subcode", "name", "name_en", "description",
-                        "brand_name", "department_name", "department_id", "samian_department", "season",
+                        "brand_name", "department_name", "department_id", "samian_department", "create_date", "season",
                         "style", "is_active", "is_saleable", "updated_at",
                     ],
                 )

@@ -114,8 +114,12 @@ class Command(BaseCommand):
         self.stdout.write("\n۶. جدول رنگ‌ها و سایزها...")
         call_command("sync_samian_colors_sizes")
 
-        # 7. Slugs: keep every product and category address valid and findable
-        self.stdout.write("\n۷. اصلاح اسلاگ‌ها...")
+        # 7. Site categories and products from Samian departments and products
+        self.stdout.write("\n۷. دسته‌ها و محصولات سایت از سامیان...")
+        call_command("sync_site_catalog")
+
+        # 8. Slugs: keep every product and category address valid and findable
+        self.stdout.write("\n۸. اصلاح اسلاگ‌ها...")
         call_command("fix_slugs")
 
         total_duration = time.time() - t0

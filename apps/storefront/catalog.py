@@ -213,9 +213,13 @@ def category_tree_dicts() -> list[dict]:
 
 
 def breadcrumb_items(cat_id: int | None) -> list[dict]:
+    """Home, then the category path without its root: Samian level 1 (زنانه) is the same for every Mong product."""
     items = [{"position": 1, "name": "خانه", "url": "/"}]
     if cat_id:
-        for i, c in enumerate(category_tree().ancestors(cat_id), start=2):
+        chain = category_tree().ancestors(cat_id)
+        if len(chain) > 1 and chain[0].parent_id is None:
+            chain = chain[1:]
+        for i, c in enumerate(chain, start=2):
             items.append({"position": i, "name": c.title, "url": f"/products-category/{c.slug}"})
     return items
 

@@ -86,6 +86,8 @@ class Category(SlugKeyMixin, LegacyMixin):
     base_category_type_title = models.CharField(max_length=255, blank=True, default="")
     # ERP department code; PTC/Samian department this online category maps to
     parent_map_id = models.CharField(max_length=64, blank=True, default="")
+    # The Samian department (codingdepartment_id) this category stands for; see sync_site_catalog.
+    samian_department_id = models.BigIntegerField(_("دپارتمان سامیان"), null=True, blank=True, unique=True)
 
     class Meta:
         verbose_name = _("دسته‌بندی سایت")
@@ -317,6 +319,7 @@ class ProductSamianLink(models.Model):
     class Method(models.TextChoices):
         EXACT_CODE = "exact_code", _("کد کالا یکسان")
         MANUAL = "manual", _("دستی")
+        AUTO = "auto", _("ساخته‌شده از کالای سامیان")
 
     product = models.OneToOneField(Product, on_delete=models.CASCADE, related_name="samian_link")
     samian_product_id = models.BigIntegerField(_("productmain_id سامیان"), db_index=True)
