@@ -579,3 +579,141 @@ class ShippingMethodLocation(LegacyMixin):
     shipping_method = models.ForeignKey(ShippingMethod, on_delete=models.CASCADE, related_name="locations")
     province_id = models.BigIntegerField(null=True, blank=True)
     city_id = models.BigIntegerField(null=True, blank=True)
+
+
+# -----------------------------------------------------------------------------
+# Branches (ours: edited in the admin, never imported)
+# -----------------------------------------------------------------------------
+class Branch(models.Model):
+    """
+    A shop on the branches page and, when sells_online, a warehouse whose stock
+    is offered on the site. Seeded once from the businessDepartments config
+    (seed_branches); from then on this table is the source and the config's
+    departmentList is generated from it.
+    """
+
+    title = models.CharField(_("عنوان"), max_length=255)
+    address = models.TextField(_("آدرس"), blank=True, default="")
+    phones = models.TextField(_("تلفن‌ها"), blank=True, default="", help_text=_("هر شماره در یک خط"))
+    latitude = models.FloatField(_("عرض جغرافیایی"), null=True, blank=True)
+    longitude = models.FloatField(_("طول جغرافیایی"), null=True, blank=True)
+    warehouse = models.ForeignKey(
+        "samian.SamianWarehouse", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="branches", verbose_name=_("انبار سامیان"),
+    )
+    show_on_site = models.BooleanField(_("نمایش در صفحه‌ی شعب"), default=True)
+    sells_online = models.BooleanField(
+        _("موجودی در فروش آنلاین"), default=False,
+        help_text=_("موجودی انبار این شعبه در سایت قابل خرید است"),
+    )
+    display_order = models.PositiveIntegerField(_("ترتیب نمایش"), default=0)
+    front_id = models.BigIntegerField(_("شناسه در فرانت"), null=True, blank=True, unique=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("شعبه")
+        verbose_name_plural = _("شعبه‌ها")
+        ordering = ("display_order", "id")
+
+    def __str__(self) -> str:
+        return self.title
+
+    def phone_list(self) -> list[str]:
+        return [p.strip() for p in self.phones.splitlines() if p.strip()]
+
+    def as_department(self) -> dict:
+        """One item of businessDepartments.departmentList, as the frontend reads it."""
+        return {
+            "depTitle": self.title,
+            "address": self.address,
+            "location": {"lat": self.latitude, "lng": self.longitude},
+            "phoneNumbers": [{"phoneNumber": p} for p in self.phone_list()],
+            "id": self.front_id or self.id,
+        }
+
+
+def online_warehouse_ids() -> list[int]:
+    """Samian warehouses whose stock is sold online: branches marked sells_online, else the setting."""
+    from django.conf import settings
+
+    ids = list(
+        Branch.objects.filter(sells_online=True, warehouse__isnull=False)
+        .values_list("warehouse__samian_id", flat=True)
+        .distinct()
+    )
+    return ids or list(settings.STOREFRONT_STOCK_WAREHOUSE_IDS)
+
+
+# -----------------------------------------------------------------------------
+# Customers
+# -----------------------------------------------------------------------------
+# Site accounts. Name, national code, birth date and addresses that Samian also
+# keeps are read from Samian (samian.SamianCustomer, SamianCustomerAddress) and
+# linked by mobile; what Samian does not have (favorites, newsletter, site
+# addresses with map points) lives here. Legacy ids are kept so imported
+# favorites and addresses stay attached.
+class Customer(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    first_name = models.CharField(_("نام"), max_length=150, blank=True, default="")
+    last_name = models.CharField(_("نام خانوادگی"), max_length=150, blank=True, default="")
+    cellphone = models.CharField(_("موبایل"), max_length=20, unique=True)
+    email = models.CharField(_("ایمیل"), max_length=254, blank=True, default="")
+    national_code = models.CharField(_("کد ملی"), max_length=32, blank=True, default="")
+    birth_date = models.DateField(_("تاریخ تولد"), null=True, blank=True)
+    job_id = models.IntegerField(_("شغل"), null=True, blank=True)
+    is_active = models.BooleanField(_("فعال"), default=True)
+    is_bulletin_enabled = models.BooleanField(_("عضو خبرنامه"), default=False)
+    bulletin_subscription_date = models.DateTimeField(_("تاریخ عضویت خبرنامه"), null=True, blank=True)
+    samian_customer = models.ForeignKey(
+        "samian.SamianCustomer", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="site_customers", verbose_name=_("مشتری سامیان"),
+    )
+    samian_checked_at = models.DateTimeField(_("آخرین جستجو در سامیان"), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("مشتری سایت")
+        verbose_name_plural = _("مشتریان سایت")
+        ordering = ("-id",)
+
+    def __str__(self) -> str:
+        return f"{self.first_name} {self.last_name} ({self.cellphone})".strip()
+
+
+class CustomerAddress(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name="addresses")
+    title = models.CharField(_("عنوان"), max_length=255, blank=True, default="")
+    is_default = models.BooleanField(_("پیش‌فرض"), default=False)
+    address = models.TextField(_("آدرس"), blank=True, default="")
+    # No db constraint: import_dadehfa refreshes provinces and products by
+    # deleting and re-inserting them with the same ids.
+    province = models.ForeignKey(
+        Province, null=True, blank=True, on_delete=models.DO_NOTHING, db_constraint=False, related_name="+"
+    )
+    city = models.ForeignKey(City, null=True, blank=True, on_delete=models.DO_NOTHING, db_constraint=False, related_name="+")
+    zip_code = models.CharField(_("کد پستی"), max_length=32, blank=True, default="")
+    latitude = models.DecimalField(max_digits=18, decimal_places=10, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=18, decimal_places=10, null=True, blank=True)
+    first_name = models.CharField(_("نام گیرنده"), max_length=150, blank=True, default="")
+    last_name = models.CharField(_("نام خانوادگی گیرنده"), max_length=150, blank=True, default="")
+    mobile = models.CharField(_("موبایل گیرنده"), max_length=20, blank=True, default="")
+    is_myself_recipient = models.BooleanField(_("گیرنده خودم هستم"), default=True)
+    # Samian contactinfo row this address was written to (set by the order flow).
+    samian_contact_id = models.BigIntegerField(_("شناسه آدرس در سامیان"), null=True, blank=True, db_index=True)
+
+    class Meta:
+        verbose_name = _("آدرس مشتری سایت")
+        verbose_name_plural = _("آدرس‌های مشتریان سایت")
+
+
+class CustomerFavoriteProduct(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name="favorites")
+    product = models.ForeignKey(Product, on_delete=models.DO_NOTHING, db_constraint=False, related_name="+")
+    color_id = models.BigIntegerField(null=True, blank=True)
+    size_id = models.BigIntegerField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("علاقه‌مندی")
+        verbose_name_plural = _("علاقه‌مندی‌ها")

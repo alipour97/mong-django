@@ -417,6 +417,40 @@ class SamianCustomer(models.Model):
         return f"{self.fullname} ({self.samian_id})"
 
 
+class SamianCustomerAddress(models.Model):
+    """A customer's address in Samian (accounts/contactinfo)."""
+
+    samian_id = models.BigIntegerField(_("شناسه آدرس در سامیان"), unique=True, db_index=True)
+    customer = models.ForeignKey(
+        SamianCustomer, on_delete=models.CASCADE, null=True, blank=True,
+        related_name="addresses", verbose_name=_("مشتری"),
+    )
+    customer_samian_id = models.BigIntegerField(_("شناسه مشتری"), null=True, blank=True, db_index=True)
+    title = models.CharField(_("عنوان"), max_length=255, blank=True, default="")
+    address = models.TextField(_("آدرس"), blank=True, default="")
+    receiver_name = models.CharField(_("نام گیرنده"), max_length=255, blank=True, default="")
+    mobile = models.CharField(_("موبایل"), max_length=50, blank=True, default="")
+    phone = models.CharField(_("تلفن"), max_length=50, blank=True, default="")
+    postal_code = models.CharField(_("کد پستی"), max_length=32, blank=True, default="")
+    province_id = models.BigIntegerField(_("شناسه استان"), null=True, blank=True)
+    province = models.CharField(_("استان"), max_length=128, blank=True, default="")
+    town_id = models.BigIntegerField(_("شناسه شهر"), null=True, blank=True)
+    town = models.CharField(_("شهر"), max_length=128, blank=True, default="")
+    is_default = models.BooleanField(_("پیش‌فرض"), default=False)
+
+    raw_data = models.JSONField(_("داده خام سامیان"), default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("آدرس مشتری سامیان")
+        verbose_name_plural = _("آدرس‌های مشتریان سامیان")
+        ordering = ("-is_default", "samian_id")
+
+    def __str__(self) -> str:
+        return f"{self.title or self.address[:40]} ({self.samian_id})"
+
+
 # ---------------------------------------------------------------------------
 # Sales
 # ---------------------------------------------------------------------------

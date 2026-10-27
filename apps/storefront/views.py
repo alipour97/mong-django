@@ -19,6 +19,7 @@ from rest_framework.views import APIView
 
 from apps.website.models import (
     Banner,
+    Branch,
     Category,
     CategoryTag,
     City,
@@ -72,7 +73,7 @@ class PrimaryConfigGetConfigView(PublicView):
         pc = PrimaryConfig.objects.filter(key=key, is_deleted=False).first()
         if not pc:
             return server_error()
-        raw = site_images.rewrite_media_in_text(pc.value)
+        raw = _config_value(pc)
         try:
             value = json.loads(raw) if raw else None
         except json.JSONDecodeError:
@@ -81,8 +82,20 @@ class PrimaryConfigGetConfigView(PublicView):
 
     def post(self, request, key: str = ""):
         key = key or request.data.get("key", "")
-        rows = [{"id": pc.id, "key": pc.key, "value": site_images.rewrite_media_in_text(pc.value)} for pc in PrimaryConfig.objects.filter(key=key, is_deleted=False)]
+        rows = [{"id": pc.id, "key": pc.key, "value": _config_value(pc)} for pc in PrimaryConfig.objects.filter(key=key, is_deleted=False)]
         return ok(rows)
+
+
+def _config_value(pc: PrimaryConfig) -> str:
+    """The stored JSON with media URLs rewritten; the branches list comes from the Branch table."""
+    raw = pc.value
+    if pc.key == "businessDepartments" and raw:
+        branches = Branch.objects.filter(show_on_site=True)
+        if branches.exists():
+            value = json.loads(raw)
+            value["departmentList"] = [b.as_department() for b in branches]
+            raw = json.dumps(value, ensure_ascii=False)
+    return site_images.rewrite_media_in_text(raw)
 
 
 def _company_media(record_id: int) -> dict | None:

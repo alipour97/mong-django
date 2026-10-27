@@ -5,8 +5,9 @@ Every table is fully refreshed inside one transaction, in dependency order.
 Legacy ids are kept as primary keys. Rows soft-deleted in the source are
 imported too (with is_deleted=True) so references between tables resolve.
 
-    python manage.py import_dadehfa                 # everything
-    python manage.py import_dadehfa --only catalog  # one group
+    python manage.py import_dadehfa                    # everything except customers
+    python manage.py import_dadehfa --only catalog     # one group
+    python manage.py import_dadehfa --only customers   # site accounts, addresses, favorites (explicit only)
 """
 from __future__ import annotations
 
@@ -63,6 +64,11 @@ class Spec:
     # field name -> model whose ids must contain the value (else nulled, or row skipped if required)
     fks: dict[str, tuple[type, bool]] = field(default_factory=dict)
 
+
+# The account a row belongs to after duplicate mobiles are merged.
+_OLDEST_CUSTOMER = (
+    "(SELECT MIN(c2.Id) FROM Customers c1 JOIN Customers c2 ON c2.CellPhone = c1.CellPhone WHERE c1.Id = a.CustomerId)"
+)
 
 SPECS: list[Spec] = [
     # ------------------------------------------------------------------ catalog
@@ -269,9 +275,31 @@ SPECS += [
         "id": r["Id"], "shipping_method_id": r["ShippingMethodId"], "province_id": r["ProvinceId"],
         "city_id": r["CityId"], **legacy(r),
     }, "shipping", {"shipping_method_id": (m.ShippingMethod, True)}),
+    # ---------------------------------------------------------------- customers
+    # Not part of the default run: once the new site takes sign-ups, a refresh
+    # would delete them. Duplicate mobiles are merged into the oldest account.
+    Spec(m.Customer, "SELECT * FROM Customers WHERE Id IN (SELECT MIN(Id) FROM Customers GROUP BY CellPhone)", lambda r: {
+        "id": r["Id"], "first_name": _s(r["FirstName"]), "last_name": _s(r["LastName"]),
+        "cellphone": _s(r["CellPhone"]).strip(), "email": _s(r["Email"]), "national_code": _s(r["NationalCode"]),
+        "birth_date": r["BirthDate"] if r["BirthDate"] and r["BirthDate"].year > 1 else None,
+        "job_id": r["JobId"], "is_active": _b(r["IsActive"]), "is_bulletin_enabled": _b(r["IsBulletinEnable"]),
+        "bulletin_subscription_date": r["BulletinSubscriptionDate"], **legacy(r),
+    }, "customers"),
+    Spec(m.CustomerAddress, f"SELECT a.*, {_OLDEST_CUSTOMER} AS OwnerId FROM CustomerAddresses a", lambda r: {
+        "id": r["Id"], "customer_id": r["OwnerId"], "title": _s(r["Title"]), "is_default": _b(r["IsDefault"]),
+        "address": _s(r["Address"]), "province_id": r["ProvinceId"], "city_id": r["CityId"],
+        "zip_code": _s(r["ZipCode"]), "latitude": r["Latitude"], "longitude": r["Longitude"],
+        "first_name": _s(r["FirstName"]), "last_name": _s(r["LastName"]), "mobile": _s(r["Mobile"]),
+        "is_myself_recipient": _b(r["IsMyselfRecipient"]), **legacy(r),
+    }, "customers", {"customer_id": (m.Customer, True)}),
+    Spec(m.CustomerFavoriteProduct, f"SELECT a.*, {_OLDEST_CUSTOMER} AS OwnerId FROM CustomerFavoriteProducts a", lambda r: {
+        "id": r["Id"], "customer_id": r["OwnerId"], "product_id": r["ProductId"], "color_id": r["ColerId"],
+        "size_id": r["SizeId"], **legacy(r),
+    }, "customers", {"customer_id": (m.Customer, True), "product_id": (m.Product, True)}),
 ]
 
 GROUPS = sorted({s.group for s in SPECS})
+DEFAULT_GROUPS = [g for g in GROUPS if g != "customers"]
 
 # Rows that point at their own table (parent_id) are inserted with the link
 # empty first and patched afterwards, so insert order does not matter.
@@ -285,7 +313,7 @@ class Command(BaseCommand):
         parser.add_argument("--only", choices=GROUPS, action="append", help="فقط این گروه(ها)")
 
     def handle(self, *args, **options):
-        only = set(options.get("only") or GROUPS)
+        only = set(options.get("only") or DEFAULT_GROUPS)
         specs = [s for s in SPECS if s.group in only]
         if not specs:
             raise CommandError("هیچ جدولی انتخاب نشد")

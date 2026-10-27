@@ -11,6 +11,7 @@ from .models import (
     SamianBarcode,
     SamianInventory,
     SamianCustomer,
+    SamianCustomerAddress,
     SamianSalesTransaction,
     SamianSalesRow,
     SamianPriceList,
@@ -68,11 +69,27 @@ class SamianInventoryAdmin(admin.ModelAdmin):
     list_filter = ("warehouse_id",)
 
 
+class SamianCustomerAddressInline(admin.TabularInline):
+    model = SamianCustomerAddress
+    extra = 0
+    fields = ("title", "address", "town", "postal_code", "receiver_name", "mobile", "is_default")
+    readonly_fields = fields
+    can_delete = False
+
+
 @admin.register(SamianCustomer)
 class SamianCustomerAdmin(admin.ModelAdmin):
     list_display = ("samian_id", "first_name", "last_name", "mobile", "club_level", "wallet_balance")
     search_fields = ("first_name", "last_name", "mobile", "national_code")
     list_filter = ("club_level", "is_active")
+    inlines = [SamianCustomerAddressInline]
+
+
+@admin.register(SamianCustomerAddress)
+class SamianCustomerAddressAdmin(admin.ModelAdmin):
+    list_display = ("samian_id", "customer", "title", "town", "postal_code", "is_default")
+    search_fields = ("address", "mobile", "postal_code", "customer_samian_id")
+    raw_id_fields = ("customer",)
 
 
 class SamianSalesRowInline(admin.TabularInline):
@@ -85,7 +102,8 @@ class SamianSalesRowInline(admin.TabularInline):
 class SamianSalesTransactionAdmin(admin.ModelAdmin):
     list_display = ("samian_id", "transaction_code", "transaction_date", "report_date", "total_amount", "net_amount", "status", "store_order_id")
     search_fields = ("transaction_code", "transaction_unique_id", "customer_samian_id")
-    list_filter = ("status", "warehouse_id")
+    list_filter = ("status", "warehouse")
+    raw_id_fields = ("samian_customer", "samian_warehouse")
     inlines = [SamianSalesRowInline]
 
 

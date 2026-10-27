@@ -39,7 +39,44 @@ class BannerAdmin(admin.ModelAdmin):
 
 for model in (
     m.Brand, m.Tag, m.Feature, m.FeatureValue, m.Collection, m.Outfit, m.SelectedProduct,
-    m.ProductComment, m.Redirect, m.CompanyInfo, m.CompanyBranch, m.SiteSetting, m.Theme,
+    m.ProductComment, m.Redirect, m.CompanyInfo, m.SiteSetting, m.Theme,
     m.CustomTheme, m.Page, m.ShippingMethod, m.ShippingMethodType, m.Province,
 ):
     admin.site.register(model)
+
+
+@admin.register(m.Branch)
+class BranchAdmin(admin.ModelAdmin):
+    list_display = ("title", "warehouse", "show_on_site", "sells_online", "display_order")
+    list_editable = ("show_on_site", "sells_online", "display_order")
+    list_filter = ("show_on_site", "sells_online")
+    search_fields = ("title", "address", "phones")
+    fieldsets = (
+        (None, {"fields": ("title", "address", "phones", ("latitude", "longitude"))}),
+        ("سایت و موجودی", {"fields": ("show_on_site", "display_order", "warehouse", "sells_online")}),
+    )
+
+
+@admin.register(m.CompanyBranch)
+class CompanyBranchAdmin(admin.ModelAdmin):
+    """The Dadehfa branch list (ids used by old invoices). Shops are edited under Branch."""
+
+    list_display = ("id", "name", "is_active", "is_deleted")
+
+
+class CustomerAddressInline(admin.StackedInline):
+    model = m.CustomerAddress
+    extra = 0
+    fields = (("title", "is_default"), "address", ("province", "city", "zip_code"),
+              ("first_name", "last_name", "mobile"), ("latitude", "longitude"), "is_deleted")
+    raw_id_fields = ("province", "city")
+
+
+@admin.register(m.Customer)
+class CustomerAdmin(admin.ModelAdmin):
+    list_display = ("id", "first_name", "last_name", "cellphone", "samian_customer", "is_active")
+    list_filter = ("is_active", "is_bulletin_enabled", "is_deleted")
+    search_fields = ("first_name", "last_name", "cellphone", "national_code", "email")
+    raw_id_fields = ("samian_customer",)
+    readonly_fields = ("samian_checked_at",)
+    inlines = [CustomerAddressInline]

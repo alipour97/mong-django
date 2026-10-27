@@ -11,7 +11,7 @@ Rules:
   linked fall back to the website price and the last legacy stock snapshot.
 - Images: Samian gallery first, website media as fallback; both served as
   pre-built WebP from /img/ (apps/website/images.py) once build_images ran.
-- Stock is the sum over settings.STOREFRONT_STOCK_WAREHOUSE_IDS (the shops), minus
+- Stock is the sum over the branches marked sells_online (website.Branch), minus
   SiteSetting.min_qty kept back per variant.
 - Listing only shows products of settings.STOREFRONT_BRAND_IDS in an online
   category, and (when SiteSetting.only_has_media_products is on) only products
@@ -50,6 +50,7 @@ from apps.website.models import (
     ProductTag,
     ProductVariant,
     SiteSetting,
+    online_warehouse_ids,
 )
 
 LISTING_CACHE_KEY = "storefront:listing:v6"
@@ -282,7 +283,7 @@ class ProductBundle:
             rows = (
                 SamianInventory.objects.filter(
                     samian_barcode__barcode__in=barcodes,
-                    warehouse_id__in=settings.STOREFRONT_STOCK_WAREHOUSE_IDS,
+                    warehouse_id__in=online_warehouse_ids(),
                 )
                 .values("samian_barcode__barcode")
                 .annotate(total=Sum("qty"))

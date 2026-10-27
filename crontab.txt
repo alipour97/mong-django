@@ -16,3 +16,6 @@
 # Build compressed WebP images (Samian galleries + legacy site media) into media/img: daily at 3:45 AM,
 # after the catalog/colors sync. Only new images are built; --prune removes images no longer used.
 45 3 * * * cd /mnt/sda2/mong_samian && flock -n /tmp/mong_build_images.lock /mnt/sda2/mong_samian/.venv/bin/python manage.py build_images --prune >> /mnt/sda2/mong_samian/logs/build_images.log 2>&1
+
+# Site customers from Samian (customer, addresses, invoices, invoice rows): daily at 4:30 AM
+30 4 * * * cd /mnt/sda2/mong_samian && flock -n /tmp/mong_sync_customers.lock /mnt/sda2/mong_samian/.venv/bin/python manage.py sync_samian_customers >> /mnt/sda2/mong_samian/logs/sync_customers.log 2>&1
