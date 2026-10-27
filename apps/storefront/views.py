@@ -464,7 +464,7 @@ def _slug(slug: str) -> str:
 
 
 def _product_by_slug(slug: str) -> Product | None:
-    return Product.objects.filter(slug=_slug(slug), is_deleted=False).select_related("category", "brand").first()
+    return catalog.in_samian(Product.objects.filter(slug=_slug(slug), is_deleted=False)).select_related("category", "brand").first()
 
 
 def _toman(rial: int) -> str:

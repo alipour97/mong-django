@@ -7,8 +7,9 @@ Sources:
 - samian.*   (synced from Samian ERP): price, stock per barcode, product images.
 
 Rules:
-- Price and stock come from Samian for products linked to it. Products not yet
-  linked fall back to the website price and the last legacy stock snapshot.
+- Samian is the reference: a website product is shown only when it is linked
+  to a Samian product (ProductBundle.load drops the others). Price and stock
+  come only from Samian.
 - Images: Samian gallery first, website media as fallback; both served as
   pre-built WebP from /img/ (apps/website/images.py) once build_images ran.
 - Stock is the sum over the branches marked sells_online (website.Branch), minus
@@ -22,6 +23,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
+from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
@@ -35,6 +37,7 @@ from apps.samian.models import (
     SamianPriceListItem,
     SamianProduct,
     SamianProductColor,
+    SamianSalesRow,
 )
 from apps.website import images as site_images
 from apps.website.models import (
@@ -49,11 +52,12 @@ from apps.website.models import (
     ProductSamianLink,
     ProductTag,
     ProductVariant,
+    SelectedProduct,
     SiteSetting,
     online_warehouse_ids,
 )
 
-LISTING_CACHE_KEY = "storefront:listing:v6"
+LISTING_CACHE_KEY = "storefront:listing:v9"
 LISTING_CACHE_TTL = 120
 TREE_CACHE_KEY = "storefront:category-tree:v1"
 TREE_CACHE_TTL = 300
@@ -237,6 +241,8 @@ class ProductBundle:
     list_price: dict[int, int] = field(default_factory=dict)  # samian product pk -> final price
     stock_by_barcode: dict[str, float] = field(default_factory=dict)
     samian_images: dict[int, dict[str, list[dict]]] = field(default_factory=dict)  # product id -> color -> images
+    samian_images_by_color_id: dict[int, dict[int, list[dict]]] = field(default_factory=dict)  # product id -> colorinfo id -> images
+    colorinfo_by_barcode: dict[str, int] = field(default_factory=dict)
     main_media: dict[int, list[dict]] = field(default_factory=dict)
     color_media: dict[int, dict[int, list[dict]]] = field(default_factory=dict)  # product id -> fv id -> images
     only_media: bool = False  # SiteSetting.only_has_media_products: hide colors that have no images
@@ -265,6 +271,11 @@ class ProductBundle:
         links = dict(ProductSamianLink.objects.filter(product_id__in=ids).values_list("product_id", "samian_product_id"))
         sps = {sp.samian_id: sp for sp in SamianProduct.objects.filter(samian_id__in=links.values())}
         b.samian = {pid: sps[sid] for pid, sid in links.items() if sid in sps}
+        # Not in Samian -> not on the site (the Dadehfa copy is only kept for comparison).
+        b.products = {pid: p for pid, p in products.items() if pid in b.samian}
+        ids = list(b.products)
+        if not ids:
+            return b
 
         now = timezone.now()
         valid = Q(price_list__isnull=True) | Q(
@@ -289,9 +300,11 @@ class ProductBundle:
                 .annotate(total=Sum("qty"))
             )
             b.stock_by_barcode = {r["samian_barcode__barcode"]: float(r["total"] or 0) for r in rows}
-            b._known_barcodes = set(
-                SamianBarcode.objects.filter(barcode__in=barcodes).values_list("barcode", flat=True)
-            )
+            b._known_barcodes = set()
+            for code, colorinfo in SamianBarcode.objects.filter(barcode__in=barcodes).values_list("barcode", "colorinfo_id"):
+                b._known_barcodes.add(code)
+                if colorinfo:
+                    b.colorinfo_by_barcode[code] = colorinfo
         else:
             b._known_barcodes = set()
 
@@ -320,6 +333,8 @@ class ProductBundle:
                 })
             if imgs:
                 self.samian_images.setdefault(pid, {}).setdefault(norm(color.color_name), []).extend(imgs)
+                if color.colorinfo_id:
+                    self.samian_images_by_color_id.setdefault(pid, {}).setdefault(color.colorinfo_id, []).extend(imgs)
 
         self.main_media = attachments(MediaAttachment.Table.PRODUCTS, ids)
         cms = list(ProductColorMedia.objects.filter(product_id__in=ids, is_deleted=False))
@@ -330,25 +345,17 @@ class ProductBundle:
 
     # -- per product -------------------------------------------------------
     def pricing(self, pid: int) -> Pricing:
-        p = self.products[pid]
         sp = self.samian.get(pid)
-        if sp and sp.sale_price:
-            base = sp.sale_price
-            final = self.list_price.get(sp.pk)
-            if final and final < base:
-                return Pricing(float(base), round((base - final) * 100 / base, 3), round_price(final))
-            return Pricing(float(base), 0.0, int(base))
-        base = money(p.price)
-        reduction = money(p.reduction)
-        after = round_price(base * (100 - reduction) / 100) if reduction else int(base)
-        return Pricing(base, reduction, after)
+        if not sp or not sp.sale_price:
+            return Pricing(0.0, 0.0, 0)
+        base = sp.sale_price
+        final = self.list_price.get(sp.pk)
+        if final and final < base:
+            return Pricing(float(base), round((base - final) * 100 / base, 3), round_price(final))
+        return Pricing(float(base), 0.0, int(base))
 
     def variant_stock(self, pid: int, v: ProductVariant) -> float:
-        if pid in self.samian:
-            qty = self.stock_by_barcode.get(v.barcode, 0.0)
-        else:
-            # Not linked to Samian yet: last stock known by the legacy site.
-            qty = money(v.legacy_qty)
+        qty = self.stock_by_barcode.get(v.barcode, 0.0) if pid in self.samian else 0.0
         return max(0.0, qty - self.min_qty)
 
     def has_images(self, pid: int) -> bool:
@@ -362,8 +369,15 @@ class ProductBundle:
             return self.main_media[pid]
         return [img for imgs in self.color_media.get(pid, {}).values() for img in imgs]
 
-    def color_images(self, pid: int, fv) -> list[dict]:
-        return self.samian_images.get(pid, {}).get(norm(fv.name)) or self.color_media.get(pid, {}).get(fv.id) or []
+    def color_images(self, pid: int, v: ProductVariant) -> list[dict]:
+        """Samian gallery of the variant's color (matched by Samian color id, then name), else the site's."""
+        colorinfo = self.colorinfo_by_barcode.get(v.barcode)
+        return (
+            (colorinfo and self.samian_images_by_color_id.get(pid, {}).get(colorinfo))
+            or self.samian_images.get(pid, {}).get(norm(v.color.name))
+            or self.color_media.get(pid, {}).get(v.color_id)
+            or []
+        )
 
     def visible_variants(self, pid: int) -> list[ProductVariant]:
         """Variants the site shows: with a color, and (like the legacy site) only colors that have images."""
@@ -371,7 +385,7 @@ class ProductBundle:
         for v in self.variants.get(pid, []):
             if not v.color:
                 continue
-            if self.only_media and not self.color_images(pid, v.color):
+            if self.only_media and not self.color_images(pid, v):
                 continue
             out.append(v)
         return out
@@ -386,7 +400,7 @@ class ProductBundle:
             if c is None:
                 c = colors[v.color_id] = {
                     "id": v.color_id, "parentId": None, "name": v.color.name, "value": v.color.value,
-                    "images": self.color_images(pid, v.color), "price": pricing.base,
+                    "images": self.color_images(pid, v), "price": pricing.base,
                     "reduction": pricing.reduction, "discount": 0, "mojodi": 0.0, "barcode": "",
                     "displayPriority": v.color.display_priority, "productVariantId": 0,
                 }
@@ -500,8 +514,8 @@ class ListingRow:
     in_stock: bool
     color_ids: frozenset
     created: object
-    view_count: int
-    sales_count: int
+    sold: float          # Mong units sold in the last BEST_SELLER_DAYS, every branch, returns subtracted
+    featured: float      # SelectedProduct.sorting_weight; inf when not selected
     buyer_score: float
 
 
@@ -534,6 +548,10 @@ def listing_rows() -> list[ListingRow]:
         ProductComment.objects.filter(product_id__in=ids, is_deleted=False, is_active=True)
         .values("product_id").annotate(avg=Avg("score")).values_list("product_id", "avg")
     )
+    sold = sold_by_samian_product()
+    featured: dict[int, float] = {}
+    for pid, weight in SelectedProduct.objects.filter(is_deleted=False).values_list("product_id", "sorting_weight"):
+        featured[pid] = min(float(weight), featured.get(pid, math.inf))
     rows = []
     for pid, p in bundle.products.items():
         pr = bundle.pricing(pid)
@@ -543,7 +561,7 @@ def listing_rows() -> list[ListingRow]:
             id=pid, title=norm(p.title), category_id=p.category_id, brand_id=p.brand_id,
             price_after=pr.after, reduction=pr.reduction, in_stock=bundle.in_stock(pid),
             color_ids=frozenset(v.color_id for v in bundle.visible_variants(pid)),
-            created=p.created, view_count=p.view_count, sales_count=p.sales_count,
+            created=p.created, sold=sold.get(bundle.samian[pid].pk, 0.0), featured=featured.get(pid, math.inf),
             buyer_score=float(scores.get(pid) or 0),
         ))
     cache.set(LISTING_CACHE_KEY, rows, LISTING_CACHE_TTL)
@@ -554,20 +572,33 @@ def _newest(r):
     return (-(r.created.timestamp() if r.created else 0), r.id)
 
 
-# sortCriteriaId -> ascending sort key; ties fall back to newest like the legacy site
+def sold_by_samian_product() -> dict[int, float]:
+    """Net units sold per SamianProduct pk over the last BEST_SELLER_DAYS (all branches, Lebaza's too)."""
+    since = timezone.localdate() - timedelta(days=settings.BEST_SELLER_DAYS)
+    sold: dict[int, float] = defaultdict(float)
+    for spk, is_return, qty in (
+        SamianSalesRow.objects.filter(report_date__gte=since, samian_product__isnull=False)
+        .values("samian_product_id", "is_return").annotate(qty=Sum("quantity"))
+        .values_list("samian_product_id", "is_return", "qty")
+    ):
+        sold[spk] += -float(qty) if is_return else float(qty)
+    return sold
+
+
+# sortCriteriaId -> ascending sort key; ties fall back to newest like the legacy site.
+# 1 (پربازدیدترین) is not offered until views are tracked; requests for it get newest.
 SORT_KEYS = {
-    1: lambda r: (-r.view_count, *_newest(r)),    # پربازدیدترین
     2: _newest,                                   # جدیدترین (also the default)
-    3: lambda r: (-r.sales_count, *_newest(r)),   # پرفروش ترین
+    3: lambda r: (-r.sold, *_newest(r)),          # پرفروش ترین
     4: lambda r: (r.price_after, *_newest(r)),    # ارزان ترین
     5: lambda r: (-r.price_after, *_newest(r)),   # گران ترین
     6: lambda r: (-r.buyer_score, *_newest(r)),   # پیشنهاد خریداران (approved comment scores)
-    7: _newest,                                   # منتخب
+    7: lambda r: (r.featured, *_newest(r)),       # منتخب: محصولات منتخب ادمین به ترتیب وزن، بعد جدیدترین
     8: lambda r: (-r.reduction, *_newest(r)),     # بیشترین تخفیف
     9: lambda r: (r.reduction, *_newest(r)),      # کمترین تخفیف
 }
 SORT_CRITERIA = [
-    {"id": 1, "sortKeyFa": "پربازدیدترین"}, {"id": 2, "sortKeyFa": "جدیدترین"},
+    {"id": 2, "sortKeyFa": "جدیدترین"},
     {"id": 3, "sortKeyFa": "پرفروش ترین"}, {"id": 4, "sortKeyFa": "ارزان ترین"},
     {"id": 5, "sortKeyFa": "گران ترین"}, {"id": 6, "sortKeyFa": "پیشنهاد خریداران"},
     {"id": 7, "sortKeyFa": "منتخب"}, {"id": 8, "sortKeyFa": "بیشترین تخفیف"},
@@ -628,3 +659,12 @@ def brands_of(rows: list[ListingRow]) -> list[dict]:
 
 def clear_caches():
     cache.delete_many([LISTING_CACHE_KEY, TREE_CACHE_KEY])
+
+
+def in_samian(products):
+    """Restrict a Product queryset to products linked to an existing Samian product."""
+    return products.filter(
+        id__in=ProductSamianLink.objects.filter(
+            samian_product_id__in=SamianProduct.objects.values("samian_id")
+        ).values("product_id")
+    )

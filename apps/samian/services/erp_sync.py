@@ -195,7 +195,7 @@ def sync_barcodes(
                     unique_fields=["samian_id"],
                     update_fields=[
                         "barcode", "subcode", "samian_product", "productmain_id",
-                        "color", "color_en", "size", "season_code",
+                        "color", "colorinfo_id", "color_en", "size", "season_code",
                         "material_desc", "sku_code", "buy_price", "sale_price",
                         "end_user_price", "is_active", "sale_status_id",
                         "sale_status", "updated_at",
@@ -219,7 +219,8 @@ def sync_barcodes(
                     subcode=_s(item.get("k_bar_code"), 128),
                     samian_product_id=product_pk_by_id[pmid],
                     productmain_id=pmid,
-                    color=_s(item.get("__colorinfo_id_value") or item.get("colornew"), 255),
+                    color=_s(item.get("__barcodecolor_value") or item.get("__colorinfo_id_value") or item.get("colornew"), 255),
+                    colorinfo_id=_int(item.get("barcodecolor")),
                     color_en=_s(item.get("colornewen"), 255),
                     size=_s(item.get("__sizeinfo_id_value") or item.get("sizenew"), 128),
                     season_code=_s(item.get("seasoncodenew"), 64),

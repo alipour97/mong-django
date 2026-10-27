@@ -61,7 +61,7 @@ class Command(BaseCommand):
                 resp = client.post(url, data=json.dumps(req["body"] or {}), content_type="application/json")
             try:
                 got = resp.json()
-            except ValueError:
+            except (TypeError, ValueError):  # not JSON (or no Content-Type)
                 got = resp.content[:80].decode(errors="replace")
 
             problems = []

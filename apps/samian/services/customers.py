@@ -1,5 +1,5 @@
 """
-Customers, their addresses and their purchase history, read from Samian.
+Customers and their addresses, read from Samian.
 
 Samian is shared with Lebaza, so instead of copying every Samian customer this
 reads only the people who have an account on the site (website.Customer),
@@ -7,13 +7,12 @@ matched by mobile number, the one identifier both sides have:
 
     retail/poscustomer          -> SamianCustomer          filter mobilephone
     accounts/contactinfo        -> SamianCustomerAddress   filter poscustomer_id
-    retail/postransaction       -> SamianSalesTransaction  filter poscustomer_id
-    retail/postransactionitems  -> SamianSalesRow          filter postransaction_id
 
 Samian has no "in" filter, so each request asks for CHUNK ids joined with
 "or". Every Samian customer with the site customer's mobile is kept (a person
 can have several); website.Customer.samian_customer points at the oldest.
-All invoices of those customers are kept, from any branch.
+Their purchase history is the Mong sales of services/sales.py attached to
+these customers.
 
 Read only: nothing is written to Samian.
 """
@@ -24,14 +23,10 @@ from typing import Any, Iterable, Iterator
 
 from django.utils import timezone
 
-from apps.samian.client import SamianClient, extract_records, get_samian_client
+from apps.samian.client import SamianClient, get_samian_client
 from apps.samian.models import (
-    SamianBarcode,
     SamianCustomer,
     SamianCustomerAddress,
-    SamianProduct,
-    SamianSalesRow,
-    SamianSalesTransaction,
     SamianSyncLog,
 )
 from apps.samian.services.erp_sync import (
@@ -43,7 +38,6 @@ from apps.samian.services.erp_sync import (
     _log_start,
     _money,
     _s,
-    _warehouse_pks,
 )
 
 logger = logging.getLogger(__name__)
@@ -204,140 +198,11 @@ def sync_addresses(client: SamianClient, customer_pks: dict[int, int]) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Purchase history
-# ---------------------------------------------------------------------------
-TRANSACTION_FIELDS = [
-    "transaction_code", "transaction_unique_id", "transaction_date", "report_date", "order_date",
-    "samian_customer", "customer_samian_id", "warehouse_id", "warehouse", "samian_warehouse",
-    "department_id", "department", "cash_id", "cash_name", "cashier_person_id", "cashier_name",
-    "status_id", "status", "total_amount", "total_discount", "total_vat", "net_amount",
-    "rounding_discount", "transaction_score", "is_first_buy", "year_info_id", "delivery_address", "updated_at",
-]
-
-ROW_FIELDS = [
-    "transaction", "transaction_samian_id", "samian_barcode", "samian_product", "barcode",
-    "barcodemain_id", "productmain_id", "subcode", "item_name", "transaction_date", "report_date",
-    "quantity", "unit_price_before_discount", "unit_price", "discount_percent", "discount_amount",
-    "vat_amount", "gross_amount", "line_revenue", "sale_person_id", "sale_person_name",
-    "warehouse_id", "samian_warehouse", "is_return", "is_gifted", "updated_at",
-]
-
-
-def _transaction(item: dict, customer_pks: dict[int, int], warehouse_pks: dict[int, int]) -> SamianSalesTransaction:
-    tx_date = _dt(item.get("transactiondate"))
-    customer = _int(item.get("poscustomer_id"))
-    warehouse = _int(item.get("warehouse_id"))
-    return SamianSalesTransaction(
-        samian_id=_int(item.get("postransaction_id") or item.get("id")),
-        transaction_code=_s(item.get("transactioncode"), 128),
-        transaction_unique_id=_s(item.get("transactionuniqueid"), 64),
-        transaction_date=tx_date,
-        report_date=timezone.localtime(tx_date).date() if tx_date else None,
-        order_date=_dt(item.get("orderdate")),
-        samian_customer_id=customer_pks.get(customer),
-        customer_samian_id=customer,
-        warehouse_id=warehouse,
-        warehouse=_s(item.get("__warehouse_id_value"), 255),
-        samian_warehouse_id=warehouse_pks.get(warehouse),
-        department_id=_int(item.get("departmentinfo_id")),
-        department=_s(item.get("__departmentinfo_id_value"), 255),
-        cash_id=_int(item.get("cashes_id")),
-        cash_name=_s(item.get("__cashes_id_value"), 255),
-        cashier_person_id=_int(item.get("cashierpersoninfo_id")),
-        cashier_name=_s(item.get("__cashierpersoninfo_id_value"), 255),
-        status_id=_int(item.get("transactionstatus_id")),
-        status=_s(item.get("__transactionstatus_id_value"), 128),
-        total_amount=_money(item.get("tramount")),
-        total_discount=_money(item.get("trdiscountcost")),
-        total_vat=_money(item.get("trvatcost")),
-        net_amount=_money(item.get("trnetamount")),
-        rounding_discount=_money(item.get("roundingdiscount")),
-        transaction_score=_money(item.get("transactionscore")),
-        is_first_buy=bool(item.get("firstbuy")),
-        year_info_id=_int(item.get("yearinfo_id")),
-        delivery_address=_s(item.get("deliveryaddress")),
-    )
-
-
-def sync_transactions(client: SamianClient, customer_pks: dict[int, int]) -> list[int]:
-    """Invoices of these Samian customers. Returns their Samian ids."""
-    warehouse_pks = _warehouse_pks()
-    instances = [
-        _transaction(item, customer_pks, warehouse_pks)
-        for item in _iter_matching(client, "retail/postransaction", "postransaction_id", "poscustomer_id", list(customer_pks))
-    ]
-    _upsert(SamianSalesTransaction, instances, TRANSACTION_FIELDS)
-    return [t.samian_id for t in instances]
-
-
-def sync_rows(client: SamianClient, transaction_ids: list[int]) -> int:
-    """Line items of these invoices, with the invoice date and links to barcode and product."""
-    txs = {
-        sid: (pk, dt, d, wh, whpk)
-        for sid, pk, dt, d, wh, whpk in SamianSalesTransaction.objects.filter(samian_id__in=transaction_ids)
-        .values_list("samian_id", "pk", "transaction_date", "report_date", "warehouse_id", "samian_warehouse_id")
-    }
-    items = list(_iter_matching(client, "retail/postransactionitems", "postransactionitems_id", "postransaction_id", transaction_ids))
-    barcodes = dict(
-        SamianBarcode.objects.filter(samian_id__in={_int(i.get("barcodemain_id")) for i in items})
-        .values_list("samian_id", "pk")
-    )
-    products = dict(
-        SamianProduct.objects.filter(samian_id__in={_int(i.get("productmain_id")) for i in items})
-        .values_list("samian_id", "pk")
-    )
-    instances = []
-    for item in items:
-        tx_pk, tx_dt, tx_day, wh, wh_pk = txs.get(_int(item.get("postransaction_id")), (None,) * 5)
-        qty = _dec(item.get("qty"), "1")
-        unit_before = _money(item.get("itemprice"))
-        discount = _money(item.get("discountcost"))
-        instances.append(SamianSalesRow(
-            samian_id=_int(item.get("postransactionitems_id") or item.get("id")),
-            transaction_id=tx_pk,
-            transaction_samian_id=_int(item.get("postransaction_id")),
-            samian_barcode_id=barcodes.get(_int(item.get("barcodemain_id"))),
-            samian_product_id=products.get(_int(item.get("productmain_id"))),
-            barcode=_s(item.get("itembarcode") or item.get("__barcodemain_id_value"), 255),
-            barcodemain_id=_int(item.get("barcodemain_id")),
-            productmain_id=_int(item.get("productmain_id")),
-            subcode=_s(item.get("subcode"), 128),
-            item_name=_s(item.get("itemname") or item.get("__productmain_id_value"), 512),
-            transaction_date=tx_dt,
-            report_date=tx_day,
-            quantity=qty,
-            unit_price_before_discount=unit_before,
-            unit_price=_money(item.get("saleprice")),
-            discount_percent=_dec(item.get("finaldiscount")),
-            discount_amount=discount,
-            vat_amount=_money(item.get("vatcost")),
-            gross_amount=_money(item.get("tritemamount")),
-            line_revenue=_money(item.get("tritemnetamount")),
-            sale_person_id=_int(item.get("salepersoninfo_id")),
-            sale_person_name=_s(item.get("__salepersoninfo_id_value"), 255),
-            warehouse_id=_int(item.get("itemwarehouse_id")) or wh,
-            samian_warehouse_id=wh_pk,
-            is_return=bool(item.get("isreturn")),
-            is_gifted=bool(item.get("isgifted")),
-        ))
-    _upsert(SamianSalesRow, instances, ROW_FIELDS)
-    return len(instances)
-
-
-# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
-def sync_site_customers(
-    client: SamianClient | None = None,
-    *,
-    customer_ids: list[int] | None = None,
-    all_rows: bool = False,
-) -> dict[str, Any]:
-    """
-    Read Samian data for site customers: the customer, addresses, invoices and
-    invoice rows. Rows are fetched only for invoices that have none stored yet
-    (Samian invoices do not change once closed) unless all_rows is set.
-    """
+def sync_site_customers(client: SamianClient | None = None, *, customer_ids: list[int] | None = None) -> dict[str, Any]:
+    """Read the Samian customer and addresses of site customers, and attach their invoices."""
+    from apps.samian.services.sales import link_customers
     from apps.website.models import Customer
 
     client = client or get_samian_client()
@@ -353,15 +218,9 @@ def sync_site_customers(
         linked = link_site_customers(site)
         customer_pks = dict(SamianCustomer.objects.filter(mobile__in=mobiles).values_list("samian_id", "pk"))
         addresses = sync_addresses(client, customer_pks)
-        tx_ids = sync_transactions(client, customer_pks)
-        if not all_rows:
-            done = set(SamianSalesRow.objects.filter(transaction_samian_id__in=tx_ids).values_list("transaction_samian_id", flat=True))
-            tx_ids = [t for t in tx_ids if t not in done]
-        rows = sync_rows(client, tx_ids)
+        invoices = link_customers()
         return _log_finish(log, total=len(site), synced=linked, details={
-            "samian_customers": found, "linked": linked, "addresses": addresses,
-            "transactions": SamianSalesTransaction.objects.filter(customer_samian_id__in=customer_pks).count(),
-            "rows_fetched": rows,
+            "samian_customers": found, "linked": linked, "addresses": addresses, "invoices_attached": invoices,
         })
     except Exception as exc:
         logger.exception("sync_site_customers failed")

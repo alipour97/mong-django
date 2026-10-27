@@ -282,6 +282,8 @@ class SamianBarcode(models.Model):
     productmain_id = models.BigIntegerField(_("شناسه محصول"), null=True, blank=True, db_index=True)
 
     color = models.CharField(_("رنگ"), max_length=255, blank=True, default="", db_index=True)
+    # Same id as SamianProductColor.colorinfo_id; names differ between the two (سورمه اي / سرمه‌اي).
+    colorinfo_id = models.BigIntegerField(_("شناسه رنگ پایه"), null=True, blank=True, db_index=True)
     color_en = models.CharField(_("رنگ انگلیسی"), max_length=255, blank=True, default="")
     size = models.CharField(_("سایز"), max_length=128, blank=True, default="")
     season_code = models.CharField(_("کد فصل"), max_length=64, blank=True, default="", db_index=True)

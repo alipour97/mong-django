@@ -198,6 +198,8 @@ SAMIAN_BRAND_IDS = [int(x) for x in os.getenv("SAMIAN_BRAND_IDS", "140430,14041"
 # - listing shows only these website brands (website.Brand ids for مانگ, توليد)
 # - stock is the sum of the online-sale branches: مرواريد(3) گلسار(2) ستارخان شيراز(26) زيگورات(28) پارك سنتر اهواز(29)
 STOREFRONT_BRAND_IDS = [int(x) for x in os.getenv("STOREFRONT_BRAND_IDS", "15,1").split(",") if x.strip()]
+# «پرفروش‌ترین»: Mong units sold in this many days, in every branch (Lebaza's included).
+BEST_SELLER_DAYS = int(os.getenv("BEST_SELLER_DAYS", "90"))
 STOREFRONT_STOCK_WAREHOUSE_IDS = [
     int(x) for x in os.getenv("STOREFRONT_STOCK_WAREHOUSE_IDS", "2,3,26,28,29").split(",") if x.strip()
 ]
