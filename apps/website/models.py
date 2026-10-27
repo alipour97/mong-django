@@ -287,6 +287,36 @@ class MediaAttachment(LegacyMixin):
         return self.media_url
 
 
+class FileFormat(LegacyMixin):
+    """File types the gallery accepts (FileFormats)."""
+
+    id = models.BigAutoField(primary_key=True)
+    type = models.CharField(max_length=64)          # Image, Video, ...
+    extension = models.CharField(max_length=32)     # jpg, webp, mp4, ...
+    mime_type = models.CharField(max_length=128, blank=True, default="")
+
+    class Meta:
+        verbose_name = _("فرمت فایل")
+        verbose_name_plural = _("فرمت‌های فایل")
+
+    def __str__(self) -> str:
+        return self.extension
+
+
+class FileTag(LegacyMixin):
+    """A gallery tag (separate from product/category tags)."""
+
+    id = models.BigAutoField(primary_key=True)
+    title = models.CharField(max_length=255)
+
+    class Meta:
+        verbose_name = _("تگ گالری")
+        verbose_name_plural = _("تگ‌های گالری")
+
+    def __str__(self) -> str:
+        return self.title
+
+
 class FileMedia(LegacyMixin):
     """Uploaded file in the admin media gallery."""
 
@@ -447,12 +477,27 @@ class OutfitProduct(LegacyMixin):
         return f"{self.outfit_id} / {self.product_id}"
 
 
+class FileMediaTag(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    file_media = models.ForeignKey(FileMedia, on_delete=models.CASCADE, related_name="tag_links")
+    tag = models.ForeignKey(FileTag, on_delete=models.CASCADE, related_name="file_links")
+
+    class Meta:
+        verbose_name = _("تگ فایل")
+        verbose_name_plural = _("تگ‌های فایل")
+
+    def __str__(self) -> str:
+        return f"{self.file_media_id} ← {self.tag_id}"
+
+
 class SelectedProduct(LegacyMixin):
     """Products picked by the admin for the home page slider."""
 
     id = models.BigAutoField(primary_key=True)
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="selections")
     feature_value = models.ForeignKey(FeatureValue, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    # The color shown first: a Samian colorinfo id (feature_value is the Dadehfa color of imported rows).
+    color_id = models.BigIntegerField(null=True, blank=True)
     sorting_weight = models.DecimalField(max_digits=18, decimal_places=3, default=0)
 
     class Meta:

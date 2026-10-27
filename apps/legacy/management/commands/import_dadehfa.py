@@ -276,6 +276,17 @@ SPECS += [
         "id": r["Id"], "shipping_method_id": r["ShippingMethodId"], "province_id": r["ProvinceId"],
         "city_id": r["CityId"], **legacy(r),
     }, "shipping", {"shipping_method_id": (m.ShippingMethod, True)}),
+    # ---------------------------------------------------------------- gallery
+    Spec(m.FileFormat, "SELECT * FROM FileFormats", lambda r: {
+        "id": r["Id"], "type": _s(r["Type"]), "extension": _s(r["Extension"]).lower(), "mime_type": _s(r["MimeType"]),
+        **legacy(r),
+    }, "gallery"),
+    Spec(m.FileTag, "SELECT * FROM FileTags", lambda r: {
+        "id": r["Id"], "title": _s(r["Title"]), **legacy(r),
+    }, "gallery"),
+    Spec(m.FileMediaTag, "SELECT * FROM FileMediaTags", lambda r: {
+        "id": r["Id"], "file_media_id": r["FileMediaId"], "tag_id": r["TagId"], **legacy(r),
+    }, "gallery", {"file_media_id": (m.FileMedia, True), "tag_id": (m.FileTag, True)}),
     # ---------------------------------------------------------------- customers
     # Not part of the default run: once the new site takes sign-ups, a refresh
     # would delete them. Duplicate mobiles are merged into the oldest account.

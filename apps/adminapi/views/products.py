@@ -19,8 +19,10 @@ is gone (photos come from Samian); size guides come with the gallery step.
 from __future__ import annotations
 
 from collections import defaultdict
+from decimal import Decimal, InvalidOperation
 
-from django.db.models import Sum
+from django.db.models import Max, Min, Sum
+from django.utils import timezone
 
 from apps.samian.models import SamianInventory, SamianWarehouse
 from apps.storefront import catalog
@@ -32,6 +34,7 @@ from apps.website.models import (
     Product,
     ProductCollection,
     ProductTag,
+    SelectedProduct,
     online_warehouse_ids,
 )
 
@@ -297,3 +300,151 @@ class DescriptionsView(AdminView):
         p.save(update_fields=["long_description_html", "short_description_html"])
         index.clear()
         return ok({"result": True})
+
+
+# -----------------------------------------------------------------------------
+# Size guides (adding one goes through FileMedia/AddFilesToEntity with ProductGuides/CategoryGuides)
+# -----------------------------------------------------------------------------
+class DeleteGuideView(AdminView):
+    """GET Products/DeleteGuid?productId= and Category/DeleteGuid?categoryId=."""
+
+    table: int = MediaAttachment.Table.PRODUCTS
+    param: str = "productId"
+
+    def get(self, request):
+        record = to_int(request.query_params.get(self.param))
+        removed = MediaAttachment.objects.filter(
+            table=self.table, record_id=record, is_product_guid=True, is_deleted=False,
+        ).update(is_deleted=True)
+        if not removed:
+            return fail("تصویر پیدا نشد.", 404)
+        index.clear()
+        return ok({"result": True})
+
+
+# -----------------------------------------------------------------------------
+# Selected products (the home page's «منتخب» row and the «منتخب» sort)
+# -----------------------------------------------------------------------------
+WEIGHT_STEP = Decimal(256)
+
+
+def _cards(pids: list[int], selections: dict[int, SelectedProduct]) -> list[dict]:
+    """Storefront product cards, plus the selection's id, weight and first color."""
+    bundle = catalog.ProductBundle.load(pids)
+    out = []
+    for pid in pids:
+        if pid not in bundle.products:
+            continue
+        item = bundle.list_item(pid)
+        s = selections.get(pid)
+        item["selectedProductId"] = s.id if s else None
+        item["sortingWeight"] = float(s.sorting_weight) if s else None
+        if s and s.color_id and item["details"]:
+            item["details"][0]["defaultItemId"] = s.color_id
+        out.append(item)
+    return out
+
+
+def _selections() -> dict[int, SelectedProduct]:
+    return {s.product_id: s for s in SelectedProduct.objects.filter(is_deleted=False).order_by("sorting_weight", "id")}
+
+
+class SelectedListView(AdminView):
+    def get(self, request):
+        selections = _selections()
+        return ok({"result": _cards(list(selections), selections)})
+
+
+class SelectedAddView(AdminView):
+    """POST Products/AddSelectedProduct?productId=&featureValueId= -> adds it (or moves it) to the end."""
+
+    def post(self, request):
+        pid = to_int(request.query_params.get("productId"))
+        if not Product.objects.filter(id=pid, is_deleted=False).exists():
+            return fail(NOT_FOUND, 404)
+        color = to_int(request.query_params.get("featureValueId"))
+        top = SelectedProduct.objects.filter(is_deleted=False).aggregate(m=Max("sorting_weight"))["m"] or Decimal(0)
+        s = SelectedProduct.objects.filter(product_id=pid).first()
+        if s is None:
+            s = SelectedProduct.objects.create(product_id=pid, color_id=color, sorting_weight=top + WEIGHT_STEP,
+                                               created=timezone.now())
+        else:
+            s.color_id = color if color is not None else s.color_id
+            if s.sorting_weight != top or s.is_deleted:
+                s.sorting_weight = top + WEIGHT_STEP
+            s.is_deleted = False
+            s.save(update_fields=["color_id", "sorting_weight", "is_deleted"])
+        index.clear()
+        return ok({"id": s.id})
+
+
+class SelectedDeleteView(AdminView):
+    def post(self, request):
+        qs = SelectedProduct.objects.filter(is_deleted=False)
+        sid, pid = to_int(request.query_params.get("id")), to_int(request.query_params.get("productId"))
+        if sid is not None:
+            qs = qs.filter(id=sid)
+        if pid is not None:
+            qs = qs.filter(product_id=pid)
+        s = qs.first() if (sid is not None or pid is not None) else None
+        if s is None:
+            return fail("ایتمی با این شناسه یافت نشد.", 404)
+        s.delete()
+        index.clear()
+        return ok({"result": True})
+
+
+class SelectedWeightView(AdminView):
+    """Like the old panel: below the smallest weight -> half of it; above the largest -> largest + 256."""
+
+    def post(self, request):
+        s = SelectedProduct.objects.filter(id=to_int(request.query_params.get("id")), is_deleted=False).first()
+        if s is None:
+            return fail("ایتمی با این شناسه یافت نشد.", 404)
+        try:
+            weight = Decimal(str(request.query_params.get("sortingWeight")))
+        except (InvalidOperation, TypeError):
+            return fail("وزن نامعتبر است", 400)
+        if weight == s.sorting_weight:
+            return ok({"result": True})
+        if weight <= 0:
+            return ok({"result": False})
+        agg = SelectedProduct.objects.filter(is_deleted=False).aggregate(lo=Min("sorting_weight"), hi=Max("sorting_weight"))
+        if agg["lo"] is not None and weight < agg["lo"]:
+            weight = agg["lo"] / 2
+        if agg["hi"] is not None and weight > agg["hi"]:
+            weight = agg["hi"] + WEIGHT_STEP
+        s.sorting_weight = weight
+        s.save(update_fields=["sorting_weight"])
+        index.clear()
+        return ok({"result": True})
+
+
+class SelectedClearView(AdminView):
+    def post(self, request):
+        qs = SelectedProduct.objects.filter(is_deleted=False)
+        if not qs.exists():
+            return fail("لیست قبلا خالی شده است.", 404)
+        qs.delete()
+        index.clear()
+        return ok({"result": True})
+
+
+class BriefProductsView(AdminView):
+    """
+    GET Products/GetBriefProducts?Search=&CategoryIds=&FeatureValueIds=&pageNumber=&pageSize=
+    Products shown on the site (the ones worth selecting), as storefront cards.
+    """
+
+    def get(self, request):
+        q = request.query_params
+        payload = {
+            "search": q.get("Search") or "",
+            "filteredCategoryIds": int_list(q.getlist("CategoryIds")),
+            "filteredFeatureId": int_list(q.getlist("FeatureValueIds")),
+            "sortCriteriaId": 2,
+        }
+        rows = catalog.filter_rows(payload)
+        page = paginated(rows, to_int(q.get("pageNumber"), 1), to_int(q.get("pageSize"), 10))
+        page["items"] = _cards([r.id for r in page["items"]], _selections())
+        return ok({"result": page})

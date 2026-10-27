@@ -9,7 +9,9 @@ from django.urls import path, re_path
 
 from apps.storefront import views as storefront
 
-from .views import auth, categories, dashboard, products
+from apps.website.models import MediaAttachment
+
+from .views import auth, categories, dashboard, gallery, products, tags
 
 urlpatterns = [
     path("Auth/login", auth.LoginView.as_view()),
@@ -34,6 +36,40 @@ urlpatterns = [
     path("Products/ValidateSlug", products.ValidateSlugView.as_view()),
     path("Products/ShowInTrob", products.TorobView.as_view()),
     path("Products/<int:product_id>/descriptions", products.DescriptionsView.as_view()),
+    path("Products/DeleteGuid", products.DeleteGuideView.as_view()),
+    path("Category/DeleteGuid", products.DeleteGuideView.as_view(table=MediaAttachment.Table.CATEGORIES, param="categoryId")),
+    path("Products/GetSelectedProducts", products.SelectedListView.as_view()),
+    path("Products/AddSelectedProduct", products.SelectedAddView.as_view()),
+    path("Products/DeleteSelectedProduct", products.SelectedDeleteView.as_view()),
+    path("Products/SetSortingWeight", products.SelectedWeightView.as_view()),
+    path("Products/ClearAllSelectedProducts", products.SelectedClearView.as_view()),
+    path("Products/GetBriefProducts", products.BriefProductsView.as_view()),
+
+    path("FileMedia/UploadFile", gallery.UploadView.as_view()),
+    path("FileMedia/GetFilteredMedia", gallery.FilteredView.as_view()),
+    path("FileMedia/GetFileMediaById/<int:file_id>", gallery.ByIdView.as_view()),
+    path("FileMedia/GetAllTags", gallery.TagsView.as_view()),
+    path("FileMedia/AddTag", gallery.AddTagView.as_view()),
+    path("FileMedia/AddTagsToFile", gallery.TagsToFileView.as_view()),
+    path("FileMedia/AddTagsToFiles", gallery.TagsToFilesView.as_view()),
+    path("FileMedia/AddFilesToEntity", gallery.AddToEntityView.as_view()),
+    path("FileMedia/RemoveFiles", gallery.RemoveFilesView.as_view()),
+    path("FileMedia/DetachMedia/<int:media_id>", gallery.DetachView.as_view()),
+    path("FileMedia/DetachMedias", gallery.DetachManyView.as_view()),
+    path("FileMedia/UpdateAttributesToFile", gallery.AttributesView.as_view()),
+    path("FileMedia/UpdateAttributesToFiles", gallery.AttributesView.as_view(many=True)),
+    path("FileMedia/UpdateAttributesToMedia", gallery.AttributesView.as_view(media=True)),
+    path("FileMedia/UpdateAttributesToMedias", gallery.AttributesView.as_view(many=True, media=True)),
+    path("FileMedia/GetAllFormats", gallery.FormatsView.as_view()),
+    path("FileMedia/GetAllFormatTypes", gallery.FormatsView.as_view(what="types")),
+    path("FileMedia/GetAllFormatExtensions", gallery.FormatsView.as_view(what="extensions")),
+
+    path("TagControllers/GetAllTags", tags.AllView.as_view()),
+    path("TagControllers/AddTag", tags.AddView.as_view()),
+    path("TagControllers/AddTagsToProduct", tags.ToProductView.as_view()),
+    path("TagControllers/AddTagsToProducts", tags.ToProductsView.as_view()),
+    path("TagControllers/AddTagsToCategory", tags.ToCategoryView.as_view()),
+    path("TagControllers/AddTagsToCategories", tags.ToCategoriesView.as_view()),
 
     path("SearchEngine/SiteMaps", storefront.SearchEngineSiteMapsView.as_view()),
     re_path(r"^SearchEngine/(?P<entity_type>[^/]+)/(?P<slug>.+)/meta$", storefront.SearchEngineMetaView.as_view()),

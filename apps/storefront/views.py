@@ -357,6 +357,8 @@ class ProductGetSelectedProductsView(PublicView):
                 continue
             item = bundle.list_item(s.product_id)
             item.update({"selectedProductId": s.id, "sortingWeight": float(s.sorting_weight)})
+            if s.color_id and item["details"]:
+                item["details"][0]["defaultItemId"] = s.color_id
             data.append(item)
         return ok(data)
 

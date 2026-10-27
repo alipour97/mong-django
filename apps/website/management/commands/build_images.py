@@ -112,7 +112,8 @@ class Command(BaseCommand):
             root = images.img_root()
             for full in root.glob("**/full.webp"):
                 key = str(full.parent.relative_to(root))
-                if key not in jobs:
+                # u/: files uploaded in the admin gallery; their gallery entry owns them.
+                if key not in jobs and not key.startswith("u/"):
                     shutil.rmtree(full.parent)
                     pruned += 1
 
