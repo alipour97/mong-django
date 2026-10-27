@@ -86,9 +86,9 @@
   - دو خطا: یک فایل سامیان عکس معتبر نیست؛ یک فایل سایت قبلی روی `cdn.mong.ir` هم وجود ندارد.
   - آماده برای CDN: کافی است `PUBLIC_MEDIA_BASE_URL` عوض شود و `media/img` روی CDN باشد (یا CDN از همین سرور pull کند، با query string در کلید کش).
 - [ ] **کارهایی که شما انجام می‌دهید:**
-  - [ ] فایل `deploy/nginx/mong-img-map.conf` به `/etc/nginx/conf.d/` کپی شود.
-  - [ ] محتوای `deploy/nginx/samian-img-location.conf` داخل بلاک `server` روی پورت ۴۴۳ قرار بگیرد، بعد `nginx -t` و `reload`.
-  - [ ] بعد از آن، خط `PUBLIC_IMG_PATH=/api/img` از `.env` حذف شود تا عکس‌ها مستقیم از nginx سرو شوند (الان موقتاً از جنگو).
+  - [x] فایل `deploy/nginx/mong-img-map.conf` به `/etc/nginx/conf.d/` کپی شود.
+  - [x] محتوای `deploy/nginx/samian-img-location.conf` داخل بلاک `server` روی پورت ۴۴۳ قرار بگیرد، بعد `nginx -t` و `reload`.
+  - [x] بعد از آن، خط `PUBLIC_IMG_PATH=/api/img` از `.env` حذف شد؛ عکس‌ها مستقیم از nginx سرو می‌شوند (کش یک‌ساله).
   - [ ] در crontab، خط `sync_samian_images` با خط `build_images` در `crontab.txt` جایگزین شود.
   - [ ] (اختیاری) پوشه‌ی `media/products` (۲۲۸ مگابایت عکس اصلی دانلودشده‌ی قبلی) دیگر استفاده نمی‌شود و می‌شود پاکش کرد.
 - [ ] **`DEBUG=True` روی دامنه‌ی عمومی:** صفحه‌ی خطای جنگو لیست آدرس‌ها و تنظیمات را نشان می‌دهد. قبل از سوییچ باید `DJANGO_DEBUG=False` شود.
