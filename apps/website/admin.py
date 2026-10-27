@@ -25,10 +25,21 @@ class LegacyAdmin(admin.ModelAdmin):
 # -----------------------------------------------------------------------------
 @admin.register(m.Category)
 class CategoryAdmin(LegacyAdmin):
-    list_display = ("id", "title", "slug", "parent", "is_online_active", "in_main_page", "display_priority")
+    """Categories are Samian departments (sync_site_catalog); a new one arrives switched off."""
+
+    list_display = ("id", "title", "parent", "slug", "samian_department_id", "is_online_active", "in_main_page",
+                    "display_priority")
+    list_editable = ("is_online_active", "in_main_page", "display_priority")
     list_filter = ("is_online_active", "in_main_page", "group_level")
     search_fields = ("title", "slug", "map_id")
     raw_id_fields = ("parent",)
+    readonly_fields = ("samian_department_id",)
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from apps.storefront.catalog import clear_caches
+
+        clear_caches()
 
 
 @admin.register(m.Brand)
