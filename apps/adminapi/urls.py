@@ -11,7 +11,7 @@ from apps.storefront import views as storefront
 
 from apps.website.models import MediaAttachment
 
-from .views import auth, banners, categories, collections, comments, dashboard, gallery, products, tags
+from .views import auth, banners, categories, collections, comments, configs, customize, dashboard, gallery, products, tags
 
 urlpatterns = [
     path("Auth/login", auth.LoginView.as_view()),
@@ -37,6 +37,49 @@ urlpatterns = [
     path("Collection/All", collections.AllView.as_view()),
     path("Collection/SoftDelete/<int:collection_id>", collections.DeleteView.as_view()),
     path("Collection/<int:collection_id>", collections.DetailView.as_view()),
+
+    path("PrimaryConfig", customize.ConfigAddView.as_view()),
+    path("PrimaryConfig/Get", customize.ConfigGetView.as_view()),
+    path("PrimaryConfig/Update/<int:config_id>", customize.ConfigUpdateView.as_view()),
+    path("PrimaryConfig/update/<int:config_id>", customize.ConfigUpdateView.as_view()),
+    path("PrimaryConfig/SoftDelete/<int:config_id>", customize.ConfigDeleteView.as_view()),
+
+    path("Setting/GetSetting", customize.SettingView.as_view()),
+    path("Setting/ChangeMinQty", customize.MinQtyView.as_view()),
+    path("Setting/ToggleHasMediaProducts", customize.HasMediaView.as_view()),
+    path("Setting/UpdateShowCategoryTopProduct", customize.ShowCategoryTopProductView.as_view()),
+    path("Setting/SetDefaultTheme", customize.DefaultThemeView.as_view()),
+    path("Setting/GetCompanyInfo", customize.CompanyInfoView.as_view()),
+    path("Setting/UpdateCompanyInfo", customize.UpdateCompanyInfoView.as_view()),
+    path("Setting/GetPaymentConnections", customize.PaymentConnectionsView.as_view()),
+    path("Setting/UpdatePaymentConnections", customize.UpdatePaymentConnectionsView.as_view()),
+    path("Cdn/upload", customize.UploadView.as_view()),
+
+    path("RedirectManager/GetAll", customize.RedirectListView.as_view()),
+    path("RedirectManager/GetRedirect/<int:redirect_id>", customize.RedirectByIdView.as_view()),
+    path("RedirectManager/AddOrUpdateRedirect", customize.RedirectSaveView.as_view()),
+    path("RedirectManager/AddOrUpdateRedirects", customize.RedirectBulkView.as_view()),
+    path("RedirectManager/BulkAddOrUpdateRedirects", customize.RedirectBulkView.as_view()),
+    path("RedirectManager/DeleteRedirect/<int:redirect_id>", customize.RedirectDeleteView.as_view()),
+    path("RedirectManager/Redirect", customize.RedirectGoView.as_view()),
+
+    path("ShippingMethod", configs.ShippingCreateView.as_view()),
+    path("ShippingMethod/All", configs.ShippingListView.as_view()),
+    path("ShippingMethod/Types", configs.ShippingTypesView.as_view()),
+    path("ShippingMethod/Types/<int:type_id>", configs.ShippingTypeUpdateView.as_view()),
+    path("ShippingMethod/methods/<int:method_id>", configs.ShippingStateView.as_view()),
+    path("ShippingMethod/<int:method_id>", configs.ShippingDetailView.as_view()),
+
+    path("Bank/GetGateway", configs.GatewayListView.as_view()),
+    path("Bank/GetInfo", configs.GatewayListView.as_view()),
+    path("Bank/AddBankGateway", configs.GatewayRefuseView.as_view()),
+    path("Bank/UpdateBankGateway", configs.GatewayRefuseView.as_view()),
+    path("Bank/SoftDelete", configs.GatewayRefuseView.as_view()),
+
+    path("ThirdParty/LogSummary", configs.TorobSummaryView.as_view()),
+    path("ThirdParty/ProductReport", configs.TorobReportView.as_view()),
+    path("ThirdParty/ProductVisitPieChart", configs.EmptyChartView.as_view()),
+    path("ThirdParty/ProductVisitBarChart", configs.EmptyChartView.as_view()),
 
     path("Category/All", categories.AllView.as_view()),
     path("Category/GetParents", categories.ParentsView.as_view()),
