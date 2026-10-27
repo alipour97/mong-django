@@ -88,6 +88,13 @@ class CategoryTag(LegacyMixin):
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="tag_links")
     tag = models.ForeignKey(Tag, on_delete=models.CASCADE, related_name="category_links")
 
+    class Meta:
+        verbose_name = _("برچسب دسته")
+        verbose_name_plural = _("برچسب‌های دسته")
+
+    def __str__(self) -> str:
+        return f"{self.category_id} ← {self.tag_id}"
+
 
 class Feature(LegacyMixin):
     """رنگ (1) و سایز (2)."""
@@ -173,6 +180,13 @@ class ProductTag(LegacyMixin):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="tag_links")
     tag = models.ForeignKey(Tag, on_delete=models.CASCADE, related_name="product_links")
 
+    class Meta:
+        verbose_name = _("برچسب محصول")
+        verbose_name_plural = _("برچسب‌های محصول")
+
+    def __str__(self) -> str:
+        return f"{self.product_id} ← {self.tag_id}"
+
 
 class ProductVariant(LegacyMixin):
     """One color/size combination of a product (one barcode)."""
@@ -191,6 +205,9 @@ class ProductVariant(LegacyMixin):
         verbose_name = _("تنوع محصول")
         verbose_name_plural = _("تنوع‌های محصول")
 
+    def __str__(self) -> str:
+        return f"{self.barcode} ({self.color_id}/{self.size_id})"
+
 
 class ProductColorMedia(LegacyMixin):
     """A product's gallery for one color (legacy FeatureValueMedias)."""
@@ -198,6 +215,13 @@ class ProductColorMedia(LegacyMixin):
     id = models.BigAutoField(primary_key=True)
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="color_medias")
     feature_value = models.ForeignKey(FeatureValue, on_delete=models.CASCADE, related_name="+")
+
+    class Meta:
+        verbose_name = _("گالری رنگ")
+        verbose_name_plural = _("گالری‌های رنگ")
+
+    def __str__(self) -> str:
+        return f"{self.product_id} / {self.feature_value_id}"
 
 
 class MediaAttachment(LegacyMixin):
@@ -229,6 +253,9 @@ class MediaAttachment(LegacyMixin):
         verbose_name_plural = _("مدیاهای الصاقی")
         indexes = [models.Index(fields=["table", "record_id"])]
 
+    def __str__(self) -> str:
+        return self.media_url
+
 
 class FileMedia(LegacyMixin):
     """Uploaded file in the admin media gallery."""
@@ -252,6 +279,9 @@ class FileMedia(LegacyMixin):
         verbose_name = _("فایل گالری")
         verbose_name_plural = _("گالری فایل‌ها")
 
+    def __str__(self) -> str:
+        return self.file_name or self.url
+
 
 class ProductSamianLink(models.Model):
     """Which Samian productmain a website product corresponds to."""
@@ -268,6 +298,9 @@ class ProductSamianLink(models.Model):
     class Meta:
         verbose_name = _("اتصال محصول به سامیان")
         verbose_name_plural = _("اتصال محصولات به سامیان")
+
+    def __str__(self) -> str:
+        return f"{self.product_id} → {self.samian_product_id}"
 
 
 # -----------------------------------------------------------------------------
@@ -301,6 +334,9 @@ class Banner(LegacyMixin):
         verbose_name_plural = _("بنرها")
         ordering = ["display_priority", "id"]
 
+    def __str__(self) -> str:
+        return self.link or self.media_url
+
 
 class Collection(LegacyMixin):
     id = models.BigAutoField(primary_key=True)
@@ -317,11 +353,21 @@ class Collection(LegacyMixin):
         verbose_name = _("کالکشن")
         verbose_name_plural = _("کالکشن‌ها")
 
+    def __str__(self) -> str:
+        return self.title
+
 
 class CollectionCategory(LegacyMixin):
     id = models.BigAutoField(primary_key=True)
     collection = models.ForeignKey(Collection, on_delete=models.CASCADE, related_name="category_links")
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="collection_links")
+
+    class Meta:
+        verbose_name = _("دسته‌ی کالکشن")
+        verbose_name_plural = _("دسته‌های کالکشن")
+
+    def __str__(self) -> str:
+        return f"{self.collection_id} / {self.category_id}"
 
 
 class ProductCollection(LegacyMixin):
@@ -329,6 +375,13 @@ class ProductCollection(LegacyMixin):
     collection = models.ForeignKey(Collection, on_delete=models.CASCADE, related_name="product_links")
     product = models.ForeignKey(Product, null=True, blank=True, on_delete=models.CASCADE, related_name="collection_links")
     brand = models.ForeignKey(Brand, null=True, blank=True, on_delete=models.CASCADE, related_name="collection_links")
+
+    class Meta:
+        verbose_name = _("محصول کالکشن")
+        verbose_name_plural = _("محصولات کالکشن")
+
+    def __str__(self) -> str:
+        return f"{self.collection_id} / {self.product_id}"
 
 
 class Outfit(LegacyMixin):
@@ -345,12 +398,22 @@ class Outfit(LegacyMixin):
         verbose_name = _("استایل")
         verbose_name_plural = _("استایل‌ها")
 
+    def __str__(self) -> str:
+        return self.title
+
 
 class OutfitProduct(LegacyMixin):
     id = models.BigAutoField(primary_key=True)
     outfit = models.ForeignKey(Outfit, on_delete=models.CASCADE, related_name="product_links")
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="outfit_links")
     feature_value = models.ForeignKey(FeatureValue, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        verbose_name = _("محصول استایل")
+        verbose_name_plural = _("محصولات استایل")
+
+    def __str__(self) -> str:
+        return f"{self.outfit_id} / {self.product_id}"
 
 
 class SelectedProduct(LegacyMixin):
@@ -365,6 +428,9 @@ class SelectedProduct(LegacyMixin):
         verbose_name = _("محصول منتخب")
         verbose_name_plural = _("محصولات منتخب")
         ordering = ["-sorting_weight", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.product} ({self.sorting_weight})"
 
 
 class ProductComment(LegacyMixin):
@@ -390,6 +456,9 @@ class ProductComment(LegacyMixin):
         verbose_name = _("نظر محصول")
         verbose_name_plural = _("نظرات محصولات")
 
+    def __str__(self) -> str:
+        return self.title or self.comment[:50]
+
 
 class Redirect(LegacyMixin):
     id = models.BigAutoField(primary_key=True)
@@ -403,6 +472,9 @@ class Redirect(LegacyMixin):
     class Meta:
         verbose_name = _("ریدایرکت")
         verbose_name_plural = _("ریدایرکت‌ها")
+
+    def __str__(self) -> str:
+        return f"{self.source_url} → {self.destination_url}"
 
 
 # -----------------------------------------------------------------------------
@@ -422,6 +494,9 @@ class CompanyInfo(LegacyMixin):
         verbose_name = _("اطلاعات شرکت")
         verbose_name_plural = _("اطلاعات شرکت")
 
+    def __str__(self) -> str:
+        return self.name
+
 
 class CompanyBranch(LegacyMixin):
     id = models.BigAutoField(primary_key=True)
@@ -440,6 +515,9 @@ class CompanyBranch(LegacyMixin):
     class Meta:
         verbose_name = _("شعبه")
         verbose_name_plural = _("شعب")
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class SiteSetting(LegacyMixin):
@@ -466,6 +544,9 @@ class SiteSetting(LegacyMixin):
     class Meta:
         verbose_name = _("تنظیمات سایت")
         verbose_name_plural = _("تنظیمات سایت")
+
+    def __str__(self) -> str:
+        return self.website_title or f"تنظیمات {self.id}"
 
 
 class ThemeBase(LegacyMixin):
@@ -501,6 +582,9 @@ class Theme(ThemeBase):
         verbose_name = _("قالب")
         verbose_name_plural = _("قالب‌ها")
 
+    def __str__(self) -> str:
+        return self.lable_title or self.theme_name
+
 
 class CustomTheme(ThemeBase):
     custom_theme_name = models.CharField(max_length=255)
@@ -508,6 +592,9 @@ class CustomTheme(ThemeBase):
     class Meta:
         verbose_name = _("قالب سفارشی")
         verbose_name_plural = _("قالب‌های سفارشی")
+
+    def __str__(self) -> str:
+        return self.lable_title or self.custom_theme_name
 
 
 class Page(LegacyMixin):
@@ -518,17 +605,38 @@ class Page(LegacyMixin):
     image_url = models.CharField(max_length=1024, blank=True, default="")
     is_landing_page = models.BooleanField(default=False)
 
+    class Meta:
+        verbose_name = _("صفحه‌ی قالب")
+        verbose_name_plural = _("صفحه‌های قالب")
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.type})"
+
 
 class ThemePage(LegacyMixin):
     id = models.BigAutoField(primary_key=True)
     theme = models.ForeignKey(Theme, on_delete=models.CASCADE, related_name="page_links")
     page = models.ForeignKey(Page, on_delete=models.CASCADE, related_name="theme_links")
 
+    class Meta:
+        verbose_name = _("صفحه‌ی قالب")
+        verbose_name_plural = _("صفحه‌های قالب")
+
+    def __str__(self) -> str:
+        return f"{self.theme_id} / {self.page_id}"
+
 
 class CustomThemePage(LegacyMixin):
     id = models.BigAutoField(primary_key=True)
     custom_theme = models.ForeignKey(CustomTheme, on_delete=models.CASCADE, related_name="page_links")
     page = models.ForeignKey(Page, on_delete=models.CASCADE, related_name="custom_theme_links")
+
+    class Meta:
+        verbose_name = _("صفحه‌ی قالب سفارشی")
+        verbose_name_plural = _("صفحه‌های قالب سفارشی")
+
+    def __str__(self) -> str:
+        return f"{self.custom_theme_id} / {self.page_id}"
 
 
 # -----------------------------------------------------------------------------
@@ -541,6 +649,13 @@ class Province(LegacyMixin):
     latitude = models.DecimalField(max_digits=18, decimal_places=10, null=True, blank=True)
     longitude = models.DecimalField(max_digits=18, decimal_places=10, null=True, blank=True)
 
+    class Meta:
+        verbose_name = _("استان")
+        verbose_name_plural = _("استان‌ها")
+
+    def __str__(self) -> str:
+        return self.name
+
 
 class City(LegacyMixin):
     id = models.BigAutoField(primary_key=True)
@@ -549,12 +664,26 @@ class City(LegacyMixin):
     latitude = models.DecimalField(max_digits=18, decimal_places=10, null=True, blank=True)
     longitude = models.DecimalField(max_digits=18, decimal_places=10, null=True, blank=True)
 
+    class Meta:
+        verbose_name = _("شهر")
+        verbose_name_plural = _("شهرها")
+
+    def __str__(self) -> str:
+        return self.name
+
 
 class ShippingMethodType(LegacyMixin):
     id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=255)
     key = models.CharField(max_length=128, blank=True, default="")
     include_costs = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = _("نوع روش ارسال")
+        verbose_name_plural = _("انواع روش ارسال")
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class ShippingMethod(LegacyMixin):
@@ -573,12 +702,26 @@ class ShippingMethod(LegacyMixin):
     tax_amount = models.DecimalField(max_digits=18, decimal_places=3, default=0)
     source_dependent = models.BooleanField(default=False)
 
+    class Meta:
+        verbose_name = _("روش ارسال")
+        verbose_name_plural = _("روش‌های ارسال")
+
+    def __str__(self) -> str:
+        return self.name
+
 
 class ShippingMethodLocation(LegacyMixin):
     id = models.BigAutoField(primary_key=True)
     shipping_method = models.ForeignKey(ShippingMethod, on_delete=models.CASCADE, related_name="locations")
     province_id = models.BigIntegerField(null=True, blank=True)
     city_id = models.BigIntegerField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("محدوده‌ی روش ارسال")
+        verbose_name_plural = _("محدوده‌های روش ارسال")
+
+    def __str__(self) -> str:
+        return f"{self.province_id}/{self.city_id}"
 
 
 # -----------------------------------------------------------------------------
@@ -706,6 +849,9 @@ class CustomerAddress(LegacyMixin):
         verbose_name = _("آدرس مشتری سایت")
         verbose_name_plural = _("آدرس‌های مشتریان سایت")
 
+    def __str__(self) -> str:
+        return self.title or self.address[:50]
+
 
 class CustomerFavoriteProduct(LegacyMixin):
     id = models.BigAutoField(primary_key=True)
@@ -717,3 +863,7 @@ class CustomerFavoriteProduct(LegacyMixin):
     class Meta:
         verbose_name = _("علاقه‌مندی")
         verbose_name_plural = _("علاقه‌مندی‌ها")
+
+
+    def __str__(self) -> str:
+        return f"{self.customer_id} ♥ {self.product_id}"
