@@ -110,6 +110,10 @@ class Command(BaseCommand):
         self.stdout.write("\n۵. فراخوانی دستور همگام‌سازی رنگ‌ها و گالری...")
         call_command("sync_samian_product_colors", max_records=max_records)
 
+        # 6. Color table and sizes
+        self.stdout.write("\n۶. جدول رنگ‌ها و سایزها...")
+        call_command("sync_samian_colors_sizes")
+
         total_duration = time.time() - t0
         self.stdout.write(self.style.NOTICE("\n=================================================="))
         self.stdout.write(self.style.SUCCESS(f"کاتالوگ جامع سامین در {total_duration:.1f} ثانیه همگام‌سازی گردید."))

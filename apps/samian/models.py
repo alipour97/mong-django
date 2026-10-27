@@ -270,6 +270,55 @@ class SamianProductColor(models.Model):
         return f"{self.productmain_id} - {self.color_name} (ID: {self.samian_id})"
 
 
+class SamianColor(models.Model):
+    """Samian's color table (product/colorinfo): the colors and swatches the site shows."""
+
+    samian_id = models.BigIntegerField(_("شناسه رنگ (colorinfo_id)"), unique=True, db_index=True)
+    title = models.CharField(_("نام در سامیان"), max_length=128, blank=True, default="")
+    panel_title = models.CharField(_("خانواده‌ی رنگ"), max_length=128, blank=True, default="")
+    english_title = models.CharField(_("نام انگلیسی"), max_length=128, blank=True, default="")
+    hex_code = models.CharField(_("کد رنگ"), max_length=16, blank=True, default="")
+    color_code = models.CharField(_("کد رنگ سامیان"), max_length=32, blank=True, default="")
+    display_priority = models.IntegerField(_("ترتیب نمایش"), default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("رنگ سامیان")
+        verbose_name_plural = _("رنگ‌های سامیان")
+        ordering = ("display_priority", "samian_id")
+
+    def __str__(self) -> str:
+        return self.name
+
+    @property
+    def name(self) -> str:
+        """The color's own name (استخواني, سفيد شيري); panel_title is its family (سفید)."""
+        return self.title or self.panel_title
+
+    @property
+    def family(self) -> str:
+        return self.panel_title or self.title
+
+
+class SamianSize(models.Model):
+    """
+    A size as Samian writes it on barcodes (sizenew, e.g. "38"). Samian has no
+    size table, so this gives each size a stable id for the site's size filter
+    and an order that can be edited in the admin.
+    """
+
+    name = models.CharField(_("سایز"), max_length=128, unique=True)
+    display_priority = models.IntegerField(_("ترتیب نمایش"), default=0)
+
+    class Meta:
+        verbose_name = _("سایز")
+        verbose_name_plural = _("سایزها")
+        ordering = ("display_priority", "name")
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class SamianBarcode(models.Model):
     samian_id = models.BigIntegerField(_("شناسه بارکد در سامیان"), unique=True, db_index=True)
     # Not unique: Samian has the same kbarcode on more than one barcodemain record.

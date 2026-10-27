@@ -27,7 +27,6 @@ from apps.website.models import (
     CompanyInfo,
     CustomTheme,
     CustomThemePage,
-    FeatureValue,
     FileMedia,
     MediaAttachment,
     Outfit,
@@ -402,13 +401,12 @@ class ProductGetFilterByCategoryView(PublicView):
         if not rows:
             return ok({"fromPrice": 0, "toPrice": 0, "filteredValues": [], "brands": [], "tags": []})
         color_ids = set().union(*(r.color_ids for r in rows))
-        colors = FeatureValue.objects.filter(id__in=color_ids, is_deleted=False).order_by("id")
         tag_ids = ProductTag.objects.filter(product_id__in=[r.id for r in rows], is_deleted=False).values("tag_id")
 
         return ok({
             "fromPrice": min(r.price_after for r in rows),
             "toPrice": max(r.price_after for r in rows),
-            "filteredValues": [{"id": c.id, "hasColor": True, "name": c.name, "value": c.value, "parentId": 0} for c in colors],
+            "filteredValues": catalog.color_families(color_ids),
             "brands": catalog.brands_of(rows),
             "tags": [
                 {"title": t.title, "parentId": t.parent_id, "parent": None, "tags": None, "id": t.id}
@@ -509,7 +507,7 @@ class SearchEngineMetaView(PublicView):
             "video": [i["mediaUrl"] for i in images if i["isVideo"]],
             "description": " . ".join(x for x in parts if x),
             "canonical": url,
-            "brand": {"type": "Brand", "name": p.brand.title if p.brand else ""},
+            "brand": {"type": "Brand", "name": catalog.MONG_BRAND["title"]},
             "sku": p.barcode,
             "offers": {
                 "type": "Offer",
