@@ -43,6 +43,7 @@ from apps.website.models import (
 )
 
 from apps.website import images as site_images
+from apps.website import slugs
 
 from . import catalog
 from .envelope import MSG_FETCHED, MSG_FETCHED_ONE, MSG_NOT_FOUND, MSG_NOT_FOUND_REQUIRED, MSG_SENT, iso, jalali, not_found, ok, server_error
@@ -461,8 +462,28 @@ def _slug(slug: str) -> str:
     return unquote(slug).strip()
 
 
+def _by_slug(qs, slug: str, preferred=()):
+    """
+    The row with exactly this slug; else one whose slug is the same address
+    spelled differently (ي/ی, invisible marks, encoding; see website/slugs.py),
+    preferring ids in preferred, then the oldest.
+    """
+    exact = qs.filter(slug=_slug(slug)).first()
+    if exact:
+        return exact
+    matches = list(qs.filter(slug_key=slugs.slug_key(slug)).order_by("id"))
+    return next((m for m in matches if m.id in preferred), matches[0] if matches else None)
+
+
 def _product_by_slug(slug: str) -> Product | None:
-    return catalog.in_samian(Product.objects.filter(slug=_slug(slug), is_deleted=False)).select_related("category", "brand").first()
+    listed = {r.id for r in catalog.listing_rows()}
+    qs = catalog.in_samian(Product.objects.filter(is_deleted=False)).select_related("category", "brand")
+    return _by_slug(qs, slug, listed)
+
+
+def _category_by_slug(slug: str) -> Category | None:
+    qs = Category.objects.filter(is_deleted=False)
+    return _by_slug(qs, slug, set(catalog.category_tree().nodes))
 
 
 def _toman(rial: int) -> str:
@@ -475,7 +496,7 @@ class SearchEngineIndexView(PublicView):
             p = _product_by_slug(slug)
             return Response(p.id if p else 0)
         if entity_type == "category":
-            c = Category.objects.filter(slug=_slug(slug), is_deleted=False).first()
+            c = _category_by_slug(slug)
             return Response(c.id if c else 0)
         return Response(0)
 
@@ -527,7 +548,7 @@ class SearchEngineMetaView(PublicView):
         })
 
     def _category(self, slug):
-        cat = Category.objects.filter(slug=_slug(slug), is_deleted=False).first()
+        cat = _category_by_slug(slug)
         if not cat:
             return Response(None, status=404)
         everything = list(Category.objects.filter(is_deleted=False).only("id", "parent_id", "title", "slug", "is_online_active"))
@@ -565,7 +586,7 @@ class SearchEngineBreadcrumbsView(PublicView):
             items = catalog.breadcrumb_items(p.category_id)
             items.append({"position": len(items) + 1, "name": p.title, "url": f"/products-item/{p.slug}"})
         elif entity_type == "category":
-            c = Category.objects.filter(slug=_slug(slug), is_deleted=False).first()
+            c = _category_by_slug(slug)
             if not c:
                 return Response(None, status=404)
             items = catalog.breadcrumb_items(c.id)

@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Callable
 
+from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
@@ -325,6 +326,8 @@ class Command(BaseCommand):
             known: dict[type, set] = {}
             for spec in specs:
                 known[spec.model] = self._import(spec, known)
+        if any(s.model in (m.Product, m.Category) for s in specs):
+            call_command("fix_slugs")
         self.stdout.write(self.style.SUCCESS(f"تمام شد در {time.time() - t0:.1f} ثانیه"))
 
     def _ids_of(self, model, known):

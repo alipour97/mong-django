@@ -15,6 +15,30 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 
+def validate_slug(value: str) -> None:
+    from django.core.exceptions import ValidationError
+
+    from .slugs import is_valid
+
+    if value and not is_valid(value):
+        raise ValidationError(_("آدرس فقط حروف فارسی یا انگلیسی، عدد، - و _ می‌تواند داشته باشد (بدون فاصله و /)."))
+
+
+class SlugKeyMixin(models.Model):
+    """Keeps slug_key in step with slug on save (bulk writes: manage.py fix_slugs)."""
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        from .slugs import slug_key
+
+        self.slug_key = slug_key(self.slug)
+        if kwargs.get("update_fields") is not None and "slug" in kwargs["update_fields"]:
+            kwargs["update_fields"] = {*kwargs["update_fields"], "slug_key"}
+        super().save(*args, **kwargs)
+
+
 class LegacyMixin(models.Model):
     """Fields every imported row carries over from DadehfaOnlineShop."""
 
@@ -43,12 +67,14 @@ class Brand(LegacyMixin):
         return self.title
 
 
-class Category(LegacyMixin):
+class Category(SlugKeyMixin, LegacyMixin):
     id = models.BigAutoField(primary_key=True)
     parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="children")
     title = models.CharField(_("عنوان"), max_length=255)
-    slug = models.CharField(_("اسلاگ"), max_length=255, blank=True, default="", db_index=True)
+    slug = models.CharField(_("اسلاگ"), max_length=255, blank=True, default="", db_index=True, validators=[validate_slug])
     has_manual_slug = models.BooleanField(default=False)
+    # slugs.slug_key(slug): how addresses are looked up (ي/ی, invisible marks, encoding)
+    slug_key = models.CharField(max_length=512, blank=True, default="", db_index=True, editable=False)
     group_level = models.IntegerField(_("سطح"), null=True, blank=True)
     display_priority = models.IntegerField(_("اولویت نمایش"), default=0)
     in_main_page = models.BooleanField(_("نمایش در صفحه اصلی"), default=False)
@@ -129,13 +155,15 @@ class FeatureValue(LegacyMixin):
         return f"{self.feature_id}:{self.name}"
 
 
-class Product(LegacyMixin):
+class Product(SlugKeyMixin, LegacyMixin):
     """Product page on the website. Pricing and stock come from Samian once linked."""
 
     id = models.BigAutoField(primary_key=True)
     title = models.CharField(_("عنوان"), max_length=512)
-    slug = models.CharField(_("اسلاگ"), max_length=512, blank=True, default="", db_index=True)
+    slug = models.CharField(_("اسلاگ"), max_length=512, blank=True, default="", db_index=True, validators=[validate_slug])
     has_manual_slug = models.BooleanField(default=False)
+    # slugs.slug_key(slug): how addresses are looked up (ي/ی, invisible marks, encoding)
+    slug_key = models.CharField(max_length=512, blank=True, default="", db_index=True, editable=False)
     category = models.ForeignKey(Category, null=True, blank=True, on_delete=models.SET_NULL, related_name="products")
     brand = models.ForeignKey(Brand, null=True, blank=True, on_delete=models.SET_NULL, related_name="products")
     barcode = models.CharField(_("کد کالا"), max_length=64, blank=True, default="", db_index=True)

@@ -114,6 +114,10 @@ class Command(BaseCommand):
         self.stdout.write("\n۶. جدول رنگ‌ها و سایزها...")
         call_command("sync_samian_colors_sizes")
 
+        # 7. Slugs: keep every product and category address valid and findable
+        self.stdout.write("\n۷. اصلاح اسلاگ‌ها...")
+        call_command("fix_slugs")
+
         total_duration = time.time() - t0
         self.stdout.write(self.style.NOTICE("\n=================================================="))
         self.stdout.write(self.style.SUCCESS(f"کاتالوگ جامع سامین در {total_duration:.1f} ثانیه همگام‌سازی گردید."))
