@@ -20,7 +20,8 @@ from apps.website.views import image_variant
 from django.urls import re_path
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    # /admin is the Next.js admin panel (nginx); Django admin lives here
+    path("django-admin/", admin.site.urls),
     path("api/health/", health_check, name="health-check"),
     path("api/samian/", include("apps.samian.urls")),
     path("api/v1/", include("apps.storefront.urls")),
