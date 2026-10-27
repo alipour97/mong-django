@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "apps.storefront",
     "apps.legacy",
     "apps.website",
+    "apps.adminapi",
 ]
 
 MIDDLEWARE = [
@@ -203,3 +204,11 @@ BEST_SELLER_DAYS = int(os.getenv("BEST_SELLER_DAYS", "90"))
 STOREFRONT_STOCK_WAREHOUSE_IDS = [
     int(x) for x in os.getenv("STOREFRONT_STOCK_WAREHOUSE_IDS", "2,3,26,28,29").split(",") if x.strip()
 ]
+
+# Admin panel API (apps/adminapi)
+ADMIN_TOKEN_MINUTES = int(os.getenv("ADMIN_TOKEN_MINUTES", "600"))
+
+# sms.ir (apps/smsir.py): sign-in codes through the approved verify template
+SMSIR_API_KEY = os.getenv("SMS_KEY", "")
+SMSIR_OTP_TEMPLATE_ID = int(os.getenv("SMSIR_OTP_TEMPLATE_ID", "214177"))
+SMSIR_OTP_PARAM = os.getenv("SMSIR_OTP_PARAM", "TOKEN")

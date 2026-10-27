@@ -25,6 +25,7 @@ urlpatterns = [
     path("api/health/", health_check, name="health-check"),
     path("api/samian/", include("apps.samian.urls")),
     path("api/v1/", include("apps.storefront.urls")),
+    path("api/admin/v1/", include("apps.adminapi.urls")),
     re_path(r"^(?:api/)?img/(?P<key>.+)$", image_variant),
     re_path(r"^cdn/(?P<path>.*)$", serve, {"document_root": "/mnt/sda2/cdn.samian.mong.ir/public_html/wwwroot"}),
     re_path(r"^api/cdn/(?P<path>.*)$", serve, {"document_root": "/mnt/sda2/cdn.samian.mong.ir/public_html/wwwroot"}),
