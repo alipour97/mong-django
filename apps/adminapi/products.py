@@ -1,7 +1,8 @@
 """
 The admin's product index: one row per product in a category that is on the
 site, with Samian price, stock and photo count, so the product list can filter
-and page over all of them. Cached briefly, like the storefront listing.
+and page over all of them. Kept warm like the storefront listing (apps.storefront.warm): edits and the
+TTL only mark it stale, and it is rebuilt in the background.
 
 Unlike the storefront, products without photos or stock are included: the
 admin needs to see what is missing.
@@ -10,13 +11,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from django.core.cache import cache
-
-from apps.storefront import catalog
+from apps.storefront import catalog, warm
 from apps.website.models import Product, ProductComment
 
-CACHE_KEY = "adminapi:product-rows:v1"
-CACHE_TTL = 600  # edits in the admin clear it (clear())
+CACHE_KEY = "adminapi:product-rows:v2"
+CACHE_TTL = 600  # edits in the admin mark it stale (clear())
 
 
 @dataclass
@@ -38,9 +37,10 @@ class AdminRow:
 
 
 def admin_rows() -> list[AdminRow]:
-    rows = cache.get(CACHE_KEY)
-    if rows is not None:
-        return rows
+    return warm.get(CACHE_KEY, CACHE_TTL, _build)
+
+
+def _build() -> list[AdminRow]:
     tree = catalog.category_tree()
     ids = list(
         catalog.in_samian(Product.objects.filter(is_deleted=False, is_active=True, category_id__in=tree.nodes.keys()))
@@ -62,10 +62,9 @@ def admin_rows() -> list[AdminRow]:
             has_long_description=bool(p.long_description_html), has_short_description=bool(p.short_description_html),
         ))
     rows.sort(key=lambda r: r.id)
-    cache.set(CACHE_KEY, rows, CACHE_TTL)
     return rows
 
 
 def clear() -> None:
-    cache.delete(CACHE_KEY)
+    warm.invalidate(CACHE_KEY)
     catalog.clear_caches()

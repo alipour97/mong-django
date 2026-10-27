@@ -58,11 +58,13 @@ from apps.website.models import (
     online_warehouse_ids,
 )
 
+from . import warm
+
 # مانگ and توليد are one brand for customers: every product is shown as Mong.
 MONG_BRAND = {"id": 15, "title": "مانگ"}
 
 LISTING_CACHE_KEY = "storefront:listing:v11"
-LISTING_CACHE_TTL = 120
+LISTING_CACHE_TTL = 300  # Samian syncs every 15 minutes; a stale listing is rebuilt in the background
 TREE_CACHE_KEY = "storefront:category-tree:v1"
 TREE_CACHE_TTL = 300
 
@@ -329,7 +331,11 @@ class ProductBundle:
         pid_by_sp = {sp.pk: pid for pid, sp in b.samian.items()}
         colors = {c.samian_id: c for c in SamianColor.objects.all()}
         sizes = {sz.name: sz for sz in SamianSize.objects.all()}
-        for bc in SamianBarcode.objects.filter(samian_product_id__in=pid_by_sp, is_active=True).order_by("samian_id"):
+        barcodes = (
+            SamianBarcode.objects.filter(samian_product_id__in=pid_by_sp, is_active=True)
+            .only("samian_id", "barcode", "size", "color", "colorinfo_id", "samian_product_id").order_by("samian_id")
+        )
+        for bc in barcodes:
             sz = sizes.get(bc.size)
             b.variants.setdefault(pid_by_sp[bc.samian_product_id], []).append(Variant(
                 id=bc.samian_id, pk=bc.pk, barcode=bc.barcode,
@@ -350,7 +356,11 @@ class ProductBundle:
     def _load_images(self, ids, include_hidden: bool = False):
         pmid_to_pid = {sp.samian_id: pid for pid, sp in self.samian.items()}
         hidden = set(HiddenImage.objects.values_list("key", flat=True))
-        for color in SamianProductColor.objects.filter(productmain_id__in=pmid_to_pid.keys(), has_gallery=True).order_by("samian_id"):
+        colors = (
+            SamianProductColor.objects.filter(productmain_id__in=pmid_to_pid.keys(), has_gallery=True)
+            .only("samian_id", "productmain_id", "colorinfo_id", "colorsgalery").order_by("samian_id")
+        )
+        for color in colors:
             pid = pmid_to_pid[color.productmain_id]
             imgs = []
             for idx, item in enumerate(color.colorsgalery or []):
@@ -558,9 +568,10 @@ class ListingRow:
 
 
 def listing_rows() -> list[ListingRow]:
-    rows = cache.get(LISTING_CACHE_KEY)
-    if rows is not None:
-        return rows
+    return warm.get(LISTING_CACHE_KEY, LISTING_CACHE_TTL, _build_listing_rows)
+
+
+def _build_listing_rows() -> list[ListingRow]:
     tree = category_tree()
     setting = SiteSetting.objects.filter(is_deleted=False).first()
     only_media = bool(setting and setting.only_has_media_products)
@@ -603,7 +614,6 @@ def listing_rows() -> list[ListingRow]:
             created=p.created, sold=sold.get(bundle.samian[pid].pk, 0.0), featured=featured.get(pid, math.inf),
             buyer_score=float(scores.get(pid) or 0),
         ))
-    cache.set(LISTING_CACHE_KEY, rows, LISTING_CACHE_TTL)
     return rows
 
 
@@ -717,7 +727,8 @@ def brands_of(rows: list[ListingRow]) -> list[dict]:
 
 
 def clear_caches():
-    cache.delete_many([LISTING_CACHE_KEY, TREE_CACHE_KEY])
+    cache.delete(TREE_CACHE_KEY)
+    warm.invalidate(LISTING_CACHE_KEY)
 
 
 def in_samian(products):
