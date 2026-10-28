@@ -12,7 +12,7 @@ from apps.storefront import views as storefront
 from apps.website.models import MediaAttachment
 
 from .views import (
-    auth, banners, categories, collections, comments, configs, cooperation, customers, customize, dashboard, gallery,
+    auth, banners, blog, categories, collections, comments, configs, cooperation, customers, customize, dashboard, gallery,
     products, tags, users,
 )
 
@@ -23,6 +23,15 @@ urlpatterns = [
     path("Auth/GetProfile", auth.ProfileView.as_view()),
 
     path("Dashboard/Date", dashboard.DateView.as_view()),
+    path("Dashboard/DashboardNotif", dashboard.NotifView.as_view()),
+    path("Dashboard/GrowthRate", dashboard.GrowthRateView.as_view()),
+    path("Dashboard/SynchronizationStatus", dashboard.SyncStatusView.as_view()),
+    path("Dashboard/Search", dashboard.SearchView.as_view()),
+    path("Report/GetDashboardLablesReports", dashboard.LabelsView.as_view()),
+    path("Invoice/DailyCounts", dashboard.DailyCountsView.as_view()),
+    path("Invoice/InvoiceCountByHour", dashboard.CountByHourView.as_view()),
+    path("Products/TopSelling", dashboard.TopSellingView.as_view()),
+    path("Products/TopSellingGroupProduct", dashboard.TopSellingGroupsView.as_view()),
 
     path("ProductComment/RecentComments", comments.RecentView.as_view()),
     path("ProductComment/GetFilteredComments", comments.FilteredView.as_view()),
@@ -99,6 +108,19 @@ urlpatterns = [
         for name, state in cooperation.LISTS.items()
     ],
     *[path(f"Cooperation/{name}", cooperation.ActionView.as_view(action=name)) for name in cooperation.ACTIONS],
+
+    path("Article", blog.CreateView.as_view()),
+    path("Article/All", blog.ListView.as_view()),
+    path("Article/All/", blog.ListView.as_view()),
+    path("Article/Categories", blog.CategoriesView.as_view()),
+    path("Article/categories", blog.CategoriesView.as_view()),
+    path("Article/Tags", blog.TagsView.as_view()),
+    path("Article/tags", blog.TagsView.as_view()),
+    path("Article/SoftDeleteCategory", blog.DeleteCategoryView.as_view()),
+    path("Article/SoftDeleteTag", blog.DeleteTagView.as_view()),
+    path("Article/CheckUniqUrl", blog.CheckUrlView.as_view()),
+    path("Article/SoftDelete/<int:article_id>", blog.DeleteView.as_view()),
+    path("Article/<int:article_id>", blog.DetailView.as_view()),
 
     path("ShippingMethod", configs.ShippingCreateView.as_view()),
     path("ShippingMethod/All", configs.ShippingListView.as_view()),

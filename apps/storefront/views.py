@@ -609,12 +609,14 @@ class SearchEngineSiteMapsView(PublicView):
         listed = Product.objects.filter(id__in=[r.id for r in rows]).values_list("slug", "last_modified", "created")
         tree = catalog.category_tree()
 
+        from . import blog
+
         def item(loc, modified):
             return {"urlLocation": loc, "lastModified": iso(modified) or now, "changeFrequency": "daily", "priority": 0.8}
 
         entity_type = request.query_params.get("entityType")
         data = {
-            "blog": {"entityType": "blog", "lastCacheTime": now, "items": []},
+            "blog": {"entityType": "blog", "lastCacheTime": now, "items": blog.sitemap_items(item)},
             "product": {"entityType": "product", "lastCacheTime": now,
                         "items": [item(slug, lm or cr) for slug, lm, cr in listed if slug]},
             "category": {"entityType": "category", "lastCacheTime": now,

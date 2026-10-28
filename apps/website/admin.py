@@ -407,3 +407,27 @@ class CooperationRequestAdmin(LegacyAdmin):
     list_filter = ("state",)
     search_fields = ("first_name", "last_name", "cellphone", "email", "job_position_title")
     date_hierarchy = "created"
+
+
+@admin.register(m.Article)
+class ArticleAdmin(LegacyAdmin):
+    list_display = ("id", "title", "uniq_url", "show_on_page", "publish_date", "view_count")
+    list_filter = ("show_on_page",)
+    search_fields = ("title", "uniq_url")
+
+
+@admin.register(m.BlogCategory)
+class BlogCategoryAdmin(LegacyAdmin):
+    list_display = ("id", "title", "in_main_page")
+
+
+@admin.register(m.ArticleTag)
+class ArticleTagAdmin(LegacyAdmin):
+    list_display = ("id", "name")
+    search_fields = ("name",)
+
+
+@admin.register(m.ArticleComment)
+class ArticleCommentAdmin(LegacyAdmin):
+    list_display = ("id", "article", "title", "status", "created")
+    list_filter = ("status",)

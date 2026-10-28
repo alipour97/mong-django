@@ -5,6 +5,7 @@ base URLs point here for now.
 """
 from django.urls import path, re_path
 
+from . import blog
 from . import views as v
 
 urlpatterns = [
@@ -14,6 +15,14 @@ urlpatterns = [
     path("CompanyInfo/GetCompanyInfo", v.CompanyInfoView.as_view()),
     path("Setting/GetDefaultTheme", v.SettingGetDefaultThemeView.as_view()),
     path("SortCriteria/GetAll", v.SortCriteriaGetAllView.as_view()),
+
+    # Blog
+    path("Article/GetRecentArticles", blog.RecentView.as_view()),
+    path("Article/GetArticleByUniqUrl", blog.ByUniqUrlView.as_view()),
+    path("Article/GetAllCategoryArticle", blog.CategoriesView.as_view()),
+    path("Article/GetArticleByCategoryId", blog.ByCategoryView.as_view()),
+    path("Article/GetSuggestedArticles", blog.SuggestedView.as_view()),
+    path("Article/GetAllArticleComments", blog.CommentsView.as_view()),
 
     # Categories
     path("Category/GetAll", v.CategoryGetAllView.as_view()),

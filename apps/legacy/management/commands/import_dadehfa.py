@@ -290,6 +290,37 @@ SPECS += [
     Spec(m.Job, "SELECT * FROM Jobs", lambda r: {
         "id": r["Id"], "title": _s(r["Title"]), **legacy(r),
     }, "jobs"),
+    # ---------------------------------------------------------------- blog
+    # Not in the default run: articles are written in the new admin from now on.
+    Spec(m.BlogCategory, "SELECT * FROM BlogCategories", lambda r: {
+        "id": r["Id"], "title": _s(r["Title"]), "in_main_page": _b(r["InMainPage"]), "parent_id": r["ParentId"], **legacy(r),
+    }, "blog", {"parent_id": (m.BlogCategory, False)}),
+    Spec(m.ArticleTag, "SELECT * FROM ArticleTags", lambda r: {
+        "id": r["Id"], "name": _s(r["Name"]), **legacy(r),
+    }, "blog"),
+    Spec(m.Article, "SELECT * FROM Articles", lambda r: {
+        "id": r["Id"], "title": _s(r["ArticleTitle"]), "content": _s(r["ArticleContent"]),
+        "description": _s(r["ArticleDescription"]), "thumbnail": _s(r["ArticleThumbnail"]),
+        "uniq_url": _s(r["ArticleUniqUrl"]) or f"article-{r['Id']}", "author_id": r["AuthorId"],
+        "publish_date": r["PublishDate"], "expiration_date": r["ExpirationDate"],
+        "show_on_page": _b(r["ShowOnPage"]), "view_count": r["ViewCount"] or 0, **legacy(r),
+    }, "blog"),
+    Spec(m.ArticleBlogCategory, "SELECT * FROM ArticleBlogCategories", lambda r: {
+        "id": r["Id"], "article_id": r["ArticleId"], "category_id": r["CategoryId"], **legacy(r),
+    }, "blog", {"article_id": (m.Article, True), "category_id": (m.BlogCategory, True)}),
+    Spec(m.ArticleTagRelation, "SELECT * FROM ArticleTagRelations", lambda r: {
+        "id": r["Id"], "article_id": r["ArticleId"], "tag_id": r["ArticleTagId"], **legacy(r),
+    }, "blog", {"article_id": (m.Article, True), "tag_id": (m.ArticleTag, True)}),
+    Spec(m.ArticleComment, "SELECT * FROM ArticleComments", lambda r: {
+        "id": r["Id"], "article_id": r["ArticleId"], "parent_id": r["ParentId"], "commenter_id": r["CommenterId"],
+        "title": _s(r["Title"]), "comment": _s(r["Comment"]), "score": r["Score"] or 0,
+        "is_admin_comment": _b(r["IsAdminComment"]), "is_buyer": _b(r["IsBuyer"]), "is_anonymous": _b(r["IsAnonymous"]),
+        "is_active": _b(r["IsActive"]), "status": r["Status"] or 0, "status_description": _s(r["CommentStatusDescription"]),
+        "verified_by_user_id": r["VerifiedByUserId"], **legacy(r),
+    }, "blog", {"article_id": (m.Article, True), "parent_id": (m.ArticleComment, False)}),
+    Spec(m.ArticleLike, "SELECT * FROM ArticleLikes", lambda r: {
+        "id": r["Id"], "article_id": r["ArticleId"], "customer_id": r["CustomerId"], "liked": _b(r["Liked"]), **legacy(r),
+    }, "blog", {"article_id": (m.Article, True)}),
     # ---------------------------------------------------------------- cooperation
     # Not part of the default run either: the site will take new requests.
     Spec(m.CooperationRequest, "SELECT * FROM CooperationRequests", lambda r: {
@@ -322,7 +353,7 @@ SPECS += [
 ]
 
 GROUPS = sorted({s.group for s in SPECS})
-DEFAULT_GROUPS = [g for g in GROUPS if g not in ("customers", "cooperation")]
+DEFAULT_GROUPS = [g for g in GROUPS if g not in ("customers", "cooperation", "blog")]
 
 # Rows that point at their own table (parent_id) are inserted with the link
 # empty first and patched afterwards, so insert order does not matter.

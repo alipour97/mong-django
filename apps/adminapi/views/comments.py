@@ -4,7 +4,7 @@ ProductComment/* — reviewing product comments, as the old ProductComment contr
 Statuses: 0 pending, 1 approved, 2 rejected, 3 viewed. The site shows approved
 comments only (is_active follows the status).
 
-Article comments (type 1) come with the blog; until then only type 0 exists.
+type 0 is a product comment, type 1 an article comment; the lists show both.
 
     GET  ProductComment/RecentComments?count=          pending ones, newest first
     GET  ProductComment/GetFilteredComments?status=&FromDate=&ToDate=&FromChngStatusDate=&ToChngStatusDate=&SearchText=&pageNumber=&pageSize=
@@ -14,6 +14,8 @@ Article comments (type 1) come with the blog; until then only type 0 exists.
 """
 from __future__ import annotations
 
+from collections import Counter
+
 from django.db.models import Count, Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
@@ -21,12 +23,13 @@ from django.utils.dateparse import parse_date, parse_datetime
 from apps.samian.models import SamianSalesTransaction
 from apps.storefront import catalog
 from apps.storefront.envelope import jalali
-from apps.website.models import Customer, ProductComment
+from apps.website.models import ArticleComment, Customer, ProductComment
 
 from ..envelope import fail, ok
 from ..models import AdminUser
 from ..paging import paginated, to_int
 from .auth import AdminView
+from .gallery import _url
 
 PENDING, APPROVED, REJECTED, VIEWED = 0, 1, 2, 3
 STATUS_TITLES = {PENDING: "در انتظار تایید", APPROVED: "تایید شده", REJECTED: "رد شده", VIEWED: "مشاهده شده"}
@@ -88,32 +91,44 @@ class RecentView(AdminView):
         return ok({"result": items})
 
 
+MODELS = {0: ProductComment, 1: ArticleComment}
+
+
+def _model(request):
+    return MODELS.get(to_int(request.query_params.get("type"), 0))
+
+
 class FilteredView(AdminView):
     def get(self, request):
         q = request.query_params
-        qs = ProductComment.objects.filter(is_deleted=False)
         status = to_int(q.get("status") if q.get("status") not in (None, "") else q.get("Status"))
-        if status is not None:
-            qs = qs.filter(status=status)
         bounds = {
             "created__gte": _date(q.get("FromDate")), "created__lte": _date(q.get("ToDate"), end=True),
             "last_modified__gte": _date(q.get("FromChngStatusDate")),
             "last_modified__lte": _date(q.get("ToChngStatusDate"), end=True),
         }
-        qs = qs.filter(**{k: v for k, v in bounds.items() if v})
         search = (q.get("SearchText") or "").strip()
-        if search:
-            qs = qs.filter(Q(title__icontains=search) | Q(comment__icontains=search))
-        comments = list(qs.order_by("-created", "-id"))
+        comments = []
+        for model in MODELS.values():
+            qs = model.objects.filter(is_deleted=False, **{k: v for k, v in bounds.items() if v})
+            if status is not None:
+                qs = qs.filter(status=status)
+            if search:
+                qs = qs.filter(Q(title__icontains=search) | Q(comment__icontains=search))
+            comments += list(qs)
+        comments.sort(key=lambda c: (c.created or timezone.now(), c.id), reverse=True)
         customers = Customer.objects.in_bulk([c.commenter_id for c in comments if c.commenter_id])
         admins = _admin_names({c.verified_by_user_id for c in comments})
 
-        def item(c: ProductComment) -> dict:
+        def item(c) -> dict:
             cu = customers.get(c.commenter_id)
+            article = isinstance(c, ArticleComment)
             return {
                 "id": c.id, "comment": c.comment, "score": float(c.score), "commenterId": c.commenter_id,
-                "isBuyer": c.is_buyer, "productId": c.product_id, "invoiceId": c.invoice_id, "articleCommentId": None,
-                "type": "فاکتور" if c.invoice_id else "محصول", "typeId": 0, "status": c.status, "title": c.title,
+                "isBuyer": c.is_buyer, "productId": None if article else c.product_id,
+                "invoiceId": None if article else c.invoice_id, "articleCommentId": c.article_id if article else None,
+                "type": "مقاله" if article else ("فاکتور" if c.invoice_id else "محصول"), "typeId": 1 if article else 0,
+                "status": c.status, "title": c.title,
                 "createDate": jalali(c.created, with_time=False), **_status_dates(c),
                 "firstName": cu.first_name if cu else None, "lastName": cu.last_name if cu else None,
                 "customerId": cu.id if cu else None, "viewedBy": admins.get(c.verified_by_user_id, ""),
@@ -125,13 +140,18 @@ class FilteredView(AdminView):
 
 class StatusCountsView(AdminView):
     def get(self, request):
-        counts = dict(ProductComment.objects.filter(is_deleted=False).values_list("status").annotate(n=Count("id")))
+        counts = Counter()
+        for model in MODELS.values():
+            counts.update(dict(model.objects.filter(is_deleted=False).values_list("status").annotate(n=Count("id"))))
         return ok({"result": {title: counts.get(s, 0) for s, title in STATUS_TITLES.items()}})
 
 
 class DetailView(AdminView):
     def get(self, request, comment_id: int):
-        if to_int(request.query_params.get("type"), 0) != 0:
+        model = _model(request)
+        if model is ArticleComment:
+            return self._article(comment_id)
+        if model is None:
             return fail(NOT_FOUND, 404)
         c = ProductComment.objects.filter(id=comment_id, is_deleted=False).select_related("product").first()
         if not c:
@@ -149,15 +169,29 @@ class DetailView(AdminView):
         }})
 
 
+    def _article(self, comment_id: int):
+        c = ArticleComment.objects.filter(id=comment_id, is_deleted=False).select_related("article").first()
+        if not c:
+            return fail(NOT_FOUND, 404)
+        return ok({"result": {
+            "title": c.title, "comment": c.comment, "score": float(c.score),
+            "imageUrl": _url(c.article.thumbnail) if c.article.thumbnail else None, "barcode": None,
+            "productTitle": c.article.title, "commenterId": c.commenter_id, "isBuyer": c.is_buyer,
+            "verifiedByUser": _admin_names([c.verified_by_user_id]).get(c.verified_by_user_id), **_status_dates(c),
+            "commentStatusDescription": c.status_description, "invoiceId": None,
+        }})
+
+
 class UpdateStatusView(AdminView):
     def post(self, request, comment_id: int):
         q = request.query_params
         status = to_int(q.get("status"))
         if status not in STATUS_TITLES:
             return fail("وضعیت نامعتبر است", 400)
-        if to_int(q.get("type"), 0) != 0:
+        model = _model(request)
+        if model is None:
             return ok({"result": False})
-        c = ProductComment.objects.filter(id=comment_id, is_deleted=False).first()
+        c = model.objects.filter(id=comment_id, is_deleted=False).first()
         if not c:
             return ok({"result": False})
         c.status = status

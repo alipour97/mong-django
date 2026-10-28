@@ -1008,3 +1008,126 @@ class CooperationRequest(LegacyMixin):
 
     def __str__(self) -> str:
         return f"{self.first_name} {self.last_name} ({self.job_position_title})".strip()
+
+
+# -----------------------------------------------------------------------------
+# Blog
+# -----------------------------------------------------------------------------
+class BlogCategory(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    title = models.CharField(_("عنوان"), max_length=255)
+    in_main_page = models.BooleanField(_("در صفحه اصلی"), default=False)
+    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="children")
+
+    class Meta:
+        verbose_name = _("دسته‌ی بلاگ")
+        verbose_name_plural = _("دسته‌های بلاگ")
+        ordering = ("id",)
+
+    def __str__(self) -> str:
+        return self.title
+
+
+class ArticleTag(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    name = models.CharField(_("نام"), max_length=255)
+
+    class Meta:
+        verbose_name = _("تگ بلاگ")
+        verbose_name_plural = _("تگ‌های بلاگ")
+        ordering = ("id",)
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Article(LegacyMixin):
+    """A blog post. On the site while show_on_page, published and not expired."""
+
+    id = models.BigAutoField(primary_key=True)
+    title = models.CharField(_("عنوان"), max_length=512)
+    content = models.TextField(_("متن (HTML)"), blank=True, default="")
+    description = models.TextField(_("خلاصه"), blank=True, default="")
+    thumbnail = models.CharField(_("تصویر شاخص"), max_length=1024, blank=True, default="")
+    uniq_url = models.CharField(_("آدرس یکتا"), max_length=512, unique=True)
+    author_id = models.BigIntegerField(_("نویسنده (کاربر ادمین)"), null=True, blank=True)
+    publish_date = models.DateTimeField(_("تاریخ انتشار"), null=True, blank=True)
+    expiration_date = models.DateTimeField(_("تاریخ انقضا"), null=True, blank=True)
+    show_on_page = models.BooleanField(_("نمایش در سایت"), default=True)
+    view_count = models.IntegerField(_("بازدید"), default=0)
+    categories = models.ManyToManyField(BlogCategory, through="ArticleBlogCategory", related_name="articles")
+    tags = models.ManyToManyField(ArticleTag, through="ArticleTagRelation", related_name="articles")
+
+    class Meta:
+        verbose_name = _("مقاله")
+        verbose_name_plural = _("مقاله‌ها")
+        ordering = ("-id",)
+
+    def __str__(self) -> str:
+        return self.title
+
+
+class ArticleBlogCategory(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name="category_links")
+    category = models.ForeignKey(BlogCategory, on_delete=models.CASCADE, related_name="article_links")
+
+    class Meta:
+        verbose_name = _("دسته‌ی مقاله")
+        verbose_name_plural = _("دسته‌های مقاله")
+
+    def __str__(self) -> str:
+        return f"{self.article_id} / {self.category_id}"
+
+
+class ArticleTagRelation(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name="tag_links")
+    tag = models.ForeignKey(ArticleTag, on_delete=models.CASCADE, related_name="article_links")
+
+    class Meta:
+        verbose_name = _("تگ مقاله")
+        verbose_name_plural = _("تگ‌های مقاله")
+
+    def __str__(self) -> str:
+        return f"{self.article_id} / {self.tag_id}"
+
+
+class ArticleComment(LegacyMixin):
+    """Statuses as product comments: 0 pending, 1 approved, 2 rejected, 3 viewed."""
+
+    id = models.BigAutoField(primary_key=True)
+    article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name="comments")
+    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.CASCADE, related_name="replies")
+    commenter_id = models.BigIntegerField(null=True, blank=True)
+    title = models.CharField(max_length=512, blank=True, default="")
+    comment = models.TextField(blank=True, default="")
+    score = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    is_admin_comment = models.BooleanField(default=False)
+    is_buyer = models.BooleanField(default=False)
+    is_anonymous = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=False)
+    status = models.IntegerField(default=0)
+    status_description = models.TextField(blank=True, default="")
+    verified_by_user_id = models.BigIntegerField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("نظر مقاله")
+        verbose_name_plural = _("نظرات مقاله‌ها")
+
+    def __str__(self) -> str:
+        return self.title or self.comment[:50]
+
+
+class ArticleLike(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name="likes")
+    customer_id = models.BigIntegerField(null=True, blank=True)
+    liked = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = _("پسند مقاله")
+        verbose_name_plural = _("پسندهای مقاله")
+
+    def __str__(self) -> str:
+        return f"{self.article_id} / {self.customer_id}"
