@@ -46,10 +46,10 @@ def _customers():
 
 
 def _purchases(customers) -> dict[int, int]:
-    """customer id -> number of their Samian sales (Mong purchases)."""
+    """customer id -> number of their online orders in Samian (the panel's invoices; store purchases are not counted)."""
     samian = {c.samian_customer_id: c.id for c in customers if c.samian_customer_id}
     counts = (
-        SamianSalesTransaction.objects.filter(samian_customer_id__in=samian)
+        SamianSalesTransaction.objects.filter(samian_customer_id__in=samian, store_order_id__isnull=False)
         .values_list("samian_customer_id").annotate(n=Count("pk"))
     )
     return {samian[sid]: n for sid, n in counts}
@@ -67,7 +67,7 @@ class LabelsView(AdminView):
     def get(self, request):
         qs = _customers()
         buyers = SamianSalesTransaction.objects.filter(
-            samian_customer_id__in=qs.exclude(samian_customer=None).values("samian_customer_id")
+            store_order_id__isnull=False, samian_customer_id__in=qs.exclude(samian_customer=None).values("samian_customer_id")
         ).values("samian_customer_id").distinct().count()
         return ok({"result": {
             "totalCustomers": qs.count(), "activeCustomers": qs.filter(is_active=True).count(),

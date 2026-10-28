@@ -555,6 +555,18 @@ class SamianSalesTransaction(models.Model):
     year_info_id = models.IntegerField(_("سال مالی"), null=True, blank=True, db_index=True)
     store_order_id = models.BigIntegerField(_("شناسه سفارش وبسایت"), null=True, blank=True, db_index=True)
     delivery_address = models.TextField(_("آدرس تحویل"), blank=True, default="")
+    # Online orders (a website order posted to Samian) carry the fields below; store sales leave them empty.
+    store_user_id = models.BigIntegerField(_("شناسه کاربر فروشگاه اینترنتی"), null=True, blank=True)
+    order_web_status_id = models.IntegerField(_("شناسه وضعیت سفارش وب"), null=True, blank=True)
+    order_web_status = models.CharField(_("وضعیت سفارش وب"), max_length=128, blank=True, default="")
+    shipment_type_id = models.BigIntegerField(_("شناسه روش ارسال"), null=True, blank=True)
+    shipment_type = models.CharField(_("روش ارسال"), max_length=128, blank=True, default="")
+    shipment_price = models.BigIntegerField(_("هزینه ارسال (ریال)"), default=0)
+    delivery_person = models.CharField(_("گیرنده"), max_length=255, blank=True, default="")
+    delivery_tel = models.CharField(_("تلفن گیرنده"), max_length=64, blank=True, default="")
+    delivery_postal_code = models.CharField(_("کد پستی"), max_length=32, blank=True, default="")
+    delivery_desc = models.CharField(_("توضیح ارسال"), max_length=512, blank=True, default="")
+    delivery_time = models.DateTimeField(_("زمان تحویل"), null=True, blank=True)
 
     raw_data = models.JSONField(_("داده خام سامیان"), default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

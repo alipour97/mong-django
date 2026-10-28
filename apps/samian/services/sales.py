@@ -42,7 +42,10 @@ TRANSACTION_FIELDS = [
     "samian_customer", "customer_samian_id", "warehouse_id", "warehouse", "samian_warehouse",
     "department_id", "department", "cash_id", "cash_name", "cashier_person_id", "cashier_name",
     "status_id", "status", "total_amount", "total_discount", "total_vat", "net_amount",
-    "rounding_discount", "transaction_score", "is_first_buy", "year_info_id", "delivery_address", "updated_at",
+    "rounding_discount", "transaction_score", "is_first_buy", "year_info_id", "delivery_address",
+    "store_order_id", "store_user_id", "order_web_status_id", "order_web_status", "shipment_type_id", "shipment_type",
+    "shipment_price", "delivery_person", "delivery_tel", "delivery_postal_code", "delivery_desc", "delivery_time",
+    "updated_at",
 ]
 
 ROW_FIELDS = [
@@ -87,6 +90,18 @@ def _transaction(item: dict, customer_pks: dict[int, int], warehouse_pks: dict[i
         is_first_buy=bool(item.get("firstbuy")),
         year_info_id=_int(item.get("yearinfo_id")),
         delivery_address=_s(item.get("deliveryaddress")),
+        store_order_id=_int(item.get("storeorderid")),
+        store_user_id=_int(item.get("storeuserid")),
+        order_web_status_id=_int(item.get("orderwebstatus_id")),
+        order_web_status=_s(item.get("__orderwebstatus_id_value"), 128),
+        shipment_type_id=_int(item.get("shipmenttypes_id")),
+        shipment_type=_s(item.get("__shipmenttypes_id_value"), 128),
+        shipment_price=_money(item.get("shipmentprice")),
+        delivery_person=_s(item.get("deliveryperson"), 255),
+        delivery_tel=_s(item.get("deliverytel"), 64),
+        delivery_postal_code=_s(item.get("deliverypostalcode"), 32),
+        delivery_desc=_s(item.get("deliverydesc"), 512),
+        delivery_time=_dt(item.get("deliverytime")),
     )
 
 

@@ -1,16 +1,18 @@
 """
-Invoice/* — the invoices page, read from Mong sales in Samian.
+Invoice/* — the invoices page: online orders in Samian.
 
-Like the dashboard, an invoice is a Samian sales receipt with Mong items, from
-any branch. Only its Mong rows are kept (a receipt can hold other brands'
-items too), so amounts are the sums of those rows; returned rows count
-negative. The id is the receipt's Samian id and the invoice number its code.
+An online order is a Samian sales receipt posted by a web store (it carries
+storeorderid, a shipment type and delivery details); store sales are not
+invoices here. Only its Mong rows are kept (a receipt can hold other brands'
+items too), so amounts are the sums of those rows plus shipping; returned rows
+count negative. The id is the receipt's Samian id and the invoice number its
+code. Telling Mong's web orders from Lebaza's is still open (asked of Samian).
 
-Samian status 1 «تاييد شده» is the panel's "successful" (3) and 2 «معلق» its
-"held" (2); there are no pre-invoices or cancelled ones, nor a shipping method
-or online payment, until site orders are written to Samian. Editing and
-cancelling come with that phase too (the panel only offers them for SnappPay
-orders).
+The panel's state comes from the order's web status: awaiting payment is a
+pre-invoice (1), cancelled (or a voided/deleted receipt) is cancelled (4), and
+paid, processing, ready, sent and delivered are successful (3). Online payment
+rows, editing and cancelling come with the order phase (the panel only offers
+them for SnappPay orders).
 
     GET  Invoice/GetFilteredInvoices?FromAmount=&ToAmount=&FromDate=&ToDate=&InvoiceState=&HasDiscount=&HasComment=
          &SearchText=&ShippingMethodIds=&pageNumber=&pageSize=
@@ -35,9 +37,27 @@ from .auth import AdminView
 from .comments import _date
 from .dashboard import _aware, month_range, today_j
 
-# Samian status -> the panel's invoice state
-STATE_OF = {1: 3, 2: 2}
-STATUS_OF = {v: k for k, v in STATE_OF.items()}
+# Samian onlinestore/orderwebstatus -> the panel's invoice state
+AWAITING_PAYMENT, WEB_CANCELLED = 1, 5
+VOIDED = (4, 5)  # retail/transactionstatus «ابطال شده», «حذف شده»
+PRE_INVOICE, SUCCESSFUL, CANCELLED = 1, 3, 4
+
+
+def _state(t) -> int:
+    if t.status_id in VOIDED or t.order_web_status_id == WEB_CANCELLED:
+        return CANCELLED
+    return PRE_INVOICE if t.order_web_status_id == AWAITING_PAYMENT else SUCCESSFUL
+
+
+def _in_state(qs, state: int):
+    cancelled = Q(status_id__in=VOIDED) | Q(order_web_status_id=WEB_CANCELLED)
+    if state == CANCELLED:
+        return qs.filter(cancelled)
+    if state == PRE_INVOICE:
+        return qs.filter(order_web_status_id=AWAITING_PAYMENT).exclude(cancelled)
+    if state == SUCCESSFUL:
+        return qs.exclude(cancelled).exclude(order_web_status_id=AWAITING_PAYMENT)
+    return qs.none()
 NOT_YET = "ویرایش و لغو فاکتور همراه با ثبت سفارش‌های سایت در سامیان راه‌اندازی می‌شود."
 
 
@@ -49,9 +69,9 @@ def _signed(field: str, kind=BigIntegerField):
 
 
 def _invoices():
-    """Receipts with at least one Mong row, with their Mong totals (rial)."""
+    """Online orders with at least one Mong row, with their Mong totals (rial)."""
     return (
-        SamianSalesTransaction.objects.filter(rows__isnull=False, status_id__in=STATE_OF)
+        SamianSalesTransaction.objects.filter(rows__isnull=False, store_order_id__isnull=False)
         .annotate(
             amount=_signed("gross_amount"), reduction_amount=_signed("discount_amount"),
             vat_amount=_signed("vat_amount"), revenue=_signed("line_revenue"), units=_signed("quantity", DecimalField),
@@ -69,7 +89,7 @@ def _commented_products() -> set[int]:
 
 def _filter(qs, q):
     if (state := to_int(q.get("InvoiceState") or q.get("invoiceState"))) is not None:
-        qs = qs.filter(status_id=STATUS_OF.get(state, -1))
+        qs = _in_state(qs, state)
     if begin := _date(q.get("FromDate")):
         qs = qs.filter(transaction_date__gte=begin)
     if end := _date(q.get("ToDate"), end=True):
@@ -83,13 +103,14 @@ def _filter(qs, q):
     if (commented := to_bool(q.get("HasComment"))) is not None:
         with_comment = SamianSalesRow.objects.filter(samian_product_id__in=_commented_products()).values("transaction_id")
         qs = qs.filter(pk__in=with_comment) if commented else qs.exclude(pk__in=with_comment)
-    if [i for i in q.getlist("ShippingMethodIds") if i]:
-        qs = qs.none()  # no Samian sale has a site shipping method yet
+    if ids := [to_int(i) for i in q.getlist("ShippingMethodIds") if to_int(i) is not None]:
+        qs = qs.filter(shipment_type_id__in=ids)  # site methods are to carry their Samian shipment type id
     if search := (q.get("SearchText") or "").strip():
         qs = qs.filter(
             Q(transaction_code__icontains=search) | Q(samian_id=to_int(search, -1))
             | Q(samian_customer__mobile__contains=search) | Q(samian_customer__first_name__icontains=search)
             | Q(samian_customer__last_name__icontains=search) | Q(samian_customer__display_name__icontains=search)
+        | Q(store_order_id=to_int(search, -1)) | Q(delivery_tel__contains=search)
         )
     return qs
 
@@ -106,23 +127,25 @@ def _header(t: SamianSalesTransaction, site: dict, commented_rows: dict) -> dict
     last = (cu.last_name if cu else "") or (sc.last_name if sc else "")
     if sc and not (first or last):
         first = sc.display_name
-    payable = t.revenue + t.vat_amount
+    payable = t.revenue + t.vat_amount + t.shipment_price
+    state = _state(t)
     return {
         "id": t.samian_id, "invoiceNumber": t.transaction_code or str(t.samian_id),
         "customerId": cu.id if cu else 0, "customerName": first, "customerLastName": last,
         "qty": float(t.units), "createDate": t.transaction_date.isoformat() if t.transaction_date else None,
         "createDatePersian": jalali(t.transaction_date, with_time=False),
         "branchId": t.warehouse_id, "branchTitle": t.warehouse or None,
-        "invoiceState": STATE_OF[t.status_id], "invoiceType": STATE_OF[t.status_id],
-        "shippingMethodId": 0, "shippingMethodName": "", "shippingMethodTypeId": 0, "shippingMethodTypeTitle": "",
-        "deliveryAmount": 0, "customerAddressId": 0,
+        "invoiceState": state, "invoiceType": state,
+        "shippingMethodId": t.shipment_type_id or 0, "shippingMethodName": t.shipment_type,
+        "shippingMethodTypeId": t.shipment_type_id or 0, "shippingMethodTypeTitle": t.shipment_type,
+        "deliveryAmount": t.shipment_price, "customerAddressId": 0, "storeOrderId": t.store_order_id,
         "amount": t.amount, "amountAfterReduction": t.amount - t.reduction_amount, "reductionAmount": t.reduction_amount,
         "totalReductionAmounts": t.reduction_amount, "reduction": 0, "discount": t.reduction_amount,
         "hasDiscount": t.reduction_amount > 0, "deductionAmount": 0, "deductionType": "None",
         "fixedAmount": 0, "variableAmount": 0, "insuranceFee": 0,
-        "tax": 0, "taxAmount": 0, "vat": 0, "vatAmount": t.vat_amount, "amountAfterVatAndTax": payable,
+        "tax": 0, "taxAmount": 0, "vat": 0, "vatAmount": t.vat_amount, "amountAfterVatAndTax": payable - t.shipment_price,
         "payableAmount": payable, "totalAmountPayable": payable, "finalAmount": payable,
-        "giftCardId": None, "couponId": None, "description": "",
+        "giftCardId": None, "couponId": None, "description": t.order_web_status,
         "commentCounts": commented_rows.get(t.pk, 0), "hasComment": bool(commented_rows.get(t.pk)),
         "snappPayTransactionId": None, "snappPayToken": None,
     }
@@ -166,7 +189,7 @@ class StatisticsView(AdminView):
         state = to_int(request.query_params.get("invoiceState"))
         qs = _invoices()
         if state is not None:
-            qs = qs.filter(status_id=STATUS_OF.get(state, -1))
+            qs = _in_state(qs, state)
         jy, jm, _ = today_j()
         with_comment = SamianSalesRow.objects.filter(samian_product_id__in=_commented_products()).values("transaction_id")
         return ok({"result": {
@@ -239,9 +262,11 @@ class DetailView(AdminView):
                       "mobile": sc.mobile if sc else ""},
             "seller": {"companyName": info.name if info else "", "address": info.address if info else "", "branchTitle": header["branchTitle"]},
             "address": {
-                "id": 0, "customerId": header["customerId"], "isDefault": False, "title": "", "zipCode": "",
-                "firstName": header["customerName"], "lastName": header["customerLastName"], "mobile": sc.mobile if sc else "",
-                "isMyselfRecipient": True, "provinceId": 0, "cityId": 0, **_address(t.delivery_address),
+                "id": 0, "customerId": header["customerId"], "isDefault": False, "title": t.delivery_desc,
+                "zipCode": t.delivery_postal_code, "firstName": t.delivery_person or header["customerName"],
+                "lastName": "" if t.delivery_person else header["customerLastName"],
+                "mobile": t.delivery_tel or (sc.mobile if sc else ""), "isMyselfRecipient": not t.delivery_person,
+                "provinceId": 0, "cityId": 0, **_address(t.delivery_address),
             },
             "invoiceHeader": header,
             "invoiceDetails": _lines(t),

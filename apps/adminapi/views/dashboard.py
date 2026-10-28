@@ -1,9 +1,9 @@
 """
 Dashboard/*, Report/*, Invoice/DailyCounts|InvoiceCountByHour, Products/TopSelling* — the admin home page.
 
-"Invoices" here are Mong sales in Samian: confirmed sales transactions from
-every branch (Lebaza's too), the same sales the site's best-seller sort uses.
-Site orders join them with the order phase.
+"Invoices" here are successful online orders in Samian, as on the invoices page.
+Best sellers count every confirmed Mong sale from every branch (Lebaza's too),
+the same sales the site's best-seller sort uses.
 
     GET  Dashboard/Date | Dashboard/DashboardNotif | Dashboard/SynchronizationStatus | Dashboard/Search?query=
     POST Dashboard/GrowthRate?month=&year=&steps=           (Persian month and year)
@@ -66,7 +66,9 @@ def _aware(d: date) -> datetime:
 
 
 def _sales():
-    return SamianSalesTransaction.objects.filter(status_id=CONFIRMED)
+    """Invoices: successful online orders (the invoices page's state 3)."""
+    from .invoices import SUCCESSFUL, _in_state
+    return _in_state(SamianSalesTransaction.objects.filter(store_order_id__isnull=False), SUCCESSFUL)
 
 
 def _in_month(qs, jy: int, jm: int):
