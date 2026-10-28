@@ -1194,3 +1194,85 @@ class ArticleLike(LegacyMixin):
 
     def __str__(self) -> str:
         return f"{self.article_id} / {self.customer_id}"
+
+
+# -----------------------------------------------------------------------------
+# Site orders (cart -> pre-invoice -> paid). Sending a paid order to Samian is
+# the write phase; until then samian_transaction_id stays empty.
+# -----------------------------------------------------------------------------
+class Invoice(models.Model):
+    class State(models.IntegerChoices):
+        PRE_INVOICE = 1, _("پیش‌فاکتور")
+        SUSPENDED = 2, _("معلق")
+        SUCCESSFUL = 3, _("موفق")
+        CANCELLED = 4, _("لغو شده")
+
+    customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name="invoices", verbose_name=_("مشتری"))
+    state = models.IntegerField(_("وضعیت"), choices=State.choices, default=State.PRE_INVOICE, db_index=True)
+    shipping_method = models.ForeignKey(ShippingMethod, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+                                        verbose_name=_("روش ارسال"))
+    address = models.ForeignKey("CustomerAddress", null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+                                verbose_name=_("آدرس"))
+    amount = models.BigIntegerField(_("مبلغ کل (ریال)"), default=0)
+    reduction_amount = models.BigIntegerField(_("تخفیف کالاها (ریال)"), default=0)
+    delivery_amount = models.BigIntegerField(_("هزینه ارسال (ریال)"), default=0)
+    deduction_amount = models.BigIntegerField(_("کسر کارت هدیه یا کوپن (ریال)"), default=0)
+    payable_amount = models.BigIntegerField(_("قابل پرداخت (ریال)"), default=0)
+    description = models.TextField(_("توضیحات"), blank=True, default="")
+    gift_card_number = models.CharField(_("کارت هدیه"), max_length=100, blank=True, default="")
+    coupon_serial = models.CharField(_("کوپن"), max_length=250, blank=True, default="")
+    paid_at = models.DateTimeField(_("زمان پرداخت"), null=True, blank=True)
+    samian_transaction_id = models.BigIntegerField(_("شناسه رسید در سامیان"), null=True, blank=True, db_index=True)
+    is_deleted = models.BooleanField(_("حذف شده"), default=False, db_index=True)
+    created = models.DateTimeField(_("ایجاد"), auto_now_add=True)
+    last_modified = models.DateTimeField(_("آخرین تغییر"), auto_now=True)
+
+    class Meta:
+        verbose_name = _("سفارش سایت")
+        verbose_name_plural = _("سفارش‌های سایت")
+        ordering = ("-id",)
+
+    def __str__(self) -> str:
+        return f"#{self.id} {self.customer_id} ({self.get_state_display()})"
+
+
+class InvoiceLine(models.Model):
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="lines")
+    product = models.ForeignKey(Product, on_delete=models.DO_NOTHING, db_constraint=False, related_name="+")
+    variant_id = models.BigIntegerField(_("شناسه بارکد سامیان (productVariantId)"))
+    barcode = models.CharField(max_length=255, blank=True, default="")
+    name = models.CharField(max_length=512, blank=True, default="")
+    color_id = models.BigIntegerField(null=True, blank=True)
+    color_name = models.CharField(max_length=128, blank=True, default="")
+    color_value = models.CharField(max_length=32, blank=True, default="")
+    size_name = models.CharField(max_length=64, blank=True, default="")
+    qty = models.DecimalField(max_digits=12, decimal_places=2, default=1)
+    price = models.BigIntegerField(_("قیمت واحد (ریال)"), default=0)
+    reduction = models.DecimalField(_("درصد تخفیف"), max_digits=8, decimal_places=3, default=0)
+    price_after_reduction = models.BigIntegerField(_("قیمت واحد بعد از تخفیف (ریال)"), default=0)
+
+    class Meta:
+        verbose_name = _("ردیف سفارش")
+        verbose_name_plural = _("ردیف‌های سفارش")
+        ordering = ("id",)
+
+
+class InvoicePayment(models.Model):
+    """One attempt to pay an invoice through a gateway."""
+
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="payments")
+    gateway = models.CharField(max_length=32)               # zarinpal, snapppay
+    amount = models.BigIntegerField(default=0)              # rial
+    authority = models.CharField(max_length=255, blank=True, default="", db_index=True)   # Zarinpal authority / SnappPay payment token
+    transaction_id = models.CharField(max_length=64, blank=True, default="", db_index=True)  # our id sent to the gateway (SnappPay)
+    reference = models.CharField(max_length=255, blank=True, default="")  # Zarinpal ref_id / SnappPay transactionId
+    card_pan = models.CharField(max_length=64, blank=True, default="")
+    is_success = models.BooleanField(default=False)
+    error_message = models.TextField(blank=True, default="")
+    created = models.DateTimeField(auto_now_add=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("پرداخت سفارش")
+        verbose_name_plural = _("پرداخت‌های سفارش")
+        ordering = ("-id",)

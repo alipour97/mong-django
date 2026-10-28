@@ -1,15 +1,15 @@
 """
-Article/* on the site: the blog, as api.mong.ir served it (read-only part).
+Article/* on the site: the blog, as api.mong.ir served it.
 
 An article is on the site while show_on_page is on, its publish date has
-passed and it has not expired. Views are not counted (no visit tracking yet).
-Adding comments and likes needs customer sign-in and comes with that phase.
+passed and it has not expired. Opening an article counts a view. Comments
+and likes are in interactions.py.
 """
 from __future__ import annotations
 
 import math
 
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 
 from apps.adminapi.models import AdminUser
@@ -63,6 +63,8 @@ class ByUniqUrlView(PublicView):
         a = visible().filter(uniq_url__iexact=uniq).first()
         if not a:
             return ok(None, message="اطلاعات مورد نظر یافت نشد.")
+        Article.objects.filter(id=a.id).update(view_count=F("view_count") + 1)
+        a.view_count += 1
         authors = _authors([a])
         data = {
             **_summary(a, authors),

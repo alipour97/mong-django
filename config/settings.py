@@ -213,3 +213,14 @@ ADMIN_TOKEN_MINUTES = int(os.getenv("ADMIN_TOKEN_MINUTES", "600"))
 SMSIR_API_KEY = os.getenv("SMS_KEY", "")
 SMSIR_OTP_TEMPLATE_ID = int(os.getenv("SMSIR_OTP_TEMPLATE_ID", "214177"))
 SMSIR_OTP_PARAM = os.getenv("SMSIR_OTP_PARAM", "TOKEN")
+
+# Online payment. SITE_URL is the storefront the customer returns to after paying.
+SITE_URL = os.getenv("SITE_URL", PUBLIC_BASE_URL).rstrip("/")
+ZARINPAL_MERCHANT_ID = os.getenv("ZARINPAL_KEY", "")
+ZARINPAL_SANDBOX = os.getenv("ZARINPAL_SANDBOX", "false").lower() in ("1", "true", "yes")
+# SnappPay is offered only once SNAPPAY_BASE_URL (given by SnappPay with the merchant account) is set.
+SNAPPAY_BASE_URL = os.getenv("SNAPPAY_BASE_URL", "").rstrip("/")
+SNAPPAY_CLIENT_ID = os.getenv("SNAPPAY_CLIENT_ID", "")
+SNAPPAY_CLIENT_SECRET = os.getenv("SNAPPAY_CLIENT_SECRET", "")
+SNAPPAY_USERNAME = os.getenv("SNAPPAY_USERNAME", "")
+SNAPPAY_PASSWORD = os.getenv("SNAPPAY_PASSWORD", "")

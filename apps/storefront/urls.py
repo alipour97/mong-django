@@ -8,6 +8,8 @@ from django.urls import path, re_path
 from . import account as acc
 from . import blog
 from . import interactions as act
+from . import orders
+from . import payments as pay
 from . import views as v
 
 urlpatterns = [
@@ -44,6 +46,21 @@ urlpatterns = [
     path("Article/AddArticleLike/<int:article_id>/likes", act.ArticleLikeView.as_view()),
     path("Cooperation/CooperationRequestSubmit", act.CooperationSubmitView.as_view()),
     path("ThirdPartyLog/AddThirdPartyLog/AddThirdPartyLog", act.ThirdPartyLogView.as_view()),
+
+    # Cart, orders and payment
+    path("Invoice/Add", orders.AddView.as_view()),
+    path("Invoice/GetLastPreInvoice", orders.LastPreInvoiceView.as_view()),
+    path("Invoice/SoftDelete/<int:invoice_id>", orders.DeletePreInvoiceView.as_view()),
+    path("Invoice/ClearCart", orders.ClearCartView.as_view()),
+    path("Invoice/GetAllCustomerInvoice", orders.CustomerInvoicesView.as_view()),
+    path("Invoice/GetCustomerInvoiceById/<int:invoice_id>", orders.CustomerInvoiceView.as_view()),
+    path("ShipingMethod/GetAllShipingMethod", orders.ShippingMethodsView.as_view()),
+    path("Bank/GetGateways", pay.GatewaysView.as_view()),
+    path("Bank/PayInvoiceById", pay.PayView.as_view()),
+    path("Bank/SnappPayEligible", pay.SnappEligibleView.as_view()),
+    path("Bank/GiftCardPayInvoiceById", pay.ZeroAmountView.as_view()),
+    path("Bank/ZarinpalCallback", pay.ZarinpalCallbackView.as_view()),
+    path("Bank/SnappPayCallback", pay.SnappPayCallbackView.as_view()),
 
     # Blog
     path("Article/GetRecentArticles", blog.RecentView.as_view()),
