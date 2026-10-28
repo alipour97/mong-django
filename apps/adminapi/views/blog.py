@@ -72,7 +72,9 @@ class ListView(AdminView):
 
         def item(a: Article) -> dict:
             return {
-                "id": a.id, "title": a.title, "createDate": jalali_time(a.created), "publishDate": jalali(a.publish_date, with_time=False),
+                # createDate is converted to Jalali by the panel (moment), so it is sent as ISO.
+                "id": a.id, "title": a.title, "createDate": a.created.isoformat() if a.created else None,
+                "publishDate": jalali(a.publish_date, with_time=False),
                 "viewCount": a.view_count, "showOnPage": a.show_on_page, "authorName": authors.get(a.author_id, " "),
                 "likeCount": a.n_likes, "commentCount": a.n_comments, "comment": a.n_comments,
             }

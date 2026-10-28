@@ -24,7 +24,7 @@ from apps.samian.models import SamianProduct, SamianSalesRow, SamianSalesTransac
 from apps.storefront import catalog
 from apps.storefront.envelope import _g2j, jalali
 from apps.website.models import (
-    Article, Category, Collection, Customer, FileMedia, Product, ProductComment, ProductSamianLink,
+    Article, Category, Collection, Customer, FileFormat, FileMedia, Product, ProductComment, ProductSamianLink,
 )
 
 from .. import products as index
@@ -32,7 +32,6 @@ from ..envelope import ok
 from ..models import AdminUser
 from ..paging import int_list, to_int
 from .auth import AdminView
-from .blog import jalali_time
 
 CONFIRMED = 1  # Samian transaction status «تاييد شده»; 2 «معلق» is a held, unfinished sale
 
@@ -189,15 +188,19 @@ def _net_sold() -> tuple[dict[int, float], dict[int, set]]:
 
 
 class TopSellingView(AdminView):
+    """The single best-selling product (the dashboard card shows one), or null."""
+
     def get(self, request):
         units, _ = _net_sold()
-        top = [(pid, n) for pid, n in sorted(units.items(), key=lambda kv: -kv[1]) if n > 0][:10]
-        bundle = catalog.ProductBundle.load([pid for pid, _ in top])
-        titles = dict(Product.objects.filter(id__in=[pid for pid, _ in top]).values_list("id", "title"))
-        return ok({"result": [
-            {"productId": pid, "title": titles.get(pid, ""), "totalOrders": int(n), "mediaAttachments": bundle.main_images(pid)[:1]}
-            for pid, n in top
-        ]})
+        best = max(((pid, n) for pid, n in units.items() if n > 0), key=lambda kv: kv[1], default=None)
+        if best is None:
+            return ok({"result": None})
+        pid, n = best
+        bundle = catalog.ProductBundle.load([pid])
+        title = Product.objects.filter(id=pid).values_list("title", flat=True).first() or ""
+        return ok({"result": {
+            "productId": pid, "title": title, "totalOrders": int(n), "mediaAttachments": bundle.main_images(pid),
+        }})
 
 
 class TopSellingGroupsView(AdminView):
@@ -296,7 +299,10 @@ class SearchView(AdminView):
             return {"id": c.id, "comment": c.comment, "score": float(c.score), "productId": c.product_id, "status": c.status,
                     "title": c.title, "typeId": 0, "type": "محصول", "createDate": jalali(c.created, with_time=False)}
 
-        from .gallery import _url
+        from .gallery import _dto as _file_dto, _tags_of
+
+        formats = {x.id: x for x in FileFormat.objects.filter(id__in={f.format_id for f in files})}
+        file_tags = _tags_of([f.id for f in files])
 
         return ok({"result": {
             "customers": [
@@ -307,7 +313,8 @@ class SearchView(AdminView):
             ],
             "invoices": [],
             "articles": [
-                {"id": a.id, "title": a.title, "createDate": jalali_time(a.created), "publishDate": jalali(a.publish_date, with_time=False),
+                {"id": a.id, "title": a.title, "createDate": a.created.isoformat() if a.created else None,
+                 "publishDate": jalali(a.publish_date, with_time=False),
                  "viewCount": a.view_count, "showOnPage": a.show_on_page, "authorName": "", "likeCount": 0, "commentCount": 0}
                 for a in Article.objects.filter(is_deleted=False).filter(Q(title__icontains=text) | Q(description__icontains=text))[:LIMIT]
             ],
@@ -324,7 +331,7 @@ class SearchView(AdminView):
                  "userName": u.username, "email": u.email, "isActive": u.is_active}
                 for u in users
             ],
-            "fileMedias": [{"id": f.id, "fileName": f.file_name, "url": _url(f.url)} for f in files],
+            "fileMedias": [_file_dto(f, formats, file_tags) for f in files],
             "collections": [
                 {"id": c.id, "title": c.title, "isActive": c.is_active, "inMainPage": c.in_main_page,
                  "beginningDate": jalali(c.beginning_date, with_time=False), "endDate": jalali(c.end_date, with_time=False)}
