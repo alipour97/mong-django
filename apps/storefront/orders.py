@@ -22,6 +22,7 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Sum
+from django.utils import timezone
 
 from apps.samian.models import SamianBarcode, SamianInventory
 from apps.website.models import (
@@ -30,10 +31,33 @@ from apps.website.models import (
 
 from . import catalog
 from .account import CustomerView, answer
-from .envelope import jalali
+from .envelope import _g2j, jalali
 
 S = Invoice.State
 NOT_YET = "استفاده از کارت هدیه و کوپن به‌زودی فعال می‌شود."
+
+
+FIRST_IN_MONTH = 101
+
+
+def number_prefix(at) -> str:
+    """Persian year without the thousands digit and the month: 1405/08 -> "40508"."""
+    local = timezone.localtime(at)
+    jy, jm, _ = _g2j(local.year, local.month, local.day)
+    return f"{jy % 1000:03d}{jm:02d}"
+
+
+def assign_number(inv: Invoice) -> str:
+    """Gives the invoice the next number of its month (prefix + sequence from 101). Call inside a transaction."""
+    if inv.number:
+        return inv.number
+    prefix = number_prefix(inv.paid_at or timezone.now())
+    # Lock the month's invoices so two payments at once cannot take the same number.
+    taken = list(Invoice.objects.select_for_update().filter(number__startswith=prefix).values_list("number", flat=True))
+    seqs = [int(n[len(prefix):]) for n in taken if n[len(prefix):].isdigit()]
+    inv.number = f"{prefix}{max(seqs + [FIRST_IN_MONTH - 1]) + 1}"
+    inv.save(update_fields=["number"])
+    return inv.number
 
 
 def _int(value) -> int | None:
@@ -270,7 +294,7 @@ def invoice_summary(inv: Invoice) -> dict:
         "finalAmount": inv.payable_amount, "totalAmountPayable": inv.payable_amount, "discount": inv.reduction_amount,
         "reductionAmount": inv.reduction_amount, "totalReductionAmounts": inv.reduction_amount + inv.deduction_amount,
         "amountAfterReduction": inv.amount - inv.reduction_amount, "hasDiscount": inv.reduction_amount > 0,
-        "invoiceNumber": str(inv.samian_transaction_id) if inv.samian_transaction_id else None,
+        "invoiceNumber": inv.number,
         "invoiceState": inv.state, "invoiceType": inv.state, "createDatePersian": jalali(inv.created, with_time=False),
         "shippingMethodId": inv.shipping_method_id or 0, "shippingMethodName": m.name if m else "",
         "shippingMethodType": m.type.key if m and m.type else "", "shippingMethodTypeId": m.type_id if m else 0,

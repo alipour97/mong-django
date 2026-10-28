@@ -16,7 +16,7 @@ them for SnappPay orders).
 
 Orders placed on the new site that have not reached Samian yet (website
 Invoice without samian_transaction_id) are listed too, with their own id and
-no invoice number; once sent, the Samian receipt takes their place. An id is
+the invoice number given when paid; once sent, the Samian receipt takes their place. An id is
 looked up among those site orders first.
 
     GET  Invoice/GetFilteredInvoices?FromAmount=&ToAmount=&FromDate=&ToDate=&InvoiceState=&HasDiscount=&HasComment=
@@ -151,7 +151,7 @@ def _site_filter(qs, q):
     if ids := [to_int(i) for i in q.getlist("ShippingMethodIds") if to_int(i) is not None]:
         qs = qs.filter(shipping_method_id__in=ids)
     if search := (q.get("SearchText") or "").strip():
-        qs = qs.filter(Q(id=to_int(search, -1)) | Q(customer__cellphone__contains=search)
+        qs = qs.filter(Q(id=to_int(search, -1)) | Q(number=search) | Q(customer__cellphone__contains=search)
                        | Q(customer__first_name__icontains=search) | Q(customer__last_name__icontains=search))
     return qs
 
@@ -164,7 +164,7 @@ def _site_header(inv: Invoice) -> dict:
     lines = list(inv.lines.all())
     after = inv.amount - inv.reduction_amount
     return {
-        "id": inv.id, "invoiceNumber": None, "customerId": c.id, "customerName": c.first_name, "customerLastName": c.last_name,
+        "id": inv.id, "invoiceNumber": inv.number, "customerId": c.id, "customerName": c.first_name, "customerLastName": c.last_name,
         "qty": float(sum(ln.qty for ln in lines)), "createDate": inv.created.isoformat(),
         "createDatePersian": jalali(inv.created, with_time=False), "branchId": None, "branchTitle": None,
         "invoiceState": inv.state, "invoiceType": inv.state,

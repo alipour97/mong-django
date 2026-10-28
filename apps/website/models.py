@@ -1222,6 +1222,8 @@ class Invoice(models.Model):
     gift_card_number = models.CharField(_("کارت هدیه"), max_length=100, blank=True, default="")
     coupon_serial = models.CharField(_("کوپن"), max_length=250, blank=True, default="")
     paid_at = models.DateTimeField(_("زمان پرداخت"), null=True, blank=True)
+    # Given when paid: Persian year (3 digits) + month + a sequence from 101 in that month, e.g. 40508101.
+    number = models.CharField(_("شماره فاکتور"), max_length=20, null=True, blank=True, unique=True)
     samian_transaction_id = models.BigIntegerField(_("شناسه رسید در سامیان"), null=True, blank=True, db_index=True)
     is_deleted = models.BooleanField(_("حذف شده"), default=False, db_index=True)
     created = models.DateTimeField(_("ایجاد"), auto_now_add=True)
@@ -1233,7 +1235,7 @@ class Invoice(models.Model):
         ordering = ("-id",)
 
     def __str__(self) -> str:
-        return f"#{self.id} {self.customer_id} ({self.get_state_display()})"
+        return f"#{self.number or self.id} {self.customer_id} ({self.get_state_display()})"
 
 
 class InvoiceLine(models.Model):

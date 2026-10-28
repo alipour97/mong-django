@@ -32,7 +32,7 @@ from apps import smsir
 from apps.website.models import Invoice, InvoicePayment
 
 from .account import CustomerView, answer
-from .orders import S
+from .orders import S, assign_number
 from .views import PublicView
 
 logger = logging.getLogger(__name__)
@@ -48,8 +48,10 @@ def _enabled(key: str) -> bool:
     return bool(settings.SNAPPAY_BASE_URL and settings.SNAPPAY_CLIENT_ID and settings.SNAPPAY_USERNAME)
 
 
-def _confirmation(success: bool, invoice_id: int, token: str = "") -> str:
-    query = {"success": "true" if success else "false", "TrackingToken": token, "InvoiceId": invoice_id}
+def _confirmation(success: bool, inv: Invoice | None, token: str = "") -> str:
+    """The site's result page; it shows InvoiceId as the invoice number."""
+    shown = (inv.number or inv.id) if inv else ""
+    query = {"success": "true" if success else "false", "TrackingToken": token, "InvoiceId": shown}
     return f"{settings.SITE_URL}/order-confirmation?{urlencode(query)}"
 
 
@@ -70,34 +72,80 @@ def _payable_invoice(request, invoice_id) -> Invoice | None:
 
 
 def _mark_paid(inv: Invoice) -> None:
-    inv.state, inv.paid_at = S.SUCCESSFUL, timezone.now()
-    inv.save(update_fields=["state", "paid_at", "last_modified"])
-    transaction.on_commit(lambda: _notify_admins(inv.id))
+    with transaction.atomic():
+        inv.state, inv.paid_at = S.SUCCESSFUL, timezone.now()
+        inv.save(update_fields=["state", "paid_at", "last_modified"])
+        number = assign_number(inv)
+    transaction.on_commit(lambda: _notify_admins(number))
 
 
-def _notify_admins(invoice_id: int) -> None:
-    """Texts the admins who have "send invoice SMS" on, as the old site did; in the background."""
+def _notify_admins(number: str) -> None:
+    """Texts the admins who have "send invoice SMS" on (invoice template, one SMS each), in the background."""
     from apps.adminapi.models import AdminUser
-    from apps.website.models import SiteSetting
 
     mobiles = list(AdminUser.objects.filter(is_deleted=False, is_active=True, send_invoice_sms=True)
                    .exclude(cellphone="").values_list("cellphone", flat=True))
-    if not mobiles:
-        return
-    title = (SiteSetting.objects.filter(is_deleted=False).values_list("website_title", flat=True).first() or "مانگ").strip()
-    text = f"{title}\nفاکتور با شماره : {invoice_id} با موفقیت ذخیره شد."
-    threading.Thread(target=smsir.send_text, args=(mobiles, text), daemon=True).start()
+
+    def send():
+        for mobile in mobiles:
+            smsir.send_invoice(mobile, number)
+
+    if mobiles:
+        threading.Thread(target=send, daemon=True).start()
 
 
 # -----------------------------------------------------------------------------
 # Zarinpal (https://payment.zarinpal.com/pg/v4/payment/{request,verify}.json, amounts in rial)
 # -----------------------------------------------------------------------------
+# The error list in Zarinpal's docs (errors.code) -> what we keep on the payment / tell the customer.
+ZARINPAL_ERRORS = {
+    -9: "خطای اعتبارسنجی (مرچنت، آدرس بازگشت، توضیحات یا مبلغ نامعتبر)",
+    -10: "آی‌پی یا مرچنت کد پذیرنده صحیح نیست",
+    -11: "مرچنت کد فعال نیست",
+    -12: "تلاش بیش از حد مجاز در زمان کوتاه",
+    -13: "محدودیت تراکنش درگاه",
+    -14: "آدرس بازگشت با دامنه‌ی ثبت‌شده‌ی درگاه مغایرت دارد",
+    -15: "درگاه پرداخت تعلیق شده است",
+    -16: "سطح تایید پذیرنده پایین‌تر از نقره‌ای است",
+    -17: "محدودیت پذیرنده در سطح آبی",
+    -18: "استفاده از درگاه روی این دامنه مجاز نیست",
+    -19: "ایجاد تراکنش برای این درگاه ممکن نیست",
+    -40: "پارامتر expire_in نامعتبر است",
+    -41: "حداکثر مبلغ پرداختی ۱۰۰ میلیون تومان است",
+    -50: "مبلغ پرداخت‌شده با مبلغ فاکتور یکسان نیست",
+    -51: "پرداخت ناموفق",
+    -52: "خطای غیرمنتظره در زرین‌پال",
+    -53: "پرداخت متعلق به این مرچنت کد نیست",
+    -54: "اتوریتی نامعتبر است",
+    -55: "تراکنش یافت نشد",
+}
+ZARINPAL_MAX_RIAL = 1_000_000_000  # 100 million toman (-41)
+# Request errors worth showing to the customer as they are; others get a general message.
+CUSTOMER_FACING = {-9, -41}
+
+
+class GatewayError(Exception):
+    def __init__(self, message: str, customer_message: str | None = None):
+        super().__init__(message)
+        self.customer_message = customer_message
+
+
+def zarinpal_error(body: dict) -> tuple[int | None, str]:
+    """(code, Persian description) of a Zarinpal error reply."""
+    err = body.get("errors") if isinstance(body.get("errors"), dict) else {}
+    data = body.get("data") if isinstance(body.get("data"), dict) else {}
+    code = err.get("code", data.get("code"))
+    return code, ZARINPAL_ERRORS.get(code, str(err.get("message") or data.get("message") or "خطای نامشخص"))
+
+
 def _zarinpal_base() -> str:
     return "https://sandbox.zarinpal.com" if settings.ZARINPAL_SANDBOX else "https://payment.zarinpal.com"
 
 
 def zarinpal_request(inv: Invoice) -> str:
     """Creates the payment; returns the StartPay URL."""
+    if inv.payable_amount > ZARINPAL_MAX_RIAL:
+        raise GatewayError("over zarinpal limit", ZARINPAL_ERRORS[-41])
     body = {
         "merchant_id": settings.ZARINPAL_MERCHANT_ID, "amount": inv.payable_amount, "currency": "IRR",
         "callback_url": _callback("ZarinpalCallback"), "description": f"سفارش {inv.id} مانگ",
@@ -105,9 +153,11 @@ def zarinpal_request(inv: Invoice) -> str:
     }
     resp = requests.post(f"{_zarinpal_base()}/pg/v4/payment/request.json", json=body, timeout=TIMEOUT,
                          headers={"Accept": "application/json"})
-    data = (resp.json() or {}).get("data") or {}
+    reply = resp.json() or {}
+    data = reply.get("data") if isinstance(reply.get("data"), dict) else {}
     if data.get("code") != 100 or not data.get("authority"):
-        raise RuntimeError(f"zarinpal request: {resp.status_code} {resp.text[:300]}")
+        code, message = zarinpal_error(reply)
+        raise GatewayError(f"zarinpal request {code}: {message}", message if code in CUSTOMER_FACING else None)
     InvoicePayment.objects.create(invoice=inv, gateway=ZARINPAL, amount=inv.payable_amount, authority=data["authority"])
     return f"{_zarinpal_base()}/pg/StartPay/{data['authority']}"
 
@@ -184,6 +234,9 @@ class PayView(CustomerView):
             return answer(None, 400, "درگاه پرداخت انتخاب‌شده فعال نیست.")
         try:
             url = zarinpal_request(inv) if key == ZARINPAL else snapp_request(inv)
+        except GatewayError as exc:
+            logger.warning("pay request refused for invoice %s: %s", inv.id, exc)
+            return answer(None, 502, exc.customer_message or "اتصال به درگاه پرداخت برقرار نشد. لطفا دوباره تلاش کنید.")
         except Exception:
             logger.exception("pay request failed for invoice %s", inv.id)
             return answer(None, 502, "اتصال به درگاه پرداخت برقرار نشد. لطفا دوباره تلاش کنید.")
@@ -214,7 +267,7 @@ class ZeroAmountView(CustomerView):
         if inv.payable_amount > 0:
             return answer(None, 400, "این فاکتور باید از درگاه پرداخت شود.")
         _mark_paid(inv)
-        return answer(_confirmation(True, inv.id), message="پرداخت موفق با کارت هدیه.")
+        return answer(_confirmation(True, inv), message="پرداخت موفق با کارت هدیه.")
 
 
 def _finish(payment: InvoicePayment, success: bool, reference: str = "", card: str = "", error: str = "") -> None:
@@ -231,20 +284,25 @@ class ZarinpalCallbackView(PublicView):
         authority = request.query_params.get("Authority", "")
         payment = InvoicePayment.objects.select_related("invoice").filter(gateway=ZARINPAL, authority=authority).first()
         if not payment:
-            return HttpResponseRedirect(_confirmation(False, 0))
+            return HttpResponseRedirect(_confirmation(False, None))
         if payment.verified_at:  # already handled (refresh or a second visit)
-            return HttpResponseRedirect(_confirmation(payment.is_success, payment.invoice_id, payment.reference))
+            return HttpResponseRedirect(_confirmation(payment.is_success, payment.invoice, payment.reference))
         if request.query_params.get("Status") != "OK":
             _finish(payment, False, error="لغو شده توسط کاربر")
-            return HttpResponseRedirect(_confirmation(False, payment.invoice_id))
+            return HttpResponseRedirect(_confirmation(False, payment.invoice))
         try:
-            data = (zarinpal_verify(payment).get("data") or {})
+            reply = zarinpal_verify(payment)
         except Exception:
+            # Left unverified: coming back to this URL verifies again (Zarinpal returns 101 if it already was).
             logger.exception("zarinpal verify failed for %s", authority)
-            return HttpResponseRedirect(_confirmation(False, payment.invoice_id))
-        ok_ = data.get("code") in (100, 101)
-        _finish(payment, ok_, str(data.get("ref_id") or ""), data.get("card_pan") or "", "" if ok_ else str(data)[:500])
-        return HttpResponseRedirect(_confirmation(ok_, payment.invoice_id, str(data.get("ref_id") or "")))
+            return HttpResponseRedirect(_confirmation(False, payment.invoice))
+        data = reply.get("data") if isinstance(reply.get("data"), dict) else {}
+        ok_ = data.get("code") in (100, 101)  # 101: verified before
+        error = "" if ok_ else "{1} ({0})".format(*zarinpal_error(reply))
+        if not ok_:
+            logger.warning("zarinpal verify refused for %s: %s", authority, error)
+        _finish(payment, ok_, str(data.get("ref_id") or ""), data.get("card_pan") or "", error)
+        return HttpResponseRedirect(_confirmation(ok_, payment.invoice, str(data.get("ref_id") or "")))
 
 
 class SnappPayCallbackView(PublicView):
@@ -253,20 +311,20 @@ class SnappPayCallbackView(PublicView):
         payment = InvoicePayment.objects.select_related("invoice").filter(
             gateway=SNAPPPAY, transaction_id=str(d.get("transactionId") or "")).first()
         if not payment:
-            return HttpResponseRedirect(_confirmation(False, 0))
+            return HttpResponseRedirect(_confirmation(False, None))
         if payment.verified_at:
-            return HttpResponseRedirect(_confirmation(payment.is_success, payment.invoice_id, payment.reference))
+            return HttpResponseRedirect(_confirmation(payment.is_success, payment.invoice, payment.reference))
         if str(d.get("state") or "").upper() != "OK":
             _finish(payment, False, error="ناموفق در اسنپ‌پی")
-            return HttpResponseRedirect(_confirmation(False, payment.invoice_id))
+            return HttpResponseRedirect(_confirmation(False, payment.invoice))
         try:
             verified = _snapp("POST", "/api/online/payment/v1/verify", json={"paymentToken": payment.authority})
             settled = _snapp("POST", "/api/online/payment/v1/settle", json={"paymentToken": payment.authority}) \
                 if verified.get("successful") else {}
         except Exception:
             logger.exception("snapppay verify/settle failed for %s", payment.transaction_id)
-            return HttpResponseRedirect(_confirmation(False, payment.invoice_id))
+            return HttpResponseRedirect(_confirmation(False, payment.invoice))
         ok_ = bool(settled.get("successful"))
         reference = str((settled.get("response") or {}).get("transactionId") or payment.transaction_id)
         _finish(payment, ok_, reference, error="" if ok_ else str(verified if not verified.get("successful") else settled)[:500])
-        return HttpResponseRedirect(_confirmation(ok_, payment.invoice_id, reference))
+        return HttpResponseRedirect(_confirmation(ok_, payment.invoice, reference))
