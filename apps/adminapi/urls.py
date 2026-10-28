@@ -11,7 +11,10 @@ from apps.storefront import views as storefront
 
 from apps.website.models import MediaAttachment
 
-from .views import auth, banners, categories, collections, comments, configs, customize, dashboard, gallery, products, tags
+from .views import (
+    auth, banners, categories, collections, comments, configs, cooperation, customers, customize, dashboard, gallery,
+    products, tags, users,
+)
 
 urlpatterns = [
     path("Auth/login", auth.LoginView.as_view()),
@@ -62,6 +65,40 @@ urlpatterns = [
     path("RedirectManager/BulkAddOrUpdateRedirects", customize.RedirectBulkView.as_view()),
     path("RedirectManager/DeleteRedirect/<int:redirect_id>", customize.RedirectDeleteView.as_view()),
     path("RedirectManager/Redirect", customize.RedirectGoView.as_view()),
+
+    path("Customer/GetCustomerLablesReport", customers.LabelsView.as_view()),
+    path("Customer/GetCustomers", customers.ListView.as_view()),
+    path("Customer/Add", customers.AddView.as_view()),
+    path("Customer/Update", customers.UpdateView.as_view()),
+    path("Customer/Validation", customers.ValidationView.as_view()),
+    path("Customer/SoftDelete", customers.DeleteView.as_view()),
+    path("Customer/BulletinMembers", customers.BulletinView.as_view()),
+    path("Customer/<int:customer_id>", customers.DetailView.as_view()),
+    path("Job/JobDropdown", customers.JobsView.as_view()),
+    path("Favorite/GetLable", customers.FavoriteLabelView.as_view()),
+    path("Favorite/GetFavoriteMainCategories", customers.FavoriteMainCategoriesView.as_view()),
+    path("Favorite/GetFavoriteCategories", customers.FavoriteCategoriesView.as_view()),
+    path("Favorite/GetFiveCustomer", customers.FavoriteCustomersView.as_view()),
+    path("Favorite/GetFiveProduct", customers.FavoriteProductsView.as_view()),
+    path("Favorite/GetFavoriteFeatures", customers.FavoriteFeaturesView.as_view()),
+
+    path("User/GetUsers", users.ListView.as_view()),
+    path("User/GetDashboardUsers", users.DashboardUsersView.as_view()),
+    path("User/Add", users.AddView.as_view()),
+    path("User/Upadate", users.UpdateView.as_view()),
+    path("User/UpadateUser", users.UpdateNameView.as_view()),
+    path("User/ChangeSmsState/<int:user_id>", users.SmsStateView.as_view()),
+    path("User/ValidationUserName", users.ValidateUsernameView.as_view()),
+    path("User/SoftDelete", users.DeleteView.as_view()),
+    path("User/GetAllRole", users.RolesView.as_view()),
+    path("User/AddRole", users.AddRoleView.as_view()),
+
+    path("Cooperation/GetAllCooperationRequests", cooperation.ListView.as_view()),
+    *[
+        path(f"Cooperation/Get{name}CooperationRequests", cooperation.ListView.as_view(state=state))
+        for name, state in cooperation.LISTS.items()
+    ],
+    *[path(f"Cooperation/{name}", cooperation.ActionView.as_view(action=name)) for name in cooperation.ACTIONS],
 
     path("ShippingMethod", configs.ShippingCreateView.as_view()),
     path("ShippingMethod/All", configs.ShippingListView.as_view()),

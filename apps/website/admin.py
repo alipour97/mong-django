@@ -393,3 +393,17 @@ class CustomerAdmin(LegacyAdmin):
     readonly_fields = ("samian_checked_at",)
     date_hierarchy = "created"
     inlines = [CustomerAddressInline, CustomerFavoriteInline]
+
+
+@admin.register(m.Job)
+class JobAdmin(LegacyAdmin):
+    list_display = ("id", "title")
+    search_fields = ("title",)
+
+
+@admin.register(m.CooperationRequest)
+class CooperationRequestAdmin(LegacyAdmin):
+    list_display = ("id", "first_name", "last_name", "cellphone", "job_position_title", "state", "created")
+    list_filter = ("state",)
+    search_fields = ("first_name", "last_name", "cellphone", "email", "job_position_title")
+    date_hierarchy = "created"

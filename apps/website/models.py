@@ -872,6 +872,21 @@ def online_warehouse_ids() -> list[int]:
 # linked by mobile; what Samian does not have (favorites, newsletter, site
 # addresses with map points) lives here. Legacy ids are kept so imported
 # favorites and addresses stay attached.
+class Job(LegacyMixin):
+    """Occupations a customer can pick in their profile."""
+
+    id = models.BigAutoField(primary_key=True)
+    title = models.CharField(_("عنوان"), max_length=255)
+
+    class Meta:
+        verbose_name = _("شغل")
+        verbose_name_plural = _("شغل‌ها")
+        ordering = ("id",)
+
+    def __str__(self) -> str:
+        return self.title
+
+
 class Customer(LegacyMixin):
     id = models.BigAutoField(primary_key=True)
     first_name = models.CharField(_("نام"), max_length=150, blank=True, default="")
@@ -961,3 +976,35 @@ class HiddenImage(models.Model):
 
     def __str__(self) -> str:
         return self.key
+
+
+class CooperationRequest(LegacyMixin):
+    """A job application sent from the cooperation page; the resume is a MediaAttachment (table 100)."""
+
+    class State(models.IntegerChoices):
+        NEW = 0, _("جدید")
+        SEEN = 1, _("مشاهده شده")
+        PICK = 2, _("باز شده")
+        IN_PROGRESS = 3, _("در حال بررسی")
+        ACCEPT = 4, _("پذیرفته شده")
+        REJECT = 5, _("رد شده")
+
+    id = models.BigAutoField(primary_key=True)
+    first_name = models.CharField(_("نام"), max_length=150, blank=True, default="")
+    last_name = models.CharField(_("نام خانوادگی"), max_length=150, blank=True, default="")
+    cellphone = models.CharField(_("موبایل"), max_length=20, blank=True, default="")
+    email = models.CharField(_("ایمیل"), max_length=254, blank=True, default="")
+    address = models.TextField(_("آدرس"), blank=True, default="")
+    additional_info = models.TextField(_("توضیحات"), blank=True, default="")
+    job_position_title = models.CharField(_("موقعیت شغلی"), max_length=255, blank=True, default="")
+    state = models.IntegerField(_("وضعیت"), choices=State.choices, default=State.NEW)
+    reason = models.TextField(_("یادداشت‌ها"), blank=True, default="")
+    last_time_action = models.DateTimeField(_("آخرین اقدام"), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("درخواست همکاری")
+        verbose_name_plural = _("درخواست‌های همکاری")
+        ordering = ("-id",)
+
+    def __str__(self) -> str:
+        return f"{self.first_name} {self.last_name} ({self.job_position_title})".strip()

@@ -287,6 +287,17 @@ SPECS += [
     Spec(m.FileMediaTag, "SELECT * FROM FileMediaTags", lambda r: {
         "id": r["Id"], "file_media_id": r["FileMediaId"], "tag_id": r["TagId"], **legacy(r),
     }, "gallery", {"file_media_id": (m.FileMedia, True), "tag_id": (m.FileTag, True)}),
+    Spec(m.Job, "SELECT * FROM Jobs", lambda r: {
+        "id": r["Id"], "title": _s(r["Title"]), **legacy(r),
+    }, "jobs"),
+    # ---------------------------------------------------------------- cooperation
+    # Not part of the default run either: the site will take new requests.
+    Spec(m.CooperationRequest, "SELECT * FROM CooperationRequests", lambda r: {
+        "id": r["Id"], "first_name": _s(r["FirstName"]), "last_name": _s(r["LastName"]),
+        "cellphone": _s(r["CellPhone"]), "email": _s(r["Email"]), "address": _s(r["Address"]),
+        "additional_info": _s(r["AdditionalInfo"]), "job_position_title": _s(r["JobPositionTitle"]),
+        "state": r["State"] or 0, "reason": _s(r["Reason"]), "last_time_action": r["LastTimeAction"], **legacy(r),
+    }, "cooperation"),
     # ---------------------------------------------------------------- customers
     # Not part of the default run: once the new site takes sign-ups, a refresh
     # would delete them. Duplicate mobiles are merged into the oldest account.
@@ -311,7 +322,7 @@ SPECS += [
 ]
 
 GROUPS = sorted({s.group for s in SPECS})
-DEFAULT_GROUPS = [g for g in GROUPS if g != "customers"]
+DEFAULT_GROUPS = [g for g in GROUPS if g not in ("customers", "cooperation")]
 
 # Rows that point at their own table (parent_id) are inserted with the link
 # empty first and patched afterwards, so insert order does not matter.
