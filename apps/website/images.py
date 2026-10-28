@@ -27,7 +27,7 @@ from pathlib import Path
 
 from django.conf import settings
 
-QUALITY = 80
+QUALITY = 75
 WIDTHS = (384, 640, 828, 1080, 1920)
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 LEGACY_CDN = re.compile(r"https?://cdn\.mong\.ir/([^?\"'\s]+)")
@@ -118,7 +118,7 @@ def build(key: str, data: bytes) -> int:
         for name, width in targets:
             frame = im if width is None else im.resize((width, round(im.height * width / im.width)), Image.LANCZOS)
             tmp = out / f".{name}.webp.tmp"
-            frame.save(tmp, "WEBP", quality=QUALITY, method=4)
+            frame.save(tmp, "WEBP", quality=QUALITY, method=6)
             tmp.replace(out / f"{name}.webp")
             written += (out / f"{name}.webp").stat().st_size
     return written

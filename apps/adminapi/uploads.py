@@ -89,6 +89,56 @@ def optimize_video(target_path: Path) -> Path:
         temp_output.replace(output_path)
         if target_path != output_path and target_path.exists():
             target_path.unlink(missing_ok=True)
+
+        # Generate lightweight desktop WebP poster (1280px) and mobile WebP poster (640px, ~18KB)
+        poster_path = output_path.with_name(f"{output_path.stem}_poster.webp")
+        poster_m_path = output_path.with_name(f"{output_path.stem}_poster_mobile.webp")
+        poster_cmd = [
+            ffmpeg_bin,
+            "-y",
+            "-ss", "00:00:00.000",
+            "-i", str(output_path),
+            "-vframes", "1",
+            "-vf", "scale='min(1280,iw)':-1",
+            "-q:v", "75",
+            str(poster_path),
+        ]
+        poster_m_cmd = [
+            ffmpeg_bin,
+            "-y",
+            "-ss", "00:00:00.000",
+            "-i", str(output_path),
+            "-vframes", "1",
+            "-vf", "scale='min(640,iw)':-1",
+            "-q:v", "75",
+            str(poster_m_path),
+        ]
+        try:
+            subprocess.run(poster_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+            subprocess.run(poster_m_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+        except Exception as poster_exc:
+            logger.warning("Could not generate poster thumbnail for %s: %s", output_path, poster_exc)
+
+        # Generate lightweight mobile MP4 (640px wide, ~1MB) for seamless mobile playback
+        mobile_path = output_path.with_name(f"{output_path.stem}_mobile.mp4")
+        mobile_cmd = [
+            ffmpeg_bin,
+            "-y",
+            "-i", str(output_path),
+            "-vf", "scale='min(640,iw)':-2",
+            "-c:v", "libx264",
+            "-crf", "26",
+            "-preset", "slow",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            "-an",
+            str(mobile_path),
+        ]
+        try:
+            subprocess.run(mobile_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+        except Exception as mobile_exc:
+            logger.warning("Could not generate mobile video for %s: %s", output_path, mobile_exc)
+
         return output_path
     except Exception as exc:
         temp_output.unlink(missing_ok=True)
