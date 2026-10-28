@@ -321,6 +321,10 @@ SPECS += [
     Spec(m.ArticleLike, "SELECT * FROM ArticleLikes", lambda r: {
         "id": r["Id"], "article_id": r["ArticleId"], "customer_id": r["CustomerId"], "liked": _b(r["Liked"]), **legacy(r),
     }, "blog", {"article_id": (m.Article, True)}),
+    # Not in the default run: the site takes new reactions.
+    Spec(m.ProductCommentLike, "SELECT * FROM ProductCommentLikes", lambda r: {
+        "id": r["Id"], "comment_id": r["CommentId"], "customer_id": r["CustomerId"], "liked": _b(r["Liked"]), **legacy(r),
+    }, "likes", {"comment_id": (m.ProductComment, True)}),
     # ---------------------------------------------------------------- cooperation
     # Not part of the default run either: the site will take new requests.
     Spec(m.CooperationRequest, "SELECT * FROM CooperationRequests", lambda r: {
@@ -353,7 +357,7 @@ SPECS += [
 ]
 
 GROUPS = sorted({s.group for s in SPECS})
-DEFAULT_GROUPS = [g for g in GROUPS if g not in ("customers", "cooperation", "blog")]
+DEFAULT_GROUPS = [g for g in GROUPS if g not in ("customers", "cooperation", "blog", "likes")]
 
 # Rows that point at their own table (parent_id) are inserted with the link
 # empty first and patched afterwards, so insert order does not matter.

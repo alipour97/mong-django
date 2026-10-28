@@ -536,6 +536,42 @@ class ProductComment(LegacyMixin):
         return self.title or self.comment[:50]
 
 
+class ProductCommentLike(LegacyMixin):
+    """A customer's like (liked) or dislike (not liked) of a product comment; undoing it soft-deletes the row."""
+
+    id = models.BigAutoField(primary_key=True)
+    comment = models.ForeignKey(ProductComment, on_delete=models.CASCADE, related_name="likes")
+    customer_id = models.BigIntegerField(db_index=True)
+    liked = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = _("واکنش به نظر")
+        verbose_name_plural = _("واکنش‌ها به نظرها")
+
+
+class ThirdPartyLog(LegacyMixin):
+    """A visit that arrived from a third party (Torob) to a product page."""
+
+    id = models.BigAutoField(primary_key=True)
+    third_party_name = models.CharField(max_length=128, blank=True, default="")
+    redirect_url = models.TextField(blank=True, default="")
+    ip_address = models.CharField(max_length=64, blank=True, default="")
+    user_agent = models.TextField(blank=True, default="")
+    user_id = models.BigIntegerField(null=True, blank=True)
+    product_variant_id = models.BigIntegerField(null=True, blank=True)
+    price_before_reduction = models.BigIntegerField(null=True, blank=True)
+    reduction = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    image_link = models.TextField(blank=True, default="")
+    action_time = models.DateTimeField(auto_now_add=True, db_index=True)
+    utm_source = models.CharField(max_length=255, blank=True, default="")
+    utm_medium = models.CharField(max_length=255, blank=True, default="")
+    utm_campaign = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        verbose_name = _("لاگ ورود از سایت‌های دیگر")
+        verbose_name_plural = _("لاگ‌های ورود از سایت‌های دیگر")
+
+
 class Redirect(LegacyMixin):
     id = models.BigAutoField(primary_key=True)
     source_url = models.CharField(max_length=1024, db_index=True)

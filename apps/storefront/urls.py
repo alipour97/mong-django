@@ -7,6 +7,7 @@ from django.urls import path, re_path
 
 from . import account as acc
 from . import blog
+from . import interactions as act
 from . import views as v
 
 urlpatterns = [
@@ -34,6 +35,15 @@ urlpatterns = [
     path("Customer/GetCustomerFavoriteProduct", acc.FavoritesView.as_view()),
     path("Customer/AddFavoriteProduct", acc.AddFavoriteView.as_view()),
     path("Customer/DeleteFavoriteProduct", acc.DeleteFavoriteView.as_view()),
+
+    # Comments, likes, forms
+    path("Comment/add", act.ProductCommentAddView.as_view()),
+    path("Comment/add/", act.ProductCommentAddView.as_view()),
+    path("Comment/Reaction", act.ProductCommentReactionView.as_view()),
+    path("Article/AddComment", act.ArticleCommentAddView.as_view()),
+    path("Article/AddArticleLike/<int:article_id>/likes", act.ArticleLikeView.as_view()),
+    path("Cooperation/CooperationRequestSubmit", act.CooperationSubmitView.as_view()),
+    path("ThirdPartyLog/AddThirdPartyLog/AddThirdPartyLog", act.ThirdPartyLogView.as_view()),
 
     # Blog
     path("Article/GetRecentArticles", blog.RecentView.as_view()),

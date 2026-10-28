@@ -25,6 +25,7 @@ from apps.website.models import (
     City,
     Collection,
     CompanyInfo,
+    Customer,
     CustomTheme,
     CustomThemePage,
     FileMedia,
@@ -33,6 +34,7 @@ from apps.website.models import (
     PrimaryConfig,
     Product,
     ProductComment,
+    ProductCommentLike,
     ProductTag,
     Province,
     SelectedProduct,
@@ -422,12 +424,24 @@ class CommentGetByProductIdView(PublicView):
     def get(self, request, product_id: int):
         # Approved ones (status 1); imported rows have is_active off even when approved.
         comments = ProductComment.objects.filter(product_id=product_id, is_deleted=False, status=1).order_by("-id")
+        likes: dict[int, list] = {}
+        for like in ProductCommentLike.objects.filter(comment__in=comments, is_deleted=False):
+            likes.setdefault(like.comment_id, []).append(
+                {"id": like.id, "lastModifiedBy": None, "customerId": like.customer_id, "liked": like.liked,
+                 "commentId": like.comment_id, "productComment": None})
+        names = {c.id: f"{c.first_name} {c.last_name}".strip() for c in Customer.objects.filter(
+            id__in={c.commenter_id for c in comments if c.commenter_id})}
+
+        def commenter(c) -> str | None:
+            # The site shows «ناشناس» for None.
+            return None if c.is_anonymous or c.is_admin_comment else (names.get(c.commenter_id) or None)
+
         data = [
             {
                 "id": c.id, "lastModifiedBy": None, "comment": c.comment, "score": float(c.score),
                 "isAdminComment": c.is_admin_comment, "parentId": c.parent_id, "commenterId": c.commenter_id,
-                "isBuyer": c.is_buyer, "commenterFullName": "", "productId": c.product_id, "isActive": True,
-                "isAnonymous": c.is_anonymous, "parent": None, "productComments": [], "productCommentLikes": [],
+                "isBuyer": c.is_buyer, "commenterFullName": commenter(c), "productId": c.product_id, "isActive": True,
+                "isAnonymous": c.is_anonymous, "parent": None, "productComments": [], "productCommentLikes": likes.get(c.id, []),
                 "title": c.title, "commentMedias": [], "created": iso(c.created),
             }
             for c in comments
