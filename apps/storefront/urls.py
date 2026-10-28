@@ -1,5 +1,5 @@
 """
-URLs for the storefront API (samian.mong.ir/api/v1/...), mirroring api.mong.ir.
+URLs for the storefront API (<SITE_URL>/api/v1/...), mirroring api.mong.ir.
 SearchEngine/* lived on adminapi.mong.ir in the legacy system; both frontend
 base URLs point here for now.
 """

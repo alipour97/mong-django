@@ -123,7 +123,7 @@ class ArticleLikeView(CustomerView):
 
 
 def _save_resume(uploaded) -> str:
-    """Stores the resume under MEDIA_ROOT/resumes/ with a random name; returns its public URL."""
+    """Stores the resume under MEDIA_ROOT/resumes/ with a random name; returns its path (/media/resumes/...)."""
     now = timezone.localtime()
     relative = Path("resumes") / f"{now:%Y}" / f"{now:%m}" / f"{uuid.uuid4().hex}{Path(uploaded.name).suffix.lower()}"
     target = Path(settings.MEDIA_ROOT) / relative
@@ -131,7 +131,7 @@ def _save_resume(uploaded) -> str:
     with target.open("wb") as out:
         for chunk in uploaded.chunks():
             out.write(chunk)
-    return f"{settings.PUBLIC_MEDIA_BASE_URL.rstrip('/')}{settings.MEDIA_URL}{relative.as_posix()}"
+    return f"{settings.MEDIA_URL}{relative.as_posix()}"
 
 
 class CooperationSubmitView(PublicView):

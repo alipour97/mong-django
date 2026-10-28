@@ -34,6 +34,7 @@ from rest_framework.response import Response
 
 from apps.storefront import catalog
 from apps.storefront.views import PublicView, _company_media, _config_value
+from apps.website import images as site_images
 from apps.website.models import Branch, CompanyInfo, MediaAttachment, PrimaryConfig, Redirect, SiteSetting
 
 from .. import products as index
@@ -81,6 +82,11 @@ def _save_branches(value: str) -> None:
     Branch.objects.exclude(id__in=kept).update(show_on_site=False)
 
 
+def _stored_value(value) -> str:
+    """The panel sends back the public URLs it was shown; ours are kept as paths (the API adds the host)."""
+    return site_images.strip_domains_in_text(str(value or ""))
+
+
 def _config_dto(pc: PrimaryConfig) -> dict:
     return {"id": pc.id, "key": pc.key, "value": _config_value(pc)}
 
@@ -103,7 +109,7 @@ class ConfigAddView(AdminView):
         if pc and not pc.is_deleted:
             return fail("این کلید وجود دارد", 400)
         pc = pc or PrimaryConfig(key=key, created=timezone.now())
-        pc.value, pc.is_deleted, pc.last_modified = request.data.get("value") or "", False, timezone.now()
+        pc.value, pc.is_deleted, pc.last_modified = _stored_value(request.data.get("value")), False, timezone.now()
         with transaction.atomic():
             pc.save()
             if key == BUSINESS_DEPARTMENTS:
@@ -119,7 +125,7 @@ class ConfigUpdateView(AdminView):
         key = (request.data.get("key") or pc.key).strip()
         if key != pc.key and PrimaryConfig.objects.filter(key=key).exclude(id=pc.id).exists():
             return fail("این کلید وجود دارد", 400)
-        pc.key, pc.value, pc.last_modified = key, request.data.get("value") or "", timezone.now()
+        pc.key, pc.value, pc.last_modified = key, _stored_value(request.data.get("value")), timezone.now()
         with transaction.atomic():
             pc.save()
             if key == BUSINESS_DEPARTMENTS:

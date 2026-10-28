@@ -3,7 +3,7 @@ Banner/* — the home page banners, as the old Banner controller.
 
 The panel shows public image URLs and sends them back on save; a URL of a
 gallery file is stored as that file's own URL, so banners keep following the
-gallery (and PUBLIC_MEDIA_BASE_URL) like the imported ones.
+gallery (a relative path, made absolute when answering) like the imported ones.
 
     GET  Banner/GetBannerById?id=
     POST Banner/GetAllBanners {search, isActive, pageNumber, pageSize}   isActive missing = active only
@@ -16,6 +16,7 @@ from __future__ import annotations
 from django.utils import timezone
 
 from apps.storefront import catalog
+from apps.website import images as site_images
 from apps.website.models import Banner, FileMedia
 
 from ..envelope import fail, ok
@@ -40,7 +41,7 @@ def _stored_url(url: str, current: Banner | None) -> str:
     for f in FileMedia.objects.filter(is_deleted=False).only("url"):
         if _url(f.url) == url:
             return f.url
-    return url
+    return site_images.strip_domain(url)  # a URL of ours is kept as a path
 
 
 def _banner(request) -> Banner | None:

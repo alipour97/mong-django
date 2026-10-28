@@ -2,6 +2,7 @@
 Django settings for mong_samian project.
 """
 from pathlib import Path
+from urllib.parse import urlsplit
 import os
 from dotenv import load_dotenv
 
@@ -14,10 +15,16 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "mong-secret-key-development-stage-s
 
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in ("true", "1", "yes")
 
-ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "samian.mong.ir,localhost,127.0.0.1,0.0.0.0").split(",")
-ALLOWED_HOSTS = [h.strip() for h in ALLOWED_HOSTS if h.strip()]
-if "testserver" not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append("testserver")
+# The one address of the site (backend, panel and storefront behind one domain).
+# Moving to a new domain or VPS means changing SITE_URL in the root .env only;
+# the frontend reads the same file (mong_front/next.config.ts).
+SITE_URL = os.getenv("SITE_URL", "http://localhost:8800").rstrip("/")
+SITE_HOST = urlsplit(SITE_URL).hostname or "localhost"
+
+ALLOWED_HOSTS = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",") if h.strip()]
+for host in (SITE_HOST, "localhost", "127.0.0.1", "0.0.0.0", "testserver"):
+    if host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(host)
 
 # Application definition
 INSTALLED_APPS = [
@@ -98,10 +105,18 @@ TIME_ZONE = "Asia/Tehran"
 USE_I18N = True
 USE_TZ = True
 
-# Public site address, used to turn local media paths into absolute URLs
-PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://samian.mong.ir")
-# Where /img/ and /cdn/ are served from; set to a CDN address to move images there.
-PUBLIC_MEDIA_BASE_URL = os.getenv("PUBLIC_MEDIA_BASE_URL", PUBLIC_BASE_URL)
+# Public site address, used to turn local media paths into absolute URLs when
+# answering. The database keeps only relative paths (/media/..., /img/...).
+PUBLIC_BASE_URL = SITE_URL
+# Where /media/, /img/ and /cdn/ are served from; set to a CDN address to move them there.
+PUBLIC_MEDIA_BASE_URL = os.getenv("PUBLIC_MEDIA_BASE_URL", "").rstrip("/") or SITE_URL
+# Hosts whose URLs are ours: stored as relative paths. Old domains go in OLD_SITE_HOSTS
+# so URLs saved under them are recognised (strip_hardcoded_domains, uploads, panel saves).
+OWN_HOSTS = {
+    h.strip().lower() for h in [SITE_HOST, urlsplit(PUBLIC_MEDIA_BASE_URL).hostname or "",
+                                *os.getenv("OLD_SITE_HOSTS", "samian.mong.ir,us.mong.ir").split(",")]
+    if h.strip()
+}
 # URL path of the pre-built images. nginx serves /img/ statically (deploy/nginx/);
 # until that block is installed use /api/img, which nginx already passes to Django.
 PUBLIC_IMG_PATH = os.getenv("PUBLIC_IMG_PATH", "/img").rstrip("/")
@@ -126,15 +141,17 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # CORS Configuration
 CORS_ALLOW_ALL_ORIGINS = DEBUG
-CORS_ALLOWED_ORIGINS = [
+CORS_ALLOWED_ORIGINS = list(dict.fromkeys([
     "http://localhost:3000",
     "http://localhost:3300",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3300",
-    "https://samian.mong.ir",
-    "http://samian.mong.ir",
-]
+    SITE_URL,
+    f"https://{SITE_HOST}",
+    f"http://{SITE_HOST}",
+]))
 CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys([SITE_URL, f"https://{SITE_HOST}"]))
 CORS_ALLOW_HEADERS = [
     "accept",
     "accept-encoding",
@@ -217,7 +234,7 @@ SMSIR_INVOICE_TEMPLATE_ID = int(os.getenv("SMSIR_INVOICE_TEMPLATE_ID", "725839")
 SMSIR_INVOICE_PARAM = os.getenv("SMSIR_INVOICE_PARAM", "INVOICE")
 
 # Online payment. SITE_URL is the storefront the customer returns to after paying.
-SITE_URL = os.getenv("SITE_URL", PUBLIC_BASE_URL).rstrip("/")
+# (SITE_URL, defined at the top, is also the storefront the customer returns to after paying.)
 ZARINPAL_MERCHANT_ID = os.getenv("ZARINPAL_KEY", "")
 ZARINPAL_SANDBOX = os.getenv("ZARINPAL_SANDBOX", "false").lower() in ("1", "true", "yes")
 # SnappPay is offered only once SNAPPAY_BASE_URL (given by SnappPay with the merchant account) is set.

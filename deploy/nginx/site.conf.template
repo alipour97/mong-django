@@ -1,0 +1,118 @@
+# nginx site for the domain in the root .env (SITE_URL). Do not edit the
+# generated file; edit this template and run deploy/render_nginx.sh.
+#
+# Placeholders: ${SITE_HOST}, ${PROJECT_DIR}, ${LEGACY_CDN_ROOT}. nginx's own
+# variables ($host, $uri, ...) are left alone by the render script.
+# Needs deploy/nginx/mong-img-map.conf in /etc/nginx/conf.d/ ($mong_img_w).
+# HTTPS: after installing, `sudo certbot --nginx -d ${SITE_HOST}` adds the 443
+# server and the http->https redirect to the installed copy.
+
+# نگاشت برای پشتیبانی همزمان از وب‌سوکت و Keep-Alive
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      '';
+}
+
+# استخر اتصالات ماندگار به فرانت‌اند Next.js
+upstream nextjs_upstream {
+    server 127.0.0.1:3300;
+    keepalive 64;
+}
+
+# استخر اتصالات ماندگار به بک‌اند جنگو
+upstream django_upstream {
+    server 127.0.0.1:8800;
+    keepalive 32;
+}
+
+server {
+    server_name ${SITE_HOST};
+
+    # مسیر تاییدیه Let's Encrypt / Certbot
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        allow all;
+    }
+
+    client_max_body_size 50M;
+
+    # ۱. روتینگ وب‌سرویس‌ها و API جنگو (Backend - Port 8800)
+    location /api/ {
+        proxy_pass http://django_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+        proxy_connect_timeout 60s;
+    }
+
+    # ۲. روتینگ فایل‌های مدیا و آپلود جنگو
+    location /media/ {
+        alias ${PROJECT_DIR}/media/;
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000, immutable";
+    }
+
+    # ۳. روتینگ استاتیک جنگو (پنل ادمین جنگو)
+    location /static-backend/ {
+        alias ${PROJECT_DIR}/static/;
+        sendfile on;
+        tcp_nopush on;
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000, immutable";
+    }
+
+    # ۴. روتینگ پنل ادمین جنگو
+    location /django-admin/ {
+        proxy_pass http://django_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /img/ {
+        root ${PROJECT_DIR}/media;
+        default_type image/webp;
+        try_files $uri/$mong_img_w.webp $uri/full.webp =404;
+        expires 365d;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    # ۵. روتینگ فایل‌های CDN محلی
+    location /cdn/ {
+        alias ${LEGACY_CDN_ROOT}/;
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000, immutable";
+    }
+
+    # ۶. روتینگ کل فرانت‌اند Next.js (Frontend - Port 3300)
+    location / {
+        proxy_pass http://nextjs_upstream;
+        proxy_http_version 1.1;
+
+        # تنظیمات هوشمند برای WebSocket و Keep-Alive
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+    }
+
+    listen 80;
+    listen [::]:80;
+}

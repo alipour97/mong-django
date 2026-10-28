@@ -1,5 +1,5 @@
 """
-Storefront API v1 (samian.mong.ir/api/v1/...), a drop-in for the legacy
+Storefront API v1 (<SITE_URL>/api/v1/...), a drop-in for the legacy
 api.mong.ir so the unchanged Next.js frontend works against it.
 
 Response shapes are checked against real responses saved in

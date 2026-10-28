@@ -7,8 +7,9 @@ Photos (jpg, png, webp, bmp, tiff) also get the site's WebP versions at
 to WebP; gif, svg, ico are served as uploaded from /media/.
 Videos (mov, mp4, etc.) are automatically transcoded to web-optimized MP4
 with H.264 codec and FastStart (moov atom at byte 0) for zero-latency streaming.
-The URL stored on FileMedia is public (PUBLIC_MEDIA_BASE_URL), so moving to a
-CDN works as for every other image.
+FileMedia keeps a relative path (/media/uploads/..., /img/u/<id>); the API adds
+the current PUBLIC_MEDIA_BASE_URL when answering, so a new domain or a CDN
+needs no change in the data.
 """
 from __future__ import annotations
 
@@ -147,7 +148,7 @@ def optimize_video(target_path: Path) -> Path:
 
 
 def save(uploaded) -> dict:
-    """Store an UploadedFile. -> {url, format_id, width, height, size, local_path}"""
+    """Store an UploadedFile. -> {url (a relative path), format_id, width, height, size, local_path}"""
     ext = Path(uploaded.name or "").suffix.lower().lstrip(".")
     fmt = FileFormat.objects.filter(extension=ext, is_deleted=False).first()
     if fmt is None:
@@ -161,7 +162,7 @@ def save(uploaded) -> dict:
     target.write_bytes(data)
 
     width = height = None
-    url = f"{settings.PUBLIC_MEDIA_BASE_URL.rstrip('/')}{settings.MEDIA_URL}{relative.as_posix()}"
+    url = f"{settings.MEDIA_URL}{relative.as_posix()}"
 
     if ext in CONVERT_IMAGES:
         from PIL import Image
@@ -176,7 +177,7 @@ def save(uploaded) -> dict:
             raise UploadError("فایل تصویر معتبر نیست") from exc
         key = f"u/{file_id}"
         images.build(key, data)
-        url = images.public_url(key)
+        url = images.relative_url(key)
         fmt = FileFormat.objects.filter(extension="webp").first() or fmt
 
     elif ext in CONVERT_VIDEOS:
@@ -185,7 +186,7 @@ def save(uploaded) -> dict:
             target = optimized_target
             ext = "mp4"
             relative = target.relative_to(settings.MEDIA_ROOT)
-            url = f"{settings.PUBLIC_MEDIA_BASE_URL.rstrip('/')}{settings.MEDIA_URL}{relative.as_posix()}"
+            url = f"{settings.MEDIA_URL}{relative.as_posix()}"
             fmt = FileFormat.objects.filter(extension="mp4").first() or fmt
 
     file_size = target.stat().st_size if target.exists() else len(data)

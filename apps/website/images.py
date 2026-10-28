@@ -37,8 +37,37 @@ def img_root() -> Path:
     return Path(settings.MEDIA_ROOT) / "img"
 
 
+def relative_url(key: str) -> str:
+    """What the database keeps for a built image: a path, never a domain."""
+    return f"{settings.PUBLIC_IMG_PATH}/{key}"
+
+
 def public_url(key: str) -> str:
-    return f"{settings.PUBLIC_MEDIA_BASE_URL.rstrip('/')}{settings.PUBLIC_IMG_PATH}/{key}"
+    return f"{settings.PUBLIC_MEDIA_BASE_URL.rstrip('/')}{relative_url(key)}"
+
+
+OWN_URL = re.compile(r"(?i)\bhttps?://([a-z0-9.-]+)(?::\d+)?(?=/)")
+LOCAL_PATHS = ("/media/", "/img/", "/cdn/", "/api/img/", "/api/cdn/")
+
+
+def _own(m: re.Match) -> str:
+    return "" if m.group(1).lower() in settings.OWN_HOSTS else m.group(0)
+
+
+def strip_domain(url: str) -> str:
+    """Our own absolute URL -> its path (https://site/media/x.webp -> /media/x.webp); others unchanged."""
+    m = OWN_URL.match(url or "")
+    return url[m.end():] if m and m.group(1).lower() in settings.OWN_HOSTS else url
+
+
+def strip_domains_in_text(text: str) -> str:
+    """strip_domain for every URL inside a JSON/HTML string (PrimaryConfig values)."""
+    return OWN_URL.sub(_own, text) if text else text
+
+
+def absolute_media(path: str) -> str:
+    """A stored local path (/media/..., /img/...) as a URL on the current media host."""
+    return f"{settings.PUBLIC_MEDIA_BASE_URL.rstrip('/')}{path}"
 
 
 def is_built(key: str) -> bool:
@@ -84,6 +113,9 @@ def site_media_url(url: str) -> str:
     """
     if not url:
         return url
+    url = strip_domain(url)  # rows saved before paths were relative
+    if url.startswith(LOCAL_PATHS):
+        return absolute_media(url)
     key = legacy_key(url)
     if key and is_built(key):
         return public_url(key)
@@ -93,11 +125,16 @@ def site_media_url(url: str) -> str:
     return url
 
 
+LOCAL_IN_TEXT = re.compile(r"""(?<=["'(=])(/(?:media|img|cdn|api/img|api/cdn)/)""")
+
+
 def rewrite_media_in_text(text: str) -> str:
-    """Rewrite every cdn.mong.ir URL inside a JSON/HTML string (PrimaryConfig values)."""
-    if not text or "cdn.mong.ir" not in text:
+    """Public URLs inside a JSON/HTML string (PrimaryConfig values): local paths on the current
+    media host, cdn.mong.ir files on our copy."""
+    if not text:
         return text
-    return LEGACY_CDN.sub(lambda m: site_media_url(m.group(0)), text)
+    text = LOCAL_IN_TEXT.sub(lambda m: absolute_media(m.group(1)), strip_domains_in_text(text))
+    return LEGACY_CDN.sub(lambda m: site_media_url(m.group(0)), text) if "cdn.mong.ir" in text else text
 
 
 # -----------------------------------------------------------------------------
