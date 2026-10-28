@@ -35,3 +35,21 @@ def paginated(items: list, page_number: int, page_size: int, convert=None) -> di
         "pageSize": page_size,
         "items": [convert(x) for x in page] if convert else page,
     }
+
+
+def sort_spec(q, allowed) -> tuple[str | None, bool]:
+    """(SortBy, SortDesc) from the panel's table, SortBy only when it is one of allowed."""
+    key = (q.get("SortBy") or "").strip()
+    return (key if key in allowed else None), bool(to_bool(q.get("SortDesc")))
+
+
+def sort_rows(rows: list, q, keys: dict) -> list:
+    """Sorts all rows (before paging) by the column the panel asked for; keys maps SortBy -> value of a row.
+    Rows without a value go last either way."""
+    key, desc = sort_spec(q, keys)
+    if key is None:
+        return rows
+    value = keys[key]
+    present = [r for r in rows if value(r) is not None]
+    missing = [r for r in rows if value(r) is None]
+    return sorted(present, key=value, reverse=desc) + missing

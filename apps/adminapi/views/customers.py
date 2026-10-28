@@ -30,11 +30,11 @@ from apps.samian.models import SamianSalesTransaction
 from apps.smsir import normalize_mobile
 from apps.storefront import catalog
 from apps.storefront.envelope import _g2j, jalali
-from apps.website.models import Category, CompanyInfo, Customer, CustomerFavoriteProduct, FeatureValue, Job, Product
+from apps.website.models import Category, CompanyInfo, Customer, CustomerFavoriteProduct, FeatureValue, Invoice, Job, Product
 
 from .. import products as index
 from ..envelope import fail, ok
-from ..paging import paginated, to_bool, to_int
+from ..paging import paginated, sort_rows, to_bool, to_int
 from .auth import AdminView
 from .comments import _date
 
@@ -46,13 +46,20 @@ def _customers():
 
 
 def _purchases(customers) -> dict[int, int]:
-    """customer id -> number of their online orders in Samian (the panel's invoices; store purchases are not counted)."""
+    """customer id -> number of their online orders: in Samian, plus paid site orders not sent there yet
+    (the panel's invoices; store purchases are not counted)."""
     samian = {c.samian_customer_id: c.id for c in customers if c.samian_customer_id}
     counts = (
         SamianSalesTransaction.objects.filter(samian_customer_id__in=samian, store_order_id__isnull=False)
         .values_list("samian_customer_id").annotate(n=Count("pk"))
     )
-    return {samian[sid]: n for sid, n in counts}
+    out = {samian[sid]: n for sid, n in counts}
+    for cid, n in (
+        Invoice.objects.filter(customer_id__in=[c.id for c in customers], is_deleted=False, samian_transaction_id__isnull=True,
+                               state=Invoice.State.SUCCESSFUL).values_list("customer_id").annotate(n=Count("pk"))
+    ):
+        out[cid] = out.get(cid, 0) + n
+    return out
 
 
 def _month_start():
@@ -97,6 +104,9 @@ class ListView(AdminView):
                 c for c in customers
                 if (not low or low <= 0 or purchases.get(c.id, 0) >= low) and (not high or high <= 0 or purchases.get(c.id, 0) <= high)
             ]
+        customers = sort_rows(customers, q, {
+            "invoiceCount": lambda c: purchases.get(c.id, 0), "registrationDate": lambda c: c.created,
+        })
         jobs = dict(Job.objects.values_list("id", "title"))
 
         def item(c: Customer) -> dict:

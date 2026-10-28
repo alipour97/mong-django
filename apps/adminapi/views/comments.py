@@ -27,7 +27,7 @@ from apps.website.models import ArticleComment, Customer, ProductComment
 
 from ..envelope import fail, ok
 from ..models import AdminUser
-from ..paging import paginated, to_int
+from ..paging import paginated, sort_rows, to_int
 from .auth import AdminView
 from .gallery import _url
 
@@ -117,6 +117,11 @@ class FilteredView(AdminView):
                 qs = qs.filter(Q(title__icontains=search) | Q(comment__icontains=search))
             comments += list(qs)
         comments.sort(key=lambda c: (c.created or timezone.now(), c.id), reverse=True)
+        comments = sort_rows(comments, q, {
+            "score": lambda c: float(c.score or 0), "createDate": lambda c: c.created,
+            "confirmedDate": lambda c: c.last_modified if c.status == APPROVED else None,
+            "rejectedDate": lambda c: c.last_modified if c.status == REJECTED else None,
+        })
         customers = Customer.objects.in_bulk([c.commenter_id for c in comments if c.commenter_id])
         admins = _admin_names({c.verified_by_user_id for c in comments})
 

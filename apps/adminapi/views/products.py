@@ -40,7 +40,7 @@ from apps.website.models import (
 
 from .. import products as index
 from ..envelope import fail, ok
-from ..paging import int_list, paginated, to_bool, to_int
+from ..paging import int_list, paginated, to_bool, to_int, sort_rows
 from .auth import AdminView
 
 NOT_FOUND = "محصولی با این شناسه پیدا نشد."
@@ -127,6 +127,10 @@ class ListView(AdminView):
             if want is not None:
                 rows = [r for r in rows if attr(r) == want]
 
+        rows = sort_rows(rows, q, {
+            "price": lambda r: r.price, "reduction": lambda r: r.reduction, "mediaCount": lambda r: r.media_count,
+            "qty": lambda r: r.qty, "isSaleable": lambda r: r.is_saleable,
+        })
         page = paginated(rows, to_int(q.get("pageNumber"), 1), to_int(q.get("pageSize"), 10))
         pids = [r.id for r in page["items"]]
         bundle = catalog.ProductBundle.load(pids, with_images=False)

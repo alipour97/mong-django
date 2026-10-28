@@ -39,7 +39,7 @@ from apps.storefront.envelope import jalali
 from apps.website.models import City, CompanyInfo, Customer, Invoice, Product, ProductComment, ProductSamianLink, Province
 
 from ..envelope import fail, ok
-from ..paging import to_bool, to_int
+from ..paging import sort_spec, to_bool, to_int
 from .auth import AdminView
 from .comments import _date
 from .dashboard import _aware, month_range, today_j
@@ -274,19 +274,32 @@ def _headers(txs: list) -> list[dict]:
 
 
 def _page(qs, q, site_qs=None) -> dict:
-    """One page of Samian receipts and site orders together, newest first."""
+    """One page of Samian receipts and site orders together, newest first or by the column the panel sorts."""
     size, number = max(to_int(q.get("pageSize"), 10), 1), max(to_int(q.get("pageNumber"), 1), 1)
     site_qs = site_qs if site_qs is not None else Invoice.objects.none()
     total = qs.count() + site_qs.count()
     upto = number * size
-    txs = list(qs.order_by("-transaction_date", "-samian_id")[:upto])
-    site = list(site_qs.order_by("-created", "-id")[:upto])
+    key, desc = sort_spec(q, ("qty", "payableAmount", "createDate"))
+    key = key or "createDate"
+    desc = desc if q.get("SortBy") else True
     oldest = timezone.make_aware(datetime.min.replace(year=2000))
-    merged = sorted([(t.transaction_date or oldest, t) for t in txs] + [(i.created, i) for i in site],
-                    key=lambda x: x[0], reverse=True)[(number - 1) * size: upto]
-    receipts = _headers([obj for _, obj in merged if isinstance(obj, SamianSalesTransaction)])
+    # Each side sorted in the database by the same value, then merged.
+    if key == "qty":
+        qs = qs.order_by(("-" if desc else "") + "units", "-samian_id")
+        site_qs = site_qs.annotate(units=Coalesce(Sum("lines__qty"), Value(0), output_field=DecimalField())).order_by(("-" if desc else "") + "units", "-id")
+        value = lambda obj: float(obj.units)  # noqa: E731
+    elif key == "payableAmount":
+        qs = qs.annotate(payable=F("revenue") + F("vat_amount") + F("shipment_price")).order_by(("-" if desc else "") + "payable", "-samian_id")
+        site_qs = site_qs.order_by(("-" if desc else "") + "payable_amount", "-id")
+        value = lambda obj: obj.payable if isinstance(obj, SamianSalesTransaction) else obj.payable_amount  # noqa: E731
+    else:
+        qs = qs.order_by(("-" if desc else "") + "transaction_date", "-samian_id")
+        site_qs = site_qs.order_by(("-" if desc else "") + "created", "-id")
+        value = lambda obj: (obj.transaction_date or oldest) if isinstance(obj, SamianSalesTransaction) else obj.created  # noqa: E731
+    merged = sorted(list(qs[:upto]) + list(site_qs[:upto]), key=value, reverse=desc)[(number - 1) * size: upto]
+    receipts = _headers([obj for obj in merged if isinstance(obj, SamianSalesTransaction)])
     by_id = {h["id"]: h for h in receipts}
-    items = [by_id[obj.samian_id] if isinstance(obj, SamianSalesTransaction) else _site_header(obj) for _, obj in merged]
+    items = [by_id[obj.samian_id] if isinstance(obj, SamianSalesTransaction) else _site_header(obj) for obj in merged]
     return {"totalCount": total, "totalPages": math.ceil(total / size), "pageNumber": number, "pageSize": size, "items": items}
 
 
