@@ -431,3 +431,39 @@ class ArticleTagAdmin(LegacyAdmin):
 class ArticleCommentAdmin(LegacyAdmin):
     list_display = ("id", "article", "title", "status", "created")
     list_filter = ("status",)
+
+
+class InvoiceLineInline(admin.TabularInline):
+    model = m.InvoiceLine
+    extra = 0
+    can_delete = False
+    readonly_fields = ("product", "variant_id", "barcode", "name", "color_name", "size_name", "qty", "price", "reduction",
+                       "price_after_reduction")
+    fields = readonly_fields
+
+
+class InvoicePaymentInline(admin.TabularInline):
+    model = m.InvoicePayment
+    extra = 0
+    can_delete = False
+    readonly_fields = ("gateway", "amount", "authority", "transaction_id", "reference", "card_pan", "is_success",
+                       "error_message", "created", "verified_at")
+    fields = readonly_fields
+
+
+@admin.register(m.Invoice)
+class InvoiceAdmin(admin.ModelAdmin):
+    """Site orders; read only here (they change through checkout and, later, Samian)."""
+
+    list_display = ("id", "customer", "state", "payable_amount", "shipping_method", "paid_at", "samian_transaction_id", "created")
+    list_filter = ("state", "shipping_method")
+    search_fields = ("id", "customer__cellphone", "customer__first_name", "customer__last_name")
+    date_hierarchy = "created"
+    inlines = [InvoiceLineInline, InvoicePaymentInline]
+    readonly_fields = [f.name for f in m.Invoice._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
