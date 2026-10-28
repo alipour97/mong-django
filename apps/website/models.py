@@ -904,6 +904,9 @@ class Customer(LegacyMixin):
         related_name="site_customers", verbose_name=_("مشتری سامیان"),
     )
     samian_checked_at = models.DateTimeField(_("آخرین جستجو در سامیان"), null=True, blank=True)
+    # A Django password hash; empty until the customer sets one (sign-in is by SMS code otherwise).
+    # Dadehfa's own hashes were not carried over.
+    password = models.CharField(_("رمز عبور"), max_length=256, blank=True, default="")
 
     class Meta:
         verbose_name = _("مشتری سایت")
@@ -912,6 +915,30 @@ class Customer(LegacyMixin):
 
     def __str__(self) -> str:
         return f"{self.first_name} {self.last_name} ({self.cellphone})".strip()
+
+    def set_password(self, raw: str) -> None:
+        from django.contrib.auth.hashers import make_password
+        self.password = make_password(raw)
+
+    def check_password(self, raw: str) -> bool:
+        from django.contrib.auth.hashers import check_password
+        return bool(self.password) and check_password(raw, self.password)
+
+
+class CustomerOtp(models.Model):
+    """A sign-in code sent to a mobile by SMS (also before the customer has an account). Only its hash is stored."""
+
+    cellphone = models.CharField(max_length=20, db_index=True)
+    code_hash = models.CharField(max_length=256)
+    created = models.DateTimeField(auto_now_add=True)
+    expires = models.DateTimeField()
+    attempts = models.PositiveSmallIntegerField(default=0)
+    used = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = _("کد ورود مشتری")
+        verbose_name_plural = _("کدهای ورود مشتری")
+        ordering = ("-created",)
 
 
 class CustomerAddress(LegacyMixin):

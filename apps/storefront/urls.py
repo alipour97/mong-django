@@ -5,6 +5,7 @@ base URLs point here for now.
 """
 from django.urls import path, re_path
 
+from . import account as acc
 from . import blog
 from . import views as v
 
@@ -15,6 +16,24 @@ urlpatterns = [
     path("CompanyInfo/GetCompanyInfo", v.CompanyInfoView.as_view()),
     path("Setting/GetDefaultTheme", v.SettingGetDefaultThemeView.as_view()),
     path("SortCriteria/GetAll", v.SortCriteriaGetAllView.as_view()),
+
+    # Customer sign-in and account
+    path("Authentication/CustomerAthenticateInfo", acc.AuthenticateInfoView.as_view()),
+    path("Authentication/SendOtpCode", acc.SendOtpView.as_view()),
+    path("Authentication/CustomerAuthenticate", acc.AuthenticateView.as_view()),
+    path("Customer/SignUp", acc.SignUpView.as_view()),
+    path("Customer/GetMyProfile", acc.ProfileView.as_view()),
+    path("Customer/UpdateMyProfile", acc.UpdateProfileView.as_view()),
+    path("Customer/UpdateMyPassword", acc.UpdatePasswordView.as_view()),
+    path("Customer/GetAllJob", acc.JobsView.as_view()),
+    path("Customer/ActivateBulletin", acc.BulletinView.as_view()),
+    path("Customer/GetCustomerAddress", acc.AddressesView.as_view()),
+    path("Customer/AddCustomerAddress", acc.AddAddressView.as_view()),
+    path("Customer/UpdateCustomerAddress", acc.UpdateAddressView.as_view()),
+    path("Customer/SoftDeleteCustomerAddress", acc.DeleteAddressView.as_view()),
+    path("Customer/GetCustomerFavoriteProduct", acc.FavoritesView.as_view()),
+    path("Customer/AddFavoriteProduct", acc.AddFavoriteView.as_view()),
+    path("Customer/DeleteFavoriteProduct", acc.DeleteFavoriteView.as_view()),
 
     # Blog
     path("Article/GetRecentArticles", blog.RecentView.as_view()),

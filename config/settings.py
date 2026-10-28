@@ -146,6 +146,7 @@ CORS_ALLOW_HEADERS = [
     "x-csrftoken",
     "x-requested-with",
     "companyid",
+    "auth",  # the site sends "auth: true" on signed-in requests
 ]
 
 # Django REST Framework
