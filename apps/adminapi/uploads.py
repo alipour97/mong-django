@@ -4,12 +4,17 @@ Files uploaded in the admin gallery.
 The original is kept under MEDIA_ROOT/uploads/<year>/<month>/<id>.<ext>.
 Photos (jpg, png, webp, bmp, tiff) also get the site's WebP versions at
 /img/u/<id> right away (images.build), like the old panel converted uploads
-to WebP; gif, svg, ico and videos are served as uploaded from /media/.
+to WebP; gif, svg, ico are served as uploaded from /media/.
+Videos (mov, mp4, etc.) are automatically transcoded to web-optimized MP4
+with H.264 codec and FastStart (moov atom at byte 0) for zero-latency streaming.
 The URL stored on FileMedia is public (PUBLIC_MEDIA_BASE_URL), so moving to a
 CDN works as for every other image.
 """
 from __future__ import annotations
 
+import logging
+import shutil
+import subprocess
 import uuid
 from pathlib import Path
 
@@ -19,11 +24,76 @@ from django.utils import timezone
 from apps.website import images
 from apps.website.models import FileFormat
 
-CONVERT = {"jpg", "jpeg", "png", "webp", "bmp", "tiff", "tif"}
+logger = logging.getLogger(__name__)
+
+CONVERT_IMAGES = {"jpg", "jpeg", "png", "webp", "bmp", "tiff", "tif"}
+CONVERT_VIDEOS = {"mov", "mp4", "m4v", "mkv", "avi", "webm", "flv", "wmv"}
 
 
 class UploadError(ValueError):
     pass
+
+
+def get_ffmpeg_binary() -> str | None:
+    """Find system ffmpeg or fallback to imageio-ffmpeg bundled binary."""
+    sys_ffmpeg = shutil.which("ffmpeg")
+    if sys_ffmpeg:
+        return sys_ffmpeg
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+
+
+def optimize_video(target_path: Path) -> Path:
+    """
+    Transcode uploaded video to web-optimized MP4:
+    - H.264 codec (universal browser compatibility)
+    - CRF 23, fast preset (great quality / small file size)
+    - FastStart: moves moov atom to byte 0 for instant playback start
+    - AAC audio (if audio track exists)
+    """
+    ffmpeg_bin = get_ffmpeg_binary()
+    if not ffmpeg_bin:
+        logger.warning("ffmpeg binary not found; keeping original video: %s", target_path)
+        return target_path
+
+    output_path = target_path.with_suffix(".mp4")
+    temp_output = target_path.parent / f"tmp_{output_path.name}"
+
+    cmd = [
+        ffmpeg_bin,
+        "-y",
+        "-i", str(target_path),
+        "-map", "0:v:0",
+        "-map", "0:a?",
+        "-c:v", "libx264",
+        "-crf", "23",
+        "-preset", "fast",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        "-c:a", "aac",
+        "-b:a", "96k",
+        str(temp_output),
+    ]
+
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=180,
+        )
+        temp_output.replace(output_path)
+        if target_path != output_path and target_path.exists():
+            target_path.unlink(missing_ok=True)
+        return output_path
+    except Exception as exc:
+        temp_output.unlink(missing_ok=True)
+        logger.exception("Failed to transcode video %s, keeping original: %s", target_path, exc)
+        return target_path
 
 
 def save(uploaded) -> dict:
@@ -42,7 +112,8 @@ def save(uploaded) -> dict:
 
     width = height = None
     url = f"{settings.PUBLIC_MEDIA_BASE_URL.rstrip('/')}{settings.MEDIA_URL}{relative.as_posix()}"
-    if ext in CONVERT:
+
+    if ext in CONVERT_IMAGES:
         from PIL import Image
 
         try:
@@ -57,6 +128,23 @@ def save(uploaded) -> dict:
         images.build(key, data)
         url = images.public_url(key)
         fmt = FileFormat.objects.filter(extension="webp").first() or fmt
-    return {"url": url, "format_id": fmt.id, "width": width, "height": height, "size": len(data),
-            "local_path": str(relative)}
+
+    elif ext in CONVERT_VIDEOS:
+        optimized_target = optimize_video(target)
+        if optimized_target != target or ext != "mp4":
+            target = optimized_target
+            ext = "mp4"
+            relative = target.relative_to(settings.MEDIA_ROOT)
+            url = f"{settings.PUBLIC_MEDIA_BASE_URL.rstrip('/')}{settings.MEDIA_URL}{relative.as_posix()}"
+            fmt = FileFormat.objects.filter(extension="mp4").first() or fmt
+
+    file_size = target.stat().st_size if target.exists() else len(data)
+    return {
+        "url": url,
+        "format_id": fmt.id,
+        "width": width,
+        "height": height,
+        "size": file_size,
+        "local_path": str(relative),
+    }
 

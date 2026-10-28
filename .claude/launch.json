@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "django-dev",
+      "runtimeExecutable": "/mnt/sda2/mong_samian/.venv/bin/python",
+      "runtimeArgs": ["manage.py", "runserver", "0.0.0.0:8801"],
+      "port": 8801,
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "config.settings"
+      }
+    }
+  ]
+}
