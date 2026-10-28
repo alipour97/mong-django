@@ -1278,3 +1278,40 @@ class InvoicePayment(models.Model):
         verbose_name = _("پرداخت سفارش")
         verbose_name_plural = _("پرداخت‌های سفارش")
         ordering = ("-id",)
+
+
+# -----------------------------------------------------------------------------
+# Payment gateways (configs page in the panel). The site offers the active ones
+# it can talk to (zarinpal, snapppay).
+# -----------------------------------------------------------------------------
+class BankInfo(LegacyMixin):
+    id = models.BigAutoField(primary_key=True)
+    name = models.CharField(_("نام"), max_length=128)
+    key = models.CharField(_("کلید"), max_length=64, unique=True)   # zarinpal, snapppay, saman, ...
+    icon = models.TextField(_("لوگو (base64)"), blank=True, default="")
+
+    class Meta:
+        verbose_name = _("بانک / درگاه")
+        verbose_name_plural = _("بانک‌ها و درگاه‌ها")
+        ordering = ("id",)
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class BankGateway(LegacyMixin):
+    """A configured gateway; is_deleted means switched off in the panel."""
+
+    id = models.BigAutoField(primary_key=True)
+    bank = models.ForeignKey(BankInfo, on_delete=models.PROTECT, related_name="gateways", verbose_name=_("بانک"))
+    merchant = models.CharField(_("مرچنت"), max_length=255, blank=True, default="")
+    terminal_id = models.CharField(_("ترمینال"), max_length=255, blank=True, default="")
+    merchant_key = models.CharField(_("کلید مرچنت"), max_length=255, blank=True, default="")
+
+    class Meta:
+        verbose_name = _("درگاه پرداخت")
+        verbose_name_plural = _("درگاه‌های پرداخت")
+        ordering = ("id",)
+
+    def __str__(self) -> str:
+        return f"{self.bank.name} #{self.id}"

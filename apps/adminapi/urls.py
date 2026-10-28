@@ -139,10 +139,10 @@ urlpatterns = [
     path("ShippingMethod/<int:method_id>", configs.ShippingDetailView.as_view()),
 
     path("Bank/GetGateway", configs.GatewayListView.as_view()),
-    path("Bank/GetInfo", configs.GatewayListView.as_view()),
-    path("Bank/AddBankGateway", configs.GatewayRefuseView.as_view()),
-    path("Bank/UpdateBankGateway", configs.GatewayRefuseView.as_view()),
-    path("Bank/SoftDelete", configs.GatewayRefuseView.as_view()),
+    path("Bank/GetInfo", configs.BankInfoView.as_view()),
+    path("Bank/AddBankGateway", configs.GatewayAddView.as_view()),
+    path("Bank/UpdateBankGateway", configs.GatewayUpdateView.as_view()),
+    path("Bank/SoftDelete", configs.GatewayToggleView.as_view()),
 
     path("ThirdParty/LogSummary", configs.TorobSummaryView.as_view()),
     path("ThirdParty/ProductReport", configs.TorobReportView.as_view()),

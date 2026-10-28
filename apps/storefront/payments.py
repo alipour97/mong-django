@@ -1,7 +1,7 @@
 """
 Paying a pre-invoice (Bank/*), site side: Zarinpal and SnappPay.
 
-    GET  Bank/GetGateways                                  -> [{id, name, iconUrl, gatewayKey}]
+    GET  Bank/GetGateways                                  -> [{id, name, iconUrl, gatewayKey}] (active gateways from the panel)
     GET  Bank/PayInvoiceById?InvoiceId=&ShippingMethodId=&GateWayId=   -> the gateway page URL
     GET  Bank/SnappPayEligible?Amount=                     -> {eligible, title_message, description}
     GET  Bank/GiftCardPayInvoiceById?InvoiceId=&ShippingMethodId=      -> confirmation URL (only a zero-amount invoice)
@@ -29,7 +29,9 @@ from django.http import HttpResponseRedirect
 from django.utils import timezone
 
 from apps import smsir
-from apps.website.models import Invoice, InvoicePayment
+from apps.website.models import BankGateway, Invoice, InvoicePayment
+
+from apps.adminapi.paging import to_int
 
 from .account import CustomerView, answer
 from .orders import S, assign_number
@@ -38,14 +40,40 @@ from .views import PublicView
 logger = logging.getLogger(__name__)
 
 ZARINPAL, SNAPPPAY = "zarinpal", "snapppay"
-GATEWAYS = {1: (ZARINPAL, "زرین‌پال"), 2: (SNAPPPAY, "اسنپ‌پی")}
+SUPPORTED = (ZARINPAL, SNAPPPAY)
 TIMEOUT = 30
+UUID_LEN = 36  # a Zarinpal merchant_id
+
+
+def _active(key: str) -> BankGateway | None:
+    """The gateway switched on in the panel's configs page for this bank key."""
+    return BankGateway.objects.filter(bank__key=key, is_deleted=False).select_related("bank").order_by("-id").first()
+
+
+def zarinpal_merchant() -> str:
+    """The panel gateway's merchant id, else ZARINPAL_KEY from .env."""
+    g = _active(ZARINPAL)
+    for value in ((g.merchant, g.merchant_key, g.terminal_id) if g else ()):
+        if len((value or "").strip()) == UUID_LEN:
+            return value.strip()
+    return settings.ZARINPAL_MERCHANT_ID
 
 
 def _enabled(key: str) -> bool:
+    if not _active(key):
+        return False
     if key == ZARINPAL:
-        return bool(settings.ZARINPAL_MERCHANT_ID)
+        return bool(zarinpal_merchant())
+    # SnappPay's OAuth client, user and API address stay in .env.
     return bool(settings.SNAPPAY_BASE_URL and settings.SNAPPAY_CLIENT_ID and settings.SNAPPAY_USERNAME)
+
+
+def _icon_url(b64: str) -> str:
+    if not b64:
+        return ""
+    head = base64.b64decode(b64[:120])  # a 4-aligned prefix is enough to tell the type
+    kind = "svg+xml" if b"<svg" in head or b"<?xml" in head else "jpeg" if head[:2] == b"\xff\xd8" else "png"
+    return f"data:image/{kind};base64,{b64}"
 
 
 def _confirmation(success: bool, inv: Invoice | None, token: str = "") -> str:
@@ -61,10 +89,12 @@ def _callback(name: str) -> str:
 
 class GatewaysView(CustomerView):
     def get(self, request):
-        return answer([
-            {"id": gid, "name": name, "iconUrl": "", "gatewayKey": key}
-            for gid, (key, name) in GATEWAYS.items() if _enabled(key)
-        ])
+        out = []
+        for key in SUPPORTED:
+            if _enabled(key):
+                g = _active(key)
+                out.append({"id": g.id, "name": g.bank.name, "iconUrl": _icon_url(g.bank.icon), "gatewayKey": key})
+        return answer(out)
 
 
 def _payable_invoice(request, invoice_id) -> Invoice | None:
@@ -147,7 +177,7 @@ def zarinpal_request(inv: Invoice) -> str:
     if inv.payable_amount > ZARINPAL_MAX_RIAL:
         raise GatewayError("over zarinpal limit", ZARINPAL_ERRORS[-41])
     body = {
-        "merchant_id": settings.ZARINPAL_MERCHANT_ID, "amount": inv.payable_amount, "currency": "IRR",
+        "merchant_id": zarinpal_merchant(), "amount": inv.payable_amount, "currency": "IRR",
         "callback_url": _callback("ZarinpalCallback"), "description": f"سفارش {inv.id} مانگ",
         "metadata": {"mobile": inv.customer.cellphone, "order_id": str(inv.id)},
     }
@@ -163,7 +193,7 @@ def zarinpal_request(inv: Invoice) -> str:
 
 
 def zarinpal_verify(payment: InvoicePayment) -> dict:
-    body = {"merchant_id": settings.ZARINPAL_MERCHANT_ID, "amount": payment.amount, "authority": payment.authority}
+    body = {"merchant_id": zarinpal_merchant(), "amount": payment.amount, "authority": payment.authority}
     resp = requests.post(f"{_zarinpal_base()}/pg/v4/payment/verify.json", json=body, timeout=TIMEOUT,
                          headers={"Accept": "application/json"})
     return resp.json() or {}
@@ -229,8 +259,9 @@ class PayView(CustomerView):
             return answer(None, 404, "فاکتور یافت نشد")
         if inv.payable_amount <= 0:
             return answer(None, 400, "این فاکتور مبلغی برای پرداخت ندارد.")
-        key, _ = GATEWAYS.get(int(q.get("GateWayId")) if str(q.get("GateWayId") or "").isdigit() else 0, (None, None))
-        if not key or not _enabled(key):
+        g = BankGateway.objects.filter(id=to_int(q.get("GateWayId")), is_deleted=False).select_related("bank").first()
+        key = g.bank.key if g else None
+        if key not in SUPPORTED or not _enabled(key):
             return answer(None, 400, "درگاه پرداخت انتخاب‌شده فعال نیست.")
         try:
             url = zarinpal_request(inv) if key == ZARINPAL else snapp_request(inv)

@@ -11,6 +11,7 @@ imported too (with is_deleted=True) so references between tables resolve.
 """
 from __future__ import annotations
 
+import base64
 import time
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -325,6 +326,15 @@ SPECS += [
     Spec(m.ProductCommentLike, "SELECT * FROM ProductCommentLikes", lambda r: {
         "id": r["Id"], "comment_id": r["CommentId"], "customer_id": r["CustomerId"], "liked": _b(r["Liked"]), **legacy(r),
     }, "likes", {"comment_id": (m.ProductComment, True)}),
+    # Not in the default run: gateways are managed in the panel afterwards.
+    Spec(m.BankInfo, "SELECT * FROM BankInfos", lambda r: {
+        "id": r["Id"], "name": _s(r["BankName"]), "key": _s(r["BankWebSite"]),
+        "icon": base64.b64encode(r["Icon"]).decode() if r["Icon"] else "", **legacy(r),
+    }, "banks"),
+    Spec(m.BankGateway, "SELECT * FROM BankGateways", lambda r: {
+        "id": r["Id"], "bank_id": r["BankId"], "merchant": _s(r["Merchant"]), "terminal_id": _s(r["TerminalId"]),
+        "merchant_key": _s(r["MerchantKey"]), **legacy(r),
+    }, "banks", {"bank_id": (m.BankInfo, True)}),
     # ---------------------------------------------------------------- cooperation
     # Not part of the default run either: the site will take new requests.
     Spec(m.CooperationRequest, "SELECT * FROM CooperationRequests", lambda r: {
@@ -357,7 +367,7 @@ SPECS += [
 ]
 
 GROUPS = sorted({s.group for s in SPECS})
-DEFAULT_GROUPS = [g for g in GROUPS if g not in ("customers", "cooperation", "blog", "likes")]
+DEFAULT_GROUPS = [g for g in GROUPS if g not in ("customers", "cooperation", "blog", "likes", "banks")]
 
 # Rows that point at their own table (parent_id) are inserted with the link
 # empty first and patched afterwards, so insert order does not matter.

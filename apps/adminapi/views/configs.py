@@ -4,8 +4,8 @@ The configs page: ShippingMethod/*, Bank/*, ThirdParty/*.
 Shipping methods keep the old shapes: a disabled method is soft-deleted and
 still listed ("state" = disabled); its icon is a file from Cdn/upload (mediaId).
 
-Bank gateways come with the payment phase (writing invoices to Samian); until
-then the lists are empty and adding one is refused. Torob visit logs are not
+Bank gateways are the banks list (with logos, from Dadehfa) and the gateways
+configured for the site; payments are counted per gateway. Torob visit logs are not
 recorded any more, so the Torob report has the products and their Torob flag
 with zero visits.
 
@@ -20,10 +20,12 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 from rest_framework.response import Response
 
-from apps.website.models import City, MediaAttachment, Product, Province, ShippingMethod, ShippingMethodLocation, ShippingMethodType
+from apps.storefront.envelope import jalali
+from apps.website.models import BankGateway, BankInfo, City, InvoicePayment, MediaAttachment, Product, Province, ShippingMethod, ShippingMethodLocation, ShippingMethodType
 
 from .. import products as index
 from ..envelope import fail, ok
@@ -32,7 +34,6 @@ from .auth import AdminView
 from .gallery import _url
 
 NOT_FOUND = "روش ارسال یافت نشد"
-NO_GATEWAYS = "درگاه پرداخت همراه با مرحله‌ی پرداخت راه‌اندازی می‌شود."
 
 
 # -----------------------------------------------------------------------------
@@ -174,19 +175,71 @@ class ShippingTypeUpdateView(AdminView):
 
 
 # -----------------------------------------------------------------------------
-# Bank gateways (payment phase)
+# Bank gateways: the banks (with their logos) and the configured gateways. The
+# site offers the active gateways it can talk to (zarinpal, snapppay).
 # -----------------------------------------------------------------------------
+def _gateway(g: BankGateway, stats: dict) -> dict:
+    count, total, last = stats.get(g.bank.key, (0, 0, None))
+    return {
+        "id": g.id, "bankId": g.bank_id, "bankName": g.bank.name, "icon": g.bank.icon or None,
+        "merchantCode": g.merchant or g.terminal_id, "isDelete": g.is_deleted,
+        "transactionCount": count, "sumTransactionPrice": total,
+        "lastTransaction": {"createDate": jalali(last.verified_at or last.created), "price": last.amount} if last else None,
+    }
+
+
 class GatewayListView(AdminView):
     def get(self, request):
-        return ok({"result": []})
+        stats = {}
+        for key in BankGateway.objects.values_list("bank__key", flat=True).distinct():
+            paid = InvoicePayment.objects.filter(gateway=key, is_success=True)
+            stats[key] = (paid.count(), paid.aggregate(t=Sum("amount"))["t"] or 0, paid.order_by("-id").first())
+        gateways = BankGateway.objects.select_related("bank").order_by("id")
+        return ok({"result": [_gateway(g, stats) for g in gateways]})
 
 
-class GatewayRefuseView(AdminView):
+class BankInfoView(AdminView):
     def get(self, request):
-        return fail(NO_GATEWAYS, 400)
+        return ok({"result": [{"bankId": b.id, "bankName": b.name} for b in BankInfo.objects.filter(is_deleted=False)]})
 
+
+def _save_gateway(request, g: BankGateway | None):
+    d = request.data if isinstance(request.data, dict) else {}
+    bank = BankInfo.objects.filter(id=to_int(d.get("bankId")), is_deleted=False).first()
+    if not bank:
+        return fail("این بانک موجود نیست.", 400)
+    merchant, terminal = str(d.get("merchant") or "").strip(), str(d.get("terminalId") or "").strip()
+    if g is None and BankGateway.objects.filter(bank=bank, is_deleted=False).exists():
+        return fail("این پورتال وجود دارد.", 400)
+    g = g or BankGateway(created=timezone.now())
+    g.bank, g.merchant, g.terminal_id = bank, merchant, terminal
+    g.merchant_key = merchant or terminal
+    g.last_modified = timezone.now()
+    g.save()
+    return ok({"result": True})
+
+
+class GatewayAddView(AdminView):
     def post(self, request):
-        return fail(NO_GATEWAYS, 400)
+        return _save_gateway(request, None)
+
+
+class GatewayUpdateView(AdminView):
+    def post(self, request):
+        g = BankGateway.objects.filter(id=to_int(request.data.get("id"))).first() if isinstance(request.data, dict) else None
+        if not g:
+            return fail("اطلاعات اشتباه است.", 400)
+        return _save_gateway(request, g)
+
+
+class GatewayToggleView(AdminView):
+    """SoftDelete?gatewayId=&active=: active=true switches it back on, otherwise off."""
+
+    def get(self, request):
+        q = request.query_params
+        n = BankGateway.objects.filter(id=to_int(q.get("gatewayId"))).update(
+            is_deleted=not bool(to_bool(q.get("active"))), last_modified=timezone.now())
+        return ok({"result": True}) if n else fail("درگاه پرداخت موجود نیست.", 404)
 
 
 # -----------------------------------------------------------------------------
