@@ -8,6 +8,15 @@ branches less the safety stock. Lines that are gone or short come back in
 failedItems ({productVariantId: message}); a short line is kept at the stock
 left. Delivery costs the method's fixed cost when its type includes costs.
 
+Any failed line makes the whole request answer 409 with failedItems (the
+pre-invoice is still saved with what is left), so the site always tells the
+customer and drops those lines before paying. A pre-invoice gets its invoice
+number when it is created (see assign_number).
+
+The Invoice/* endpoints answer HTTP 200 with the status in statusCode, as the
+old InvoiceController did: the site reads 403/409/404 there (with no
+pre-invoice, statusCode 404 makes it push the guest cart to the server).
+
 Gift cards and coupons are refused until their Samian side is settled.
 
     POST Invoice/Add {productVariants: [{productVariantId, qty, name}], ShippingMethodId, description, gcNum?, serial?}
@@ -31,9 +40,14 @@ from apps.website.models import (
 
 from . import catalog
 from .account import CustomerView, answer
-from .envelope import _g2j, jalali
+from .envelope import MSG_FETCHED, _g2j, envelope, jalali
 
 S = Invoice.State
+
+
+def reply(data=None, status: int = 200, message: str | None = None):
+    """Invoice/* style: always HTTP 200, the outcome in statusCode."""
+    return envelope(data, status_code=status, message=message or MSG_FETCHED, http_status=200)
 NOT_YET = "استفاده از کارت هدیه و کوپن به‌زودی فعال می‌شود."
 
 
@@ -51,7 +65,7 @@ def assign_number(inv: Invoice) -> str:
     """Gives the invoice the next number of its month (prefix + sequence from 101). Call inside a transaction."""
     if inv.number:
         return inv.number
-    prefix = number_prefix(inv.paid_at or timezone.now())
+    prefix = number_prefix(inv.created or timezone.now())
     # Lock the month's invoices so two payments at once cannot take the same number.
     taken = list(Invoice.objects.select_for_update().filter(number__startswith=prefix).values_list("number", flat=True))
     seqs = [int(n[len(prefix):]) for n in taken if n[len(prefix):].isdigit()]
@@ -150,20 +164,20 @@ class AddView(CustomerView):
         method_id = _int(d.get("ShippingMethodId") or d.get("shippingMethodId"))
         method_id = method_id or None  # 0 means "not chosen yet"
         if (d.get("gcNum") or "").strip() or (d.get("serial") or "").strip():
-            return answer(None, 400, NOT_YET)
+            return reply(None, 400, NOT_YET)
         if method_id and not (customer.first_name.strip() or customer.last_name.strip()):
-            return answer(None, 403, "اجازه ایجاد فاکتور را ندارید. ابتدا اطلاعات پروفایل را تکمیل نمایید.")
+            return reply(None, 403, "اجازه ایجاد فاکتور را ندارید. ابتدا اطلاعات پروفایل را تکمیل نمایید.")
         address = customer.addresses.filter(is_deleted=False).order_by("-is_default", "-id").first()
         if method_id and address is None:
-            return answer(None, 409, "اجازه ایجاد فاکتور را ندارید. ابتدا آدرس خود را وارد نمایید.")
+            return reply(None, 409, "اجازه ایجاد فاکتور را ندارید. ابتدا آدرس خود را وارد نمایید.")
         method = None
         if method_id:
             method = ShippingMethod.objects.filter(id=method_id, is_deleted=False).select_related("type").first()
             if method is None:
-                return answer(None, 404, "روش ارسال پیدا نشد.")
+                return reply(None, 404, "روش ارسال پیدا نشد.")
         cart = _cart(d.get("productVariants"))
         if not cart:
-            return answer(None, 409, "سبد خرید خالی است، حداقل یک کالا انتخاب نمایید.")
+            return reply(None, 409, "سبد خرید خالی است، حداقل یک کالا انتخاب نمایید.")
 
         bundle, found = _bundle_for([v for v, _, _ in cart])
         listed = {r.id for r in catalog.listing_rows()}
@@ -189,14 +203,15 @@ class AddView(CustomerView):
                 price_after_reduction=pricing.after,
             ))
         if not lines:
-            return answer({"id": 0, "payableAmount": 0, "shippingMethodId": method_id, "failedItems": failed},
-                          409, "امکان ثبت فاکتور وجود ندارد.")
+            return reply({"id": 0, "payableAmount": 0, "shippingMethodId": method_id, "failedItems": failed},
+                         409, "امکان ثبت فاکتور وجود ندارد. موجودی کالاهای سبد به اتمام رسیده است.")
 
         amount = sum(int(ln.price * ln.qty) for ln in lines)
         after = sum(int(ln.price_after_reduction * ln.qty) for ln in lines)
         delivery = delivery_cost(method)
         with transaction.atomic():
             inv = _pre_invoice(customer) or Invoice(customer=customer)
+            is_new = inv.pk is None
             inv.shipping_method, inv.address = method, address
             inv.amount, inv.reduction_amount, inv.delivery_amount, inv.deduction_amount = amount, amount - after, delivery, 0
             inv.payable_amount = after + delivery
@@ -206,8 +221,13 @@ class AddView(CustomerView):
             for ln in lines:
                 ln.invoice = inv
             InvoiceLine.objects.bulk_create(lines)
-        return answer({"id": inv.id, "payableAmount": inv.payable_amount, "shippingMethodId": method_id, "failedItems": failed},
-                      message="فاکتور شما با موفقیت ثبت شد.")
+            if is_new or not inv.number:
+                assign_number(inv)
+        data = {"id": inv.id, "number": inv.number, "payableAmount": inv.payable_amount, "shippingMethodId": method_id,
+                "failedItems": failed}
+        if failed:
+            return reply(data, 409, "موجودی بعضی از کالاهای سبد کافی نیست؛ آن‌ها از سبد حذف شدند. لطفا سبد را دوباره بررسی کنید.")
+        return reply(data, message="فاکتور شما با موفقیت ثبت شد.")
 
 
 # -----------------------------------------------------------------------------
@@ -316,20 +336,20 @@ class LastPreInvoiceView(CustomerView):
     def get(self, request):
         inv = _pre_invoice(request.user)
         if not inv:
-            return answer(None, message="پیش فاکتوری وجود ندارد.")
-        return answer(full_invoice(inv))
+            return reply(None, 404, "پیش فاکتوری وجود ندارد.")
+        return reply(full_invoice(inv))
 
 
 class DeletePreInvoiceView(CustomerView):
     def get(self, request, invoice_id: int):
         n = request.user.invoices.filter(id=invoice_id, state=S.PRE_INVOICE, is_deleted=False).update(is_deleted=True)
-        return answer(True, message="اطلاعات با موفقیت حذف شدند.") if n else answer(False, 400, "فاکتور یافت نشد")
+        return reply(True, message="اطلاعات با موفقیت حذف شدند.") if n else reply(False, 400, "فاکتور یافت نشد")
 
 
 class ClearCartView(CustomerView):
     def post(self, request):
         request.user.invoices.filter(state=S.PRE_INVOICE, is_deleted=False).update(is_deleted=True)
-        return answer(True, message="سبد خرید خالی شد.")
+        return reply(True, message="سبد خرید خالی شد.")
 
 
 class CustomerInvoicesView(CustomerView):
@@ -338,7 +358,7 @@ class CustomerInvoicesView(CustomerView):
         if (kind := _int(request.query_params.get("invoiceType"))) is not None:
             qs = qs.filter(state=kind)
         rows = [invoice_summary(inv) for inv in qs.order_by("-id")]
-        return answer({
+        return reply({
             "invoices": rows,
             "successfully": [r for r in rows if r["invoiceState"] == S.SUCCESSFUL],
             "preInvoice": [r for r in rows if r["invoiceState"] in (S.PRE_INVOICE, S.SUSPENDED)],
@@ -350,5 +370,5 @@ class CustomerInvoiceView(CustomerView):
     def get(self, request, invoice_id: int):
         inv = request.user.invoices.filter(id=invoice_id, is_deleted=False).first()
         if not inv:
-            return answer(None, 404, "فاکتور یافت نشد")
-        return answer(full_invoice(inv))
+            return reply(None, 404, "فاکتور یافت نشد")
+        return reply(full_invoice(inv))
