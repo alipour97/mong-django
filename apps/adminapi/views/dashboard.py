@@ -18,6 +18,7 @@ from datetime import date, datetime, time, timedelta
 
 from django.conf import settings
 from django.db.models import Q
+from django.http import QueryDict
 from django.utils import timezone
 
 from apps.samian.models import SamianProduct, SamianSalesRow, SamianSalesTransaction, SamianSyncLog
@@ -181,7 +182,7 @@ def _net_sold() -> tuple[dict[int, float], dict[int, set]]:
         pid = product_of.get(spk)
         if pid is None:
             continue
-        units[pid] += -float(qty) if is_return else float(qty)
+        units[pid] += -abs(float(qty)) if is_return else float(qty)  # returns are stored negative already
         if not is_return:
             tx[pid].add(tid)
     return units, tx
@@ -299,7 +300,15 @@ class SearchView(AdminView):
             return {"id": c.id, "comment": c.comment, "score": float(c.score), "productId": c.product_id, "status": c.status,
                     "title": c.title, "typeId": 0, "type": "محصول", "createDate": jalali(c.created, with_time=False)}
 
+        from .customers import _purchases
         from .gallery import _dto as _file_dto, _tags_of
+        from .invoices import _filter as _invoice_filter, _headers as _invoice_headers, _invoices
+
+        customers = list(customers)
+        purchases = _purchases(customers)
+        search = QueryDict(mutable=True)
+        search["SearchText"] = text
+        invoices = list(_invoice_filter(_invoices(), search).order_by("-transaction_date")[:LIMIT])
 
         formats = {x.id: x for x in FileFormat.objects.filter(id__in={f.format_id for f in files})}
         file_tags = _tags_of([f.id for f in files])
@@ -308,10 +317,10 @@ class SearchView(AdminView):
             "customers": [
                 {"customerId": c.id, "firstName": c.first_name, "lastName": c.last_name, "cellPhone": c.cellphone,
                  "registrationDate": jalali(c.created, with_time=False), "birthDate": jalali(c.birth_date, with_time=False),
-                 "isActive": c.is_active, "invoiceCount": 0, "jobTitle": None}
+                 "isActive": c.is_active, "invoiceCount": purchases.get(c.id, 0), "jobTitle": None}
                 for c in customers
             ],
-            "invoices": [],
+            "invoices": _invoice_headers(invoices),
             "articles": [
                 {"id": a.id, "title": a.title, "createDate": a.created.isoformat() if a.created else None,
                  "publishDate": jalali(a.publish_date, with_time=False),

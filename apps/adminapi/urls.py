@@ -13,7 +13,7 @@ from apps.website.models import MediaAttachment
 
 from .views import (
     auth, banners, blog, categories, collections, comments, configs, cooperation, customers, customize, dashboard, gallery,
-    products, tags, users,
+    invoices, products, tags, users,
 )
 
 urlpatterns = [
@@ -30,6 +30,15 @@ urlpatterns = [
     path("Report/GetDashboardLablesReports", dashboard.LabelsView.as_view()),
     path("Invoice/DailyCounts", dashboard.DailyCountsView.as_view()),
     path("Invoice/InvoiceCountByHour", dashboard.CountByHourView.as_view()),
+    path("Invoice/GetFilteredInvoices", invoices.ListView.as_view()),
+    path("Invoice/GetInvoiceStatistics", invoices.StatisticsView.as_view()),
+    path("Invoice/InvoiceAmountRange", invoices.AmountRangeView.as_view()),
+    path("Invoice/InvoiceDetails/<int:invoice_id>", invoices.DetailView.as_view()),
+    path("Invoice/RecentInvoicesForCustomer", invoices.CustomerInvoicesView.as_view()),
+    path("Invoice/GetCorruptedInvoices", invoices.CorruptedView.as_view()),
+    path("Invoice/ValidateCorruptedInvoices", invoices.NotYetView.as_view()),
+    path("Invoice/UpdateInvoice/<int:invoice_id>", invoices.NotYetView.as_view()),
+    path("Invoice/CancelInvoice/<int:invoice_id>", invoices.NotYetView.as_view()),
     path("Products/TopSelling", dashboard.TopSellingView.as_view()),
     path("Products/TopSellingGroupProduct", dashboard.TopSellingGroupsView.as_view()),
 

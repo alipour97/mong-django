@@ -630,7 +630,8 @@ def sold_by_samian_product() -> dict[int, float]:
         .values("samian_product_id", "is_return").annotate(qty=Sum("quantity"))
         .values_list("samian_product_id", "is_return", "qty")
     ):
-        sold[spk] += -float(qty) if is_return else float(qty)
+        # Samian already stores returned quantities as negative; abs() keeps either sign right.
+        sold[spk] += -abs(float(qty)) if is_return else float(qty)
     return sold
 
 
