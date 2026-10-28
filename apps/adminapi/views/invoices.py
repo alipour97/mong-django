@@ -14,6 +14,11 @@ paid, processing, ready, sent and delivered are successful (3). Online payment
 rows, editing and cancelling come with the order phase (the panel only offers
 them for SnappPay orders).
 
+Orders placed on the new site that have not reached Samian yet (website
+Invoice without samian_transaction_id) are listed too, with their own id and
+no invoice number; once sent, the Samian receipt takes their place. An id is
+looked up among those site orders first.
+
     GET  Invoice/GetFilteredInvoices?FromAmount=&ToAmount=&FromDate=&ToDate=&InvoiceState=&HasDiscount=&HasComment=
          &SearchText=&ShippingMethodIds=&pageNumber=&pageSize=
     GET  Invoice/GetInvoiceStatistics?invoiceState= | Invoice/InvoiceAmountRange | Invoice/InvoiceDetails/<id>
@@ -23,13 +28,15 @@ them for SnappPay orders).
 from __future__ import annotations
 
 import math
+from datetime import datetime
 
 from django.db.models import BigIntegerField, Case, DecimalField, F, Max, Min, Q, Sum, Value, When
 from django.db.models.functions import Abs, Coalesce
+from django.utils import timezone
 
 from apps.samian.models import SamianColor, SamianProduct, SamianSalesRow, SamianSalesTransaction
 from apps.storefront.envelope import jalali
-from apps.website.models import CompanyInfo, Customer, Product, ProductComment, ProductSamianLink
+from apps.website.models import City, CompanyInfo, Customer, Invoice, Product, ProductComment, ProductSamianLink, Province
 
 from ..envelope import fail, ok
 from ..paging import to_bool, to_int
@@ -58,6 +65,8 @@ def _in_state(qs, state: int):
     if state == SUCCESSFUL:
         return qs.exclude(cancelled).exclude(order_web_status_id=AWAITING_PAYMENT)
     return qs.none()
+
+
 NOT_YET = "ویرایش و لغو فاکتور همراه با ثبت سفارش‌های سایت در سامیان راه‌اندازی می‌شود."
 
 
@@ -115,6 +124,110 @@ def _filter(qs, q):
     return qs
 
 
+# -----------------------------------------------------------------------------
+# Site orders not yet in Samian
+# -----------------------------------------------------------------------------
+def _site():
+    return (Invoice.objects.filter(is_deleted=False, samian_transaction_id__isnull=True)
+            .select_related("customer", "shipping_method__type", "address"))
+
+
+def _site_filter(qs, q):
+    if (state := to_int(q.get("InvoiceState") or q.get("invoiceState"))) is not None:
+        qs = qs.filter(state=state)
+    if begin := _date(q.get("FromDate")):
+        qs = qs.filter(created__gte=begin)
+    if end := _date(q.get("ToDate"), end=True):
+        qs = qs.filter(created__lte=end)
+    if (low := to_int(q.get("FromAmount"))) is not None:
+        qs = qs.filter(amount__gte=low)
+    if (high := to_int(q.get("ToAmount"))) is not None:
+        qs = qs.filter(amount__lte=high)
+    if (discount := to_bool(q.get("HasDiscount"))) is not None:
+        qs = qs.filter(reduction_amount__gt=0) if discount else qs.filter(reduction_amount__lte=0)
+    if (commented := to_bool(q.get("HasComment"))) is not None:
+        products = ProductComment.objects.filter(is_deleted=False, is_buyer=True, is_admin_comment=False).values("product_id")
+        qs = qs.filter(lines__product_id__in=products).distinct() if commented else qs.exclude(lines__product_id__in=products)
+    if ids := [to_int(i) for i in q.getlist("ShippingMethodIds") if to_int(i) is not None]:
+        qs = qs.filter(shipping_method_id__in=ids)
+    if search := (q.get("SearchText") or "").strip():
+        qs = qs.filter(Q(id=to_int(search, -1)) | Q(customer__cellphone__contains=search)
+                       | Q(customer__first_name__icontains=search) | Q(customer__last_name__icontains=search))
+    return qs
+
+
+SITE_NOTE = "سفارش سایت؛ هنوز به سامیان ارسال نشده"
+
+
+def _site_header(inv: Invoice) -> dict:
+    m, c = inv.shipping_method, inv.customer
+    lines = list(inv.lines.all())
+    after = inv.amount - inv.reduction_amount
+    return {
+        "id": inv.id, "invoiceNumber": None, "customerId": c.id, "customerName": c.first_name, "customerLastName": c.last_name,
+        "qty": float(sum(ln.qty for ln in lines)), "createDate": inv.created.isoformat(),
+        "createDatePersian": jalali(inv.created, with_time=False), "branchId": None, "branchTitle": None,
+        "invoiceState": inv.state, "invoiceType": inv.state,
+        "shippingMethodId": inv.shipping_method_id or 0, "shippingMethodName": m.name if m else "",
+        "shippingMethodTypeId": m.type_id if m else 0, "shippingMethodTypeTitle": m.type.name if m and m.type else "",
+        "deliveryAmount": inv.delivery_amount, "customerAddressId": inv.address_id or 0, "storeOrderId": inv.id,
+        "amount": inv.amount, "amountAfterReduction": after, "reductionAmount": inv.reduction_amount,
+        "totalReductionAmounts": inv.reduction_amount + inv.deduction_amount, "reduction": 0, "discount": inv.reduction_amount,
+        "hasDiscount": inv.reduction_amount > 0, "deductionAmount": inv.deduction_amount, "deductionType": "None",
+        "fixedAmount": 0, "variableAmount": 0, "insuranceFee": 0, "tax": 0, "taxAmount": 0, "vat": 0, "vatAmount": 0,
+        "amountAfterVatAndTax": after, "payableAmount": inv.payable_amount, "totalAmountPayable": inv.payable_amount,
+        "finalAmount": inv.payable_amount, "giftCardId": None, "couponId": None,
+        "description": "\n".join(x for x in (SITE_NOTE, inv.description) if x),
+        "commentCounts": 0, "hasComment": False, "snappPayTransactionId": None, "snappPayToken": None,
+    }
+
+
+def _site_detail(inv: Invoice) -> dict:
+    header = _site_header(inv)
+    c, a, info = inv.customer, inv.address, CompanyInfo.objects.filter(is_deleted=False).first()
+    slugs = dict(Product.objects.filter(id__in=inv.lines.values("product_id")).values_list("id", "slug"))
+    lines = []
+    for ln in inv.lines.all():
+        qty = float(ln.qty)
+        lines.append({
+            "id": ln.id, "variantFeatureValueId": ln.variant_id, "featureValueDependencyId": 0, "barcode": ln.barcode,
+            "name": ln.name, "slug": slugs.get(ln.product_id), "price": ln.price, "reduction": float(ln.reduction),
+            "discount": float(ln.reduction), "tax": 0, "vat": 0, "qty": qty, "reductionEffect": 1 - float(ln.reduction) / 100,
+            "priceAfterReduction": ln.price_after_reduction, "reductionPrice": ln.price - ln.price_after_reduction,
+            "vatDecimal": 0, "taxDecimal": 0, "vatPrice": 0, "taxPrice": 0, "priceAfterVatAndTax": ln.price_after_reduction,
+            "totalPrice": round(ln.price * qty), "totalPriceAfterReduction": round(ln.price_after_reduction * qty),
+            "totalReductionPrice": round((ln.price - ln.price_after_reduction) * qty), "totalTaxPrice": 0, "totalVatPrice": 0,
+            "totalpriceAfterVatAndTax": round(ln.price_after_reduction * qty),
+            "featureValues": [
+                {"sortOrder": 0, "featureValueId": ln.color_id or 0, "featureValueName": ln.color_name or "-", "featureId": 1, "featureName": "رنگ"},
+                {"sortOrder": 1, "featureValueId": 0, "featureValueName": ln.size_name or "-", "featureId": 2, "featureName": "سایز"},
+            ],
+            "description": None,
+        })
+    names = {"zarinpal": "زرین‌پال", "snapppay": "اسنپ‌پی"}
+    payments = [
+        {"id": p.id, "transactionId": p.reference or None, "bankId": 0, "traceNumber": p.authority or None,
+         "fullName": f"{c.first_name} {c.last_name}".strip(), "authority": p.authority, "paymentAmount": p.amount,
+         "isSuccess": p.is_success, "cellPhone": c.cellphone, "errorCode": None, "errorMessage": p.error_message or None,
+         "bankName": names.get(p.gateway, p.gateway), "key": p.gateway}
+        for p in inv.payments.all()
+    ]
+    return {
+        "buyer": {"id": c.id, "firstName": c.first_name, "lastName": c.last_name, "mobile": c.cellphone},
+        "seller": {"companyName": info.name if info else "", "address": info.address if info else "", "branchTitle": None},
+        "address": {
+            "id": a.id if a else 0, "customerId": c.id, "isDefault": bool(a and a.is_default), "title": a.title if a else "",
+            "zipCode": a.zip_code if a else "", "firstName": (a.first_name if a else "") or c.first_name,
+            "lastName": (a.last_name if a else "") or c.last_name, "mobile": (a.mobile if a else "") or c.cellphone,
+            "isMyselfRecipient": a.is_myself_recipient if a else True, "provinceId": a.province_id if a else 0,
+            "cityId": a.city_id if a else 0, "address": a.address if a else "",
+            "provinceTitle": Province.objects.filter(id=a.province_id).values_list("name", flat=True).first() or "" if a else "",
+            "cityTitle": City.objects.filter(id=a.city_id).values_list("name", flat=True).first() or "" if a else "",
+        },
+        "invoiceHeader": header, "invoiceDetails": lines, "invoicePayments": payments,
+    }
+
+
 def _site_customers(txs) -> dict[int, Customer]:
     """SamianCustomer pk -> the site account linked to it."""
     ids = {t.samian_customer_id for t in txs if t.samian_customer_id}
@@ -160,16 +273,27 @@ def _headers(txs: list) -> list[dict]:
     return [_header(t, site, counts) for t in txs]
 
 
-def _page(qs, q) -> dict:
+def _page(qs, q, site_qs=None) -> dict:
+    """One page of Samian receipts and site orders together, newest first."""
     size, number = max(to_int(q.get("pageSize"), 10), 1), max(to_int(q.get("pageNumber"), 1), 1)
-    total = qs.count()
-    txs = list(qs.order_by("-transaction_date", "-samian_id")[(number - 1) * size: number * size])
-    return {"totalCount": total, "totalPages": math.ceil(total / size), "pageNumber": number, "pageSize": size, "items": _headers(txs)}
+    site_qs = site_qs if site_qs is not None else Invoice.objects.none()
+    total = qs.count() + site_qs.count()
+    upto = number * size
+    txs = list(qs.order_by("-transaction_date", "-samian_id")[:upto])
+    site = list(site_qs.order_by("-created", "-id")[:upto])
+    oldest = timezone.make_aware(datetime.min.replace(year=2000))
+    merged = sorted([(t.transaction_date or oldest, t) for t in txs] + [(i.created, i) for i in site],
+                    key=lambda x: x[0], reverse=True)[(number - 1) * size: upto]
+    receipts = _headers([obj for _, obj in merged if isinstance(obj, SamianSalesTransaction)])
+    by_id = {h["id"]: h for h in receipts}
+    items = [by_id[obj.samian_id] if isinstance(obj, SamianSalesTransaction) else _site_header(obj) for _, obj in merged]
+    return {"totalCount": total, "totalPages": math.ceil(total / size), "pageNumber": number, "pageSize": size, "items": items}
 
 
 class ListView(AdminView):
     def get(self, request):
-        return ok({"result": _page(_filter(_invoices(), request.query_params), request.query_params)})
+        q = request.query_params
+        return ok({"result": _page(_filter(_invoices(), q), q, _site_filter(_site(), q))})
 
 
 class CustomerInvoicesView(AdminView):
@@ -179,31 +303,36 @@ class CustomerInvoicesView(AdminView):
         if not customer:
             return fail("مشتری یافت نشد.", 404)
         qs = _invoices().filter(samian_customer_id=customer.samian_customer_id) if customer.samian_customer_id else _invoices().none()
+        site = _site().filter(customer=customer)
         if to_int(q.get("couponId")) or to_int(q.get("giftCardId")):
-            qs = qs.none()  # coupons and gift cards are not linked to Samian sales yet
-        return ok({"result": _page(qs, q)})
+            qs, site = qs.none(), site.none()  # coupons and gift cards are not linked yet
+        return ok({"result": _page(qs, q, site)})
 
 
 class StatisticsView(AdminView):
     def get(self, request):
         state = to_int(request.query_params.get("invoiceState"))
-        qs = _invoices()
+        qs, site = _invoices(), _site()
         if state is not None:
-            qs = _in_state(qs, state)
+            qs, site = _in_state(qs, state), site.filter(state=state)
         jy, jm, _ = today_j()
+        month = _aware(month_range(jy, jm)[0])
         with_comment = SamianSalesRow.objects.filter(samian_product_id__in=_commented_products()).values("transaction_id")
+        commented = ProductComment.objects.filter(is_deleted=False, is_buyer=True, is_admin_comment=False).values("product_id")
         return ok({"result": {
-            "totalCount": qs.count(),
-            "recentInvoicesCount": qs.filter(transaction_date__gte=_aware(month_range(jy, jm)[0])).count(),
-            "commentInvoicesCount": qs.filter(pk__in=with_comment).count(),
-            "discountInvoicesCount": qs.filter(reduction_amount__gt=0).count(),
+            "totalCount": qs.count() + site.count(),
+            "recentInvoicesCount": qs.filter(transaction_date__gte=month).count() + site.filter(created__gte=month).count(),
+            "commentInvoicesCount": qs.filter(pk__in=with_comment).count() + site.filter(lines__product_id__in=commented).distinct().count(),
+            "discountInvoicesCount": qs.filter(reduction_amount__gt=0).count() + site.filter(reduction_amount__gt=0).count(),
         }})
 
 
 class AmountRangeView(AdminView):
     def get(self, request):
         r = _invoices().aggregate(low=Min("amount"), high=Max("amount"))
-        return ok({"result": {"minAmount": r["low"] or 0, "maxAmount": r["high"] or 0}})
+        s = _site().aggregate(low=Min("amount"), high=Max("amount"))
+        lows, highs = [x for x in (r["low"], s["low"]) if x is not None], [x for x in (r["high"], s["high"]) if x is not None]
+        return ok({"result": {"minAmount": min(lows) if lows else 0, "maxAmount": max(highs) if highs else 0}})
 
 
 def _address(text: str) -> dict:
@@ -252,6 +381,8 @@ def _lines(t: SamianSalesTransaction) -> list[dict]:
 
 class DetailView(AdminView):
     def get(self, request, invoice_id: int):
+        if inv := _site().filter(id=invoice_id).first():
+            return ok({"result": _site_detail(inv)})
         t = _invoices().filter(samian_id=invoice_id).first()
         if not t:
             return fail("فاکتور یافت نشد.", 404)

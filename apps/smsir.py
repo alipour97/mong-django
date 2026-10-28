@@ -52,3 +52,27 @@ def send_otp(mobile: str, code: str) -> bool:
     if not ok:
         logger.warning("sms.ir verify rejected: HTTP %s %s", resp.status_code, body.get("message"))
     return ok
+
+
+def send_text(mobiles: list[str], text: str) -> bool:
+    """Plain text to one or more mobiles from SMSIR_LINE_NUMBER (sms.ir bulk send). Returns whether it was accepted."""
+    mobiles = [normalize_mobile(m) for m in mobiles if m]
+    if not mobiles:
+        return True
+    if not settings.SMSIR_API_KEY or not settings.SMSIR_LINE_NUMBER:
+        logger.error("sms.ir: SMS_KEY or SMSIR_LINE_NUMBER is not set")
+        return False
+    payload = {"lineNumber": int(settings.SMSIR_LINE_NUMBER), "messageText": text, "mobiles": mobiles}
+    try:
+        resp = requests.post(
+            BASE_URL + "send/bulk", json=payload, timeout=15,
+            headers={"x-api-key": settings.SMSIR_API_KEY, "Accept": "application/json"},
+        )
+        body = resp.json() if resp.content else {}
+    except (requests.RequestException, ValueError) as exc:
+        logger.warning("sms.ir bulk failed: %s", exc)
+        return False
+    ok = resp.ok and body.get("status") == 1
+    if not ok:
+        logger.warning("sms.ir bulk rejected: HTTP %s %s", resp.status_code, body.get("message"))
+    return ok

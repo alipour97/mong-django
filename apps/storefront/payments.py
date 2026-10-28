@@ -19,6 +19,7 @@ from __future__ import annotations
 import base64
 import logging
 import secrets
+import threading
 from urllib.parse import urlencode
 
 import requests
@@ -27,6 +28,7 @@ from django.db import transaction
 from django.http import HttpResponseRedirect
 from django.utils import timezone
 
+from apps import smsir
 from apps.website.models import Invoice, InvoicePayment
 
 from .account import CustomerView, answer
@@ -70,6 +72,21 @@ def _payable_invoice(request, invoice_id) -> Invoice | None:
 def _mark_paid(inv: Invoice) -> None:
     inv.state, inv.paid_at = S.SUCCESSFUL, timezone.now()
     inv.save(update_fields=["state", "paid_at", "last_modified"])
+    transaction.on_commit(lambda: _notify_admins(inv.id))
+
+
+def _notify_admins(invoice_id: int) -> None:
+    """Texts the admins who have "send invoice SMS" on, as the old site did; in the background."""
+    from apps.adminapi.models import AdminUser
+    from apps.website.models import SiteSetting
+
+    mobiles = list(AdminUser.objects.filter(is_deleted=False, is_active=True, send_invoice_sms=True)
+                   .exclude(cellphone="").values_list("cellphone", flat=True))
+    if not mobiles:
+        return
+    title = (SiteSetting.objects.filter(is_deleted=False).values_list("website_title", flat=True).first() or "مانگ").strip()
+    text = f"{title}\nفاکتور با شماره : {invoice_id} با موفقیت ذخیره شد."
+    threading.Thread(target=smsir.send_text, args=(mobiles, text), daemon=True).start()
 
 
 # -----------------------------------------------------------------------------

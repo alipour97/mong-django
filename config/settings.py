@@ -213,6 +213,8 @@ ADMIN_TOKEN_MINUTES = int(os.getenv("ADMIN_TOKEN_MINUTES", "600"))
 SMSIR_API_KEY = os.getenv("SMS_KEY", "")
 SMSIR_OTP_TEMPLATE_ID = int(os.getenv("SMSIR_OTP_TEMPLATE_ID", "214177"))
 SMSIR_OTP_PARAM = os.getenv("SMSIR_OTP_PARAM", "TOKEN")
+# Sender line for plain texts (admin order notices); one of the account's lines (GET /v1/line).
+SMSIR_LINE_NUMBER = os.getenv("SMSIR_LINE_NUMBER", "30002108025681")
 
 # Online payment. SITE_URL is the storefront the customer returns to after paying.
 SITE_URL = os.getenv("SITE_URL", PUBLIC_BASE_URL).rstrip("/")
