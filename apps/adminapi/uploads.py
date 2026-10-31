@@ -91,60 +91,40 @@ def optimize_video(target_path: Path) -> Path:
         if target_path != output_path and target_path.exists():
             target_path.unlink(missing_ok=True)
 
-        # Generate lightweight desktop WebP poster (1280px) and mobile WebP poster (640px, ~18KB)
-        poster_path = output_path.with_name(f"{output_path.stem}_poster.webp")
-        poster_m_path = output_path.with_name(f"{output_path.stem}_poster_mobile.webp")
-        poster_cmd = [
-            ffmpeg_bin,
-            "-y",
-            "-ss", "00:00:00.000",
-            "-i", str(output_path),
-            "-vframes", "1",
-            "-vf", "scale='min(1280,iw)':-1",
-            "-q:v", "75",
-            str(poster_path),
-        ]
-        poster_m_cmd = [
-            ffmpeg_bin,
-            "-y",
-            "-ss", "00:00:00.000",
-            "-i", str(output_path),
-            "-vframes", "1",
-            "-vf", "scale='min(640,iw)':-1",
-            "-q:v", "75",
-            str(poster_m_path),
-        ]
-        try:
-            subprocess.run(poster_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
-            subprocess.run(poster_m_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
-        except Exception as poster_exc:
-            logger.warning("Could not generate poster thumbnail for %s: %s", output_path, poster_exc)
-
-        # Generate lightweight mobile MP4 (640px wide, ~1MB) for seamless mobile playback
-        mobile_path = output_path.with_name(f"{output_path.stem}_mobile.mp4")
-        mobile_cmd = [
-            ffmpeg_bin,
-            "-y",
-            "-i", str(output_path),
-            "-vf", "scale='min(640,iw)':-2",
-            "-c:v", "libx264",
-            "-crf", "26",
-            "-preset", "slow",
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-            "-an",
-            str(mobile_path),
-        ]
-        try:
-            subprocess.run(mobile_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
-        except Exception as mobile_exc:
-            logger.warning("Could not generate mobile video for %s: %s", output_path, mobile_exc)
-
+        make_video_variants(output_path, ffmpeg_bin)
         return output_path
     except Exception as exc:
         temp_output.unlink(missing_ok=True)
         logger.exception("Failed to transcode video %s, keeping original: %s", target_path, exc)
         return target_path
+
+
+# Phone screens are ~412 CSS px wide at 1.75-3x density, so the phone poster and
+# video need ~1000 px to look sharp; 640 px was visibly soft.
+POSTER_WIDTH, POSTER_MOBILE_WIDTH, POSTER_QUALITY = 1280, 1080, 80
+MOBILE_VIDEO_WIDTH, MOBILE_VIDEO_CRF = 960, 25
+
+
+def make_video_variants(video: Path, ffmpeg_bin: str | None = None) -> None:
+    """The files the site shows next to a video: <stem>_poster.webp (desktop),
+    <stem>_poster_mobile.webp and <stem>_mobile.mp4 (phones, no sound)."""
+    ffmpeg_bin = ffmpeg_bin or get_ffmpeg_binary()
+    if not ffmpeg_bin:
+        return
+
+    def run(args: list[str], what: str, timeout: int) -> None:
+        try:
+            subprocess.run([ffmpeg_bin, "-y", *args], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=timeout, check=True)
+        except Exception as exc:
+            logger.warning("Could not generate %s for %s: %s", what, video, exc)
+
+    for width, suffix in ((POSTER_WIDTH, "_poster"), (POSTER_MOBILE_WIDTH, "_poster_mobile")):
+        run(["-ss", "00:00:00.000", "-i", str(video), "-vframes", "1", "-vf", f"scale='min({width},iw)':-1",
+             "-q:v", str(POSTER_QUALITY), str(video.with_name(f"{video.stem}{suffix}.webp"))], "poster", 30)
+    run(["-i", str(video), "-vf", f"scale='min({MOBILE_VIDEO_WIDTH},iw)':-2", "-c:v", "libx264",
+         "-crf", str(MOBILE_VIDEO_CRF), "-preset", "slow", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an",
+         str(video.with_name(f"{video.stem}_mobile.mp4"))], "mobile video", 180)
 
 
 def save(uploaded) -> dict:
