@@ -232,6 +232,12 @@ def sync_product_ai_profiles(
         f"پایان همگام‌سازی هوش مصنوعی: {total_created} پروفایل جدید ایجاد شد، "
         f"{total_updated} پروفایل به‌روزرسانی شد، {total_skipped} کالا منطبق نشد."
     )
+    try:
+        from apps.storefront.snappay_crawler import invalidate_snappay_cache
+        invalidate_snappay_cache()
+    except Exception:
+        pass
+
     return summary
 
 

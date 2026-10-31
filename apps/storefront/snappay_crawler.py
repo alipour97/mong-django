@@ -10,8 +10,11 @@ Implements the official SnappPay crawler specifications:
 """
 from __future__ import annotations
 
+import html
 import json
 import math
+import os
+import re
 import urllib.parse
 from decimal import Decimal
 from typing import Any
@@ -25,7 +28,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from apps.samian.models import SamianProduct
 from apps.storefront import catalog
-from apps.website.models import Product
+from apps.website.models import Product, ProductAIProfile
 
 # Official SearchWise / SnappPay crawler IPs from specification
 SNAPPAY_DEFAULT_IPS = {
@@ -37,6 +40,61 @@ SNAPPAY_DEFAULT_IPS = {
 
 SNAPPAY_FEED_CACHE_KEY = "snappay:products:feed:v1"
 SNAPPAY_FEED_CACHE_TTL = 300  # 5 minutes
+
+
+def get_base_url() -> str:
+    """
+    Get canonical site base URL strictly from settings.SITE_URL or .env.
+    e.g. 'https://samian.mong.ir' or 'https://mong.ir'
+    """
+    url = getattr(settings, "SITE_URL", "") or getattr(settings, "PUBLIC_BASE_URL", "") or os.getenv("SITE_URL") or "https://mong.ir"
+    return url.rstrip("/")
+
+
+def normalize_url(url: str, base_url: str | None = None) -> str:
+    """
+    Ensure any product or media URL strictly uses the base domain defined in .env (SITE_URL).
+    Rebases relative URLs (/products-item/..., /img/...) as well as URLs
+    from other staging/production domains (samian.mong.ir, third-party.mong.ir, mong.ir, localhost).
+    """
+    if not url:
+        return ""
+    if base_url is None:
+        base_url = get_base_url()
+
+    url_str = str(url).strip()
+    if url_str.startswith("/"):
+        return f"{base_url}{url_str}"
+
+    parsed = urllib.parse.urlsplit(url_str)
+    if parsed.netloc:
+        hostname = (parsed.hostname or "").lower()
+        if hostname.endswith("mong.ir") or hostname in {"localhost", "127.0.0.1"}:
+            base_parsed = urllib.parse.urlsplit(base_url)
+            rebased = parsed._replace(scheme=base_parsed.scheme, netloc=base_parsed.netloc)
+            return urllib.parse.urlunsplit(rebased)
+    return url_str
+
+
+def _should_force_refresh(request: HttpRequest) -> bool:
+    """Check if caller requests bypassing and refreshing the 5-minute cache."""
+    return request.GET.get("refresh", "").lower() in ("true", "1") or request.GET.get("nocache") == "1"
+
+
+def _clean_xml_str(text: Any) -> str:
+    """Remove XML 1.0 invalid control characters and escape CDATA delimiters."""
+    if text is None:
+        return ""
+    s = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]", "", str(text))
+    return s.replace("]]>", "]]&gt;")
+
+
+def invalidate_snappay_cache() -> None:
+    """Clear all SnappPay feed cache keys (useful after syncing AI profiles or inventory)."""
+    base_url = get_base_url()
+    netloc = urllib.parse.urlsplit(base_url).netloc or "default"
+    cache.delete(f"{SNAPPAY_FEED_CACHE_KEY}:{netloc}")
+    cache.delete(SNAPPAY_FEED_CACHE_KEY)
 
 
 def get_client_ip(request: HttpRequest) -> str:
@@ -175,35 +233,43 @@ def build_snappay_product(
     p: Product,
     bundle: catalog.ProductBundle,
     tree: catalog.CategoryTree | None = None,
+    ai: ProductAIProfile | None = None,
+    base_url: str | None = None,
 ) -> dict[str, Any]:
     """
-    Build single product dictionary matching the PDF fields:
+    Build single product dictionary matching the PDF fields with AI Profile enrichment:
     - id: Unique product ID (string)
-    - title: Full product title
-    - subtitle: English / subtitle
-    - link: Full canonical website URL
+    - title: Rich AI-crafted SEO title (includes garment type, details, brand, model)
+    - subtitle: Model name / English name
+    - link: Full canonical website URL (/products-item/<slug>)
     - image_link: Array of absolute image URLs (cover image first)
     - availability: "in stock" | "out of stock"
     - regular_price: Regular price in Rials (integer)
     - sale_price: Discounted sale price in Rials (integer)
     - category: Full category hierarchy (e.g. "مد و پوشاک > زنانه > روپوش > مانتو")
-    - description: Key-value object
+    - description: Rich key-value object (attributes, fabric, style, season, bullets, stylist note, keywords)
     - brand: Brand name ("مانگ")
-    - GTIN: Barcode / GTIN
+    - GTIN / gtin: Barcode / GTIN
     - color: Available colors
     - size: Available sizes
     - shipping_cost: 0 (free shipping)
     - delivery_time: Shipping days
+    - search_keywords: List of SEO keywords from LEBAZAI
+    - summary_bullets: Bullet points from LEBAZAI
+    - meta_description: Meta description from LEBAZAI
     """
     if tree is None:
         tree = catalog.category_tree()
+
+    if base_url is None:
+        base_url = get_base_url()
 
     pr = bundle.pricing(p.id)
     sp = bundle.samian.get(p.id)
     imgs = bundle.main_images(p.id)
     in_stk = bundle.in_stock(p.id)
 
-    # Category hierarchy
+    # 1. Category hierarchy
     cat_chain = ["مد و پوشاک"]
     if p.category_id:
         ancestors = tree.ancestors(p.category_id)
@@ -212,13 +278,72 @@ def build_snappay_product(
                 cat_chain.append(c.title)
     category_str = " > ".join(cat_chain)
 
-    cat_title = p.category.title if p.category else ""
-    title = format_title(p.title, cat_title, brand_title="مانگ")
+    # 2. Title: Use AI Title (LEBAZAI) if available, otherwise formatted ERP title
+    if ai and ai.title:
+        ai_t = ai.title.strip()
+        if "مانگ" not in ai_t:
+            title = f"{ai_t} مانگ"
+        else:
+            title = ai_t
+        # Append internal model name if not already in title
+        if p.title and p.title not in title and "مدل" not in title:
+            title = f"{title} مدل {p.title}"
+    else:
+        cat_title = p.category.title if p.category else ""
+        title = format_title(p.title, cat_title, brand_title="مانگ")
 
-    # Image links
-    image_links = [img["mediaUrl"] for img in imgs if img.get("mediaUrl")]
+    # 3. Subtitle: Model name or English name
+    if sp and sp.name_en:
+        subtitle = sp.name_en
+    elif ai and ai.title and p.title:
+        subtitle = p.title
+    else:
+        subtitle = ""
 
-    # Pricing in Rials (integers)
+    # 4. Description Key-Value Object (Enhanced with AI Attributes, Bullets & Stylist notes)
+    desc_dict: dict[str, Any] = {"برند": "مانگ"}
+    if ai:
+        if ai.attributes and isinstance(ai.attributes, dict):
+            attrs = ai.attributes
+            if attrs.get("garment_type_fa"):
+                desc_dict["نوع لباس"] = attrs["garment_type_fa"]
+            if attrs.get("season_fa"):
+                desc_dict["فصل"] = attrs["season_fa"]
+            if attrs.get("fit_fa"):
+                desc_dict["فرم / تن‌خور"] = attrs["fit_fa"]
+            if attrs.get("pattern_fa"):
+                desc_dict["طرح پارچه"] = attrs["pattern_fa"]
+            if attrs.get("formality_fa"):
+                desc_dict["میزان رسمی بودن"] = str(attrs["formality_fa"])
+            if attrs.get("occasions_fa") and isinstance(attrs["occasions_fa"], list):
+                desc_dict["مناسبت"] = "، ".join(attrs["occasions_fa"])
+            if attrs.get("styles_fa") and isinstance(attrs["styles_fa"], list):
+                desc_dict["سبک استایل"] = "، ".join(attrs["styles_fa"])
+            if attrs.get("age_groups_fa") and isinstance(attrs["age_groups_fa"], list):
+                desc_dict["رده سنی"] = "، ".join(attrs["age_groups_fa"])
+        if ai.summary_bullets:
+            desc_dict["ویژگی‌های کلیدی"] = " | ".join(ai.summary_bullets)
+        if ai.stylist_note:
+            desc_dict["پیشنهاد استایلیست"] = ai.stylist_note
+        if ai.search_keywords:
+            desc_dict["کلیدواژه‌ها"] = "، ".join(ai.search_keywords)
+        if ai.fab:
+            desc_dict["مزایا و کاربرد"] = ai.fab
+    else:
+        desc_dict.update(parse_description(p, sp))
+
+    # Add general description if not already in dictionary
+    if p.description and p.description.strip() and "توضیحات تکمیلی" not in desc_dict:
+        desc_dict["توضیحات تکمیلی"] = p.description.strip()
+
+    # 5. Image links (Full-resolution WebP URLs rebased to base_url from .env)
+    image_links = [
+        normalize_url(img["mediaUrl"], base_url)
+        for img in imgs
+        if img.get("mediaUrl")
+    ]
+
+    # 6. Pricing in Rials (integers)
     regular_price = int(pr.base)
     sale_price = int(pr.after)
     if regular_price <= 0 and sale_price > 0:
@@ -226,25 +351,24 @@ def build_snappay_product(
     elif regular_price < sale_price:
         regular_price = sale_price
 
-    # Variants (colors & sizes)
+    # 7. Variants (colors & sizes)
     visible_variants = bundle.visible_variants(p.id)
     colors = list(dict.fromkeys(v.color.name for v in visible_variants if v.color and v.color.name))
     sizes = list(dict.fromkeys(v.size.name for v in visible_variants if v.size and v.size.name))
 
-    base_url = settings.PUBLIC_BASE_URL.rstrip("/")
     link = f"{base_url}/products-item/{p.slug}"
 
     item: dict[str, Any] = {
         "id": str(p.id),
         "title": title,
-        "subtitle": sp.name_en if sp and sp.name_en else "",
+        "subtitle": subtitle,
         "link": link,
         "image_link": image_links,
         "availability": "in stock" if in_stk else "out of stock",
         "regular_price": regular_price,
         "sale_price": sale_price,
         "category": category_str,
-        "description": parse_description(p, sp),
+        "description": desc_dict,
         "brand": "مانگ",
         "GTIN": p.barcode or (sp.subcode if sp else "") or "",
         "gtin": p.barcode or (sp.subcode if sp else "") or "",
@@ -258,34 +382,61 @@ def build_snappay_product(
     item["shipping_cost"] = 0
     item["delivery_time"] = p.shipping_time or 3
 
+    # Additional SEO fields from AI profile
+    if ai:
+        if ai.search_keywords:
+            item["search_keywords"] = ai.search_keywords
+        if ai.meta_description:
+            item["meta_description"] = ai.meta_description
+        if ai.summary_bullets:
+            item["summary_bullets"] = ai.summary_bullets
+
     return item
 
 
-def get_all_snappay_products() -> list[dict[str, Any]]:
-    """Fetch and serialize all live products with caching."""
-    cached = cache.get(SNAPPAY_FEED_CACHE_KEY)
-    if cached is not None:
-        return cached
+def get_all_snappay_products(
+    force_refresh: bool = False,
+    base_url: str | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Fetch and serialize all live products with AI profile enrichment and caching.
+    Supports force_refresh=True to bypass and rebuild the 5-minute cache.
+    """
+    if base_url is None:
+        base_url = get_base_url()
+
+    netloc = urllib.parse.urlsplit(base_url).netloc or "default"
+    cache_key = f"{SNAPPAY_FEED_CACHE_KEY}:{netloc}"
+
+    if not force_refresh:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
 
     rows = catalog.listing_rows()
     ids = [r.id for r in rows]
     bundle = catalog.ProductBundle.load(ids)
     tree = catalog.category_tree()
+    ai_profiles = ProductAIProfile.objects.filter(product_id__in=ids).in_bulk(field_name="product_id")
 
     products_data: list[dict[str, Any]] = []
     for r in rows:
         p = bundle.products.get(r.id)
         if not p:
             continue
-        item = build_snappay_product(p, bundle, tree)
+        ai = ai_profiles.get(p.id)
+        item = build_snappay_product(p, bundle, tree, ai=ai, base_url=base_url)
         products_data.append(item)
 
-    cache.set(SNAPPAY_FEED_CACHE_KEY, products_data, SNAPPAY_FEED_CACHE_TTL)
+    cache.set(cache_key, products_data, SNAPPAY_FEED_CACHE_TTL)
     return products_data
 
 
-def get_single_snappay_product(identifier: int | str) -> dict[str, Any] | None:
-    """Find a single product by ID or Slug."""
+def get_single_snappay_product(
+    identifier: int | str,
+    base_url: str | None = None,
+) -> dict[str, Any] | None:
+    """Find a single product by ID or Slug with AI profile enrichment (live database lookup)."""
     p = None
     if isinstance(identifier, int) or (isinstance(identifier, str) and identifier.isdigit()):
         p = Product.objects.filter(id=int(identifier), is_active=True, is_deleted=False).first()
@@ -298,38 +449,54 @@ def get_single_snappay_product(identifier: int | str) -> dict[str, Any] | None:
     if p.id not in bundle.products:
         return None
 
-    return build_snappay_product(p, bundle)
+    ai = ProductAIProfile.objects.filter(product=p).first()
+    return build_snappay_product(p, bundle, ai=ai, base_url=base_url)
 
 
 def to_xml(products: list[dict[str, Any]]) -> str:
-    """Convert product list to standard XML feed."""
+    """
+    Convert product list to standard valid XML feed.
+    Follows SnappPay specification:
+    - Elements: id, title, subtitle, link, image_link, availability, regular_price, sale_price,
+      category, description, brand, GTIN, color, size, shipping_cost, delivery_time.
+    - Description: Uses <attribute name="نام ویژگی"><![CDATA[مقدار]]></attribute> for key-values
+      to strictly adhere to XML syntax (XML element tag names cannot contain spaces or slashes).
+    """
     lines = ['<?xml version="1.0" encoding="UTF-8"?>', "<products>"]
     for p in products:
         lines.append("  <product>")
-        lines.append(f"    <id>{p['id']}</id>")
-        lines.append(f"    <title><![CDATA[{p['title']}]]></title>")
-        lines.append(f"    <subtitle><![CDATA[{p.get('subtitle', '')}]]></subtitle>")
-        lines.append(f"    <link>{p['link']}</link>")
+        lines.append(f"    <id>{_clean_xml_str(p.get('id', ''))}</id>")
+        lines.append(f"    <title><![CDATA[{_clean_xml_str(p.get('title', ''))}]]></title>")
+        lines.append(f"    <subtitle><![CDATA[{_clean_xml_str(p.get('subtitle', ''))}]]></subtitle>")
+        lines.append(f"    <link><![CDATA[{_clean_xml_str(p.get('link', ''))}]]></link>")
         lines.append("    <image_link>")
         for img in p.get("image_link", []):
-            lines.append(f"      <image>{img}</image>")
+            lines.append(f"      <image><![CDATA[{_clean_xml_str(img)}]]></image>")
         lines.append("    </image_link>")
-        lines.append(f"    <availability>{p['availability']}</availability>")
-        lines.append(f"    <regular_price>{p['regular_price']}</regular_price>")
-        lines.append(f"    <sale_price>{p['sale_price']}</sale_price>")
-        lines.append(f"    <category><![CDATA[{p['category']}]]></category>")
+        lines.append(f"    <availability>{_clean_xml_str(p.get('availability', ''))}</availability>")
+        lines.append(f"    <regular_price>{p.get('regular_price', 0)}</regular_price>")
+        lines.append(f"    <sale_price>{p.get('sale_price', 0)}</sale_price>")
+        lines.append(f"    <category><![CDATA[{_clean_xml_str(p.get('category', ''))}]]></category>")
         lines.append("    <description>")
         for k, v in p.get("description", {}).items():
-            lines.append(f"      <{k}><![CDATA[{v}]]></{k}>")
+            k_esc = html.escape(str(k), quote=True)
+            v_clean = _clean_xml_str(v)
+            lines.append(f'      <attribute name="{k_esc}"><![CDATA[{v_clean}]]></attribute>')
         lines.append("    </description>")
-        lines.append(f"    <brand><![CDATA[{p['brand']}]]></brand>")
-        lines.append(f"    <GTIN>{p.get('GTIN', '')}</GTIN>")
-        if "color" in p:
-            lines.append(f"    <color><![CDATA[{p['color']}]]></color>")
-        if "size" in p:
-            lines.append(f"    <size><![CDATA[{p['size']}]]></size>")
+        lines.append(f"    <brand><![CDATA[{_clean_xml_str(p.get('brand', ''))}]]></brand>")
+        gtin = p.get("GTIN") or p.get("gtin") or ""
+        lines.append(f"    <GTIN>{_clean_xml_str(gtin)}</GTIN>")
+        if "color" in p and p["color"]:
+            lines.append(f"    <color><![CDATA[{_clean_xml_str(p['color'])}]]></color>")
+        if "size" in p and p["size"]:
+            lines.append(f"    <size><![CDATA[{_clean_xml_str(p['size'])}]]></size>")
         lines.append(f"    <shipping_cost>{p.get('shipping_cost', 0)}</shipping_cost>")
         lines.append(f"    <delivery_time>{p.get('delivery_time', 3)}</delivery_time>")
+        if "search_keywords" in p and p["search_keywords"]:
+            kw_str = ", ".join(p["search_keywords"])
+            lines.append(f"    <keywords><![CDATA[{_clean_xml_str(kw_str)}]]></keywords>")
+        if "meta_description" in p and p["meta_description"]:
+            lines.append(f"    <meta_description><![CDATA[{_clean_xml_str(p['meta_description'])}]]></meta_description>")
         lines.append("  </product>")
     lines.append("</products>")
     return "\n".join(lines)
@@ -346,18 +513,20 @@ class SnappPayFeedView(View):
     GET /api/snappay/feed
     GET /api/snappay/feed.json
     GET /api/snappay/feed.xml
+    Pass ?refresh=true or ?nocache=1 to force refresh cache.
     """
 
     def get(self, request: HttpRequest, *args, **kwargs):
         if not is_snappay_authorized(request):
             return JsonResponse({"error": "Forbidden: IP not allowed"}, status=403)
 
+        force_refresh = _should_force_refresh(request)
         feed_format = request.GET.get("format", "").lower()
         if kwargs.get("format") == "xml" or feed_format == "xml":
-            products = get_all_snappay_products()
+            products = get_all_snappay_products(force_refresh=force_refresh)
             return HttpResponse(to_xml(products), content_type="application/xml; charset=utf-8")
 
-        products = get_all_snappay_products()
+        products = get_all_snappay_products(force_refresh=force_refresh)
         return JsonResponse(products, safe=False, json_dumps_params={"ensure_ascii": False})
 
 
@@ -368,13 +537,14 @@ class SnappPayProductsView(View):
     GET /api/snappay/products?page=1&size=50
     GET /api/snappay/products?id=139
     GET /api/snappay/products?slug=تورین-3
+    Pass ?refresh=true to force refresh product cache.
     """
 
     def get(self, request: HttpRequest, *args, **kwargs):
         if not is_snappay_authorized(request):
             return JsonResponse({"error": "Forbidden: IP not allowed"}, status=403)
 
-        # 1. Single product lookup via query parameter
+        # 1. Single product lookup via query parameter (un-cached, real-time)
         pid = request.GET.get("id")
         slug = request.GET.get("slug")
         if pid or slug:
@@ -384,7 +554,8 @@ class SnappPayProductsView(View):
             return JsonResponse(item, json_dumps_params={"ensure_ascii": False})
 
         # 2. Paginated list
-        all_products = get_all_snappay_products()
+        force_refresh = _should_force_refresh(request)
+        all_products = get_all_snappay_products(force_refresh=force_refresh)
         total_count = len(all_products)
 
         page_str = request.GET.get("page")
@@ -499,7 +670,8 @@ class SnappPayLegacyProductListView(View):
             )
 
         # Product list pagination
-        all_products = get_all_snappay_products()
+        force_refresh = str(params.get("refresh", "")).lower() in ("true", "1") or params.get("nocache") == "1"
+        all_products = get_all_snappay_products(force_refresh=force_refresh)
         total_count = len(all_products)
 
         page_val = params.get("page") or params.get("PageNumber") or params.get("pageNumber") or 1
