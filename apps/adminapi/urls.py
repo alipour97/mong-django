@@ -37,8 +37,8 @@ urlpatterns = [
     path("Invoice/RecentInvoicesForCustomer", invoices.CustomerInvoicesView.as_view()),
     path("Invoice/GetCorruptedInvoices", invoices.CorruptedView.as_view()),
     path("Invoice/ValidateCorruptedInvoices", invoices.NotYetView.as_view()),
-    path("Invoice/UpdateInvoice/<int:invoice_id>", invoices.NotYetView.as_view()),
-    path("Invoice/CancelInvoice/<int:invoice_id>", invoices.NotYetView.as_view()),
+    path("Invoice/UpdateInvoice/<int:invoice_id>", invoices.UpdateView.as_view()),
+    path("Invoice/CancelInvoice/<int:invoice_id>", invoices.CancelView.as_view()),
     path("Products/TopSelling", dashboard.TopSellingView.as_view()),
     path("Products/TopSellingGroupProduct", dashboard.TopSellingGroupsView.as_view()),
 

@@ -1,34 +1,40 @@
 """
-Paying a pre-invoice (Bank/*), site side: Zarinpal and SnappPay.
+Paying a pre-invoice (Bank/*), site side. The gateways themselves live in
+apps.payhub, the one service both sites use; the site calls it in process.
 
     GET  Bank/GetGateways                                  -> [{id, name, iconUrl, gatewayKey}] (active gateways from the panel)
     GET  Bank/PayInvoiceById?InvoiceId=&ShippingMethodId=&GateWayId=   -> the gateway page URL
     GET  Bank/SnappPayEligible?Amount=                     -> {eligible, title_message, description}
+    GET  Bank/SnappPayOffer?Amount=                        -> the same for the product page (no sign-in, cached)
     GET  Bank/GiftCardPayInvoiceById?InvoiceId=&ShippingMethodId=      -> confirmation URL (only a zero-amount invoice)
-    GET  Bank/ZarinpalCallback?Authority=&Status=          (Zarinpal returns the customer here)
-    POST Bank/SnappPayCallback  transactionId, state, amount (SnappPay posts the customer here)
+    GET  Bank/PaymentVerification?success=&trackingToken=  (the hub sends the customer here after the gateway)
 
-Each pay request is an InvoicePayment row. On return the payment is verified
-(and settled, for SnappPay) once; then the invoice is successful and the
-customer lands on /order-confirmation?success=...&InvoiceId=...&TrackingToken=...
-like before. A paid invoice is not yet sent to Samian: that is the write phase
-(Invoice.samian_transaction_id stays empty until then).
+Each pay request is an InvoicePayment row and a hub record. Back from the gateway
+the hub finishes the payment once (Zarinpal verify, SnappPay settle); then the
+invoice is successful and the customer lands on
+/order-confirmation?success=...&InvoiceId=...&TrackingToken=... like before. A paid
+invoice is not yet sent to Samian: that is the write phase (Invoice.samian_transaction_id
+stays empty until then).
 """
 from __future__ import annotations
 
 import base64
 import logging
-import secrets
 import threading
+from decimal import Decimal
 from urllib.parse import urlencode
 
-import requests
 from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
 from django.http import HttpResponseRedirect
 from django.utils import timezone
+from rest_framework.throttling import AnonRateThrottle
 
 from apps import smsir
+from apps.payhub import service as hub
+from apps.payhub import snapppay, zarinpal
+from apps.payhub.models import PayRecord
 from apps.website.models import BankGateway, Invoice, InvoicePayment
 
 from apps.adminapi.paging import to_int
@@ -40,10 +46,9 @@ from .views import PublicView
 
 logger = logging.getLogger(__name__)
 
-ZARINPAL, SNAPPPAY = "zarinpal", "snapppay"
-SUPPORTED = (ZARINPAL, SNAPPPAY)
-TIMEOUT = 30
-UUID_LEN = 36  # a Zarinpal merchant_id
+ZARINPAL, SNAPPPAY = hub.ZARINPAL, hub.SNAPPPAY
+SUPPORTED = hub.GATEWAYS
+OFFER_SECONDS = 300  # product pages share the answer: one customer view is not one SnappPay call
 
 
 def _active(key: str) -> BankGateway | None:
@@ -55,7 +60,7 @@ def zarinpal_merchant() -> str:
     """The panel gateway's merchant id, else ZARINPAL_KEY from .env."""
     g = _active(ZARINPAL)
     for value in ((g.merchant, g.merchant_key, g.terminal_id) if g else ()):
-        if len((value or "").strip()) == UUID_LEN:
+        if len((value or "").strip()) == zarinpal.UUID_LEN:
             return value.strip()
     return settings.ZARINPAL_MERCHANT_ID
 
@@ -66,7 +71,7 @@ def _enabled(key: str) -> bool:
     if key == ZARINPAL:
         return bool(zarinpal_merchant())
     # SnappPay's OAuth client, user and API address stay in .env.
-    return bool(settings.SNAPPAY_BASE_URL and settings.SNAPPAY_CLIENT_ID and settings.SNAPPAY_USERNAME)
+    return snapppay.configured()
 
 
 def _icon_url(b64: str) -> str:
@@ -84,8 +89,9 @@ def _confirmation(success: bool, inv: Invoice | None, token: str = "") -> str:
     return f"{settings.SITE_URL}/order-confirmation?{urlencode(query)}"
 
 
-def _callback(name: str) -> str:
-    return f"{settings.PUBLIC_BASE_URL.rstrip('/')}/api/v1/Bank/{name}"
+def _back_here(success: bool) -> str:
+    """Where the hub sends the customer after the gateway."""
+    return f"{settings.PUBLIC_BASE_URL.rstrip('/')}/api/v1/Bank/PaymentVerification?success={'true' if success else 'false'}"
 
 
 class GatewaysView(CustomerView):
@@ -168,128 +174,66 @@ def _notify_admins(number: str) -> None:
         threading.Thread(target=send, daemon=True).start()
 
 
-# -----------------------------------------------------------------------------
-# Zarinpal (https://payment.zarinpal.com/pg/v4/payment/{request,verify}.json, amounts in rial)
-# -----------------------------------------------------------------------------
-# The error list in Zarinpal's docs (errors.code) -> what we keep on the payment / tell the customer.
-ZARINPAL_ERRORS = {
-    -9: "خطای اعتبارسنجی (مرچنت، آدرس بازگشت، توضیحات یا مبلغ نامعتبر)",
-    -10: "آی‌پی یا مرچنت کد پذیرنده صحیح نیست",
-    -11: "مرچنت کد فعال نیست",
-    -12: "تلاش بیش از حد مجاز در زمان کوتاه",
-    -13: "محدودیت تراکنش درگاه",
-    -14: "آدرس بازگشت با دامنه‌ی ثبت‌شده‌ی درگاه مغایرت دارد",
-    -15: "درگاه پرداخت تعلیق شده است",
-    -16: "سطح تایید پذیرنده پایین‌تر از نقره‌ای است",
-    -17: "محدودیت پذیرنده در سطح آبی",
-    -18: "استفاده از درگاه روی این دامنه مجاز نیست",
-    -19: "ایجاد تراکنش برای این درگاه ممکن نیست",
-    -40: "پارامتر expire_in نامعتبر است",
-    -41: "حداکثر مبلغ پرداختی ۱۰۰ میلیون تومان است",
-    -50: "مبلغ پرداخت‌شده با مبلغ فاکتور یکسان نیست",
-    -51: "پرداخت ناموفق",
-    -52: "خطای غیرمنتظره در زرین‌پال",
-    -53: "پرداخت متعلق به این مرچنت کد نیست",
-    -54: "اتوریتی نامعتبر است",
-    -55: "تراکنش یافت نشد",
-}
-ZARINPAL_MAX_RIAL = 1_000_000_000  # 100 million toman (-41)
-# Request errors worth showing to the customer as they are; others get a general message.
-CUSTOMER_FACING = {-9, -41}
-
-
-class GatewayError(Exception):
-    def __init__(self, message: str, customer_message: str | None = None):
-        super().__init__(message)
-        self.customer_message = customer_message
-
-
-def zarinpal_error(body: dict) -> tuple[int | None, str]:
-    """(code, Persian description) of a Zarinpal error reply."""
-    err = body.get("errors") if isinstance(body.get("errors"), dict) else {}
-    data = body.get("data") if isinstance(body.get("data"), dict) else {}
-    code = err.get("code", data.get("code"))
-    return code, ZARINPAL_ERRORS.get(code, str(err.get("message") or data.get("message") or "خطای نامشخص"))
-
-
-def _zarinpal_base() -> str:
-    return "https://sandbox.zarinpal.com" if settings.ZARINPAL_SANDBOX else "https://payment.zarinpal.com"
-
-
-def zarinpal_request(inv: Invoice) -> str:
-    """Creates the payment; returns the StartPay URL."""
-    if inv.payable_amount > ZARINPAL_MAX_RIAL:
-        raise GatewayError("over zarinpal limit", ZARINPAL_ERRORS[-41])
-    body = {
-        "merchant_id": zarinpal_merchant(), "amount": inv.payable_amount, "currency": "IRR",
-        "callback_url": _callback("ZarinpalCallback"), "description": f"سفارش {inv.id} مانگ",
-        "metadata": {"mobile": inv.customer.cellphone, "order_id": str(inv.id)},
-    }
-    resp = requests.post(f"{_zarinpal_base()}/pg/v4/payment/request.json", json=body, timeout=TIMEOUT,
-                         headers={"Accept": "application/json"})
-    reply = resp.json() or {}
-    data = reply.get("data") if isinstance(reply.get("data"), dict) else {}
-    if data.get("code") != 100 or not data.get("authority"):
-        code, message = zarinpal_error(reply)
-        raise GatewayError(f"zarinpal request {code}: {message}", message if code in CUSTOMER_FACING else None)
-    InvoicePayment.objects.create(invoice=inv, gateway=ZARINPAL, amount=inv.payable_amount, authority=data["authority"])
-    return f"{_zarinpal_base()}/pg/StartPay/{data['authority']}"
-
-
-def zarinpal_verify(payment: InvoicePayment) -> dict:
-    body = {"merchant_id": zarinpal_merchant(), "amount": payment.amount, "authority": payment.authority}
-    resp = requests.post(f"{_zarinpal_base()}/pg/v4/payment/verify.json", json=body, timeout=TIMEOUT,
-                         headers={"Accept": "application/json"})
-    return resp.json() or {}
-
-
-# -----------------------------------------------------------------------------
-# SnappPay (OAuth password grant, then token -> verify -> settle; amounts in rial)
-# -----------------------------------------------------------------------------
-def _snapp_token() -> str:
-    basic = base64.b64encode(f"{settings.SNAPPAY_CLIENT_ID}:{settings.SNAPPAY_CLIENT_SECRET}".encode()).decode()
-    resp = requests.post(
-        f"{settings.SNAPPAY_BASE_URL}/api/online/v1/oauth/token", timeout=TIMEOUT,
-        headers={"Authorization": f"Basic {basic}"},
-        data={"grant_type": "password", "scope": "online-merchant", "username": settings.SNAPPAY_USERNAME,
-              "password": settings.SNAPPAY_PASSWORD},
-    )
-    token = (resp.json() or {}).get("access_token")
-    if not token:
-        raise RuntimeError(f"snapppay token: {resp.status_code}")
-    return token
-
-
-def _snapp(method: str, path: str, **kwargs) -> dict:
-    resp = requests.request(method, f"{settings.SNAPPAY_BASE_URL}{path}", timeout=TIMEOUT,
-                            headers={"Authorization": f"Bearer {_snapp_token()}"}, **kwargs)
-    return resp.json() or {}
-
-
-def snapp_eligible(amount: int) -> dict:
-    return _snapp("GET", "/api/online/offer/v1/eligible", params={"amount": amount})
-
-
-def snapp_request(inv: Invoice) -> str:
-    lines = list(inv.lines.all())
+def snapp_order(inv: Invoice, lines=None) -> dict:
+    """
+    The order as SnappPay wants it (API document, "how to calculate totalAmount and amount"):
+    cart total = count x item amount + shipping; order amount = cart total - discount - external source.
+    """
     items = [{"amount": ln.price_after_reduction, "category": "پوشاک", "count": int(ln.qty), "id": ln.variant_id,
-              "name": ln.name[:100], "commissionType": 100} for ln in lines]
+              "name": ln.name[:100], "commissionType": settings.SNAPPAY_COMMISSION_TYPE} for ln in (lines or inv.lines.all())]
     goods = sum(i["amount"] * i["count"] for i in items)
-    transaction_id = f"M{inv.id}{secrets.token_hex(2).upper()}"[:10]
-    body = {
-        "amount": inv.payable_amount, "discountAmount": inv.deduction_amount, "externalSourceAmount": 0,
-        "mobile": "+98" + inv.customer.cellphone[1:], "returnURL": _callback("SnappPayCallback"),
-        "transactionId": transaction_id,
+    external = inv.deduction_amount if inv.gift_card_number else 0
+    discount = inv.deduction_amount - external
+    amount = goods + inv.delivery_amount - discount - external
+    return {
+        "amount": amount, "discountAmount": discount, "externalSourceAmount": external, "mobile": inv.customer.cellphone,
         "cartList": [{"cartId": inv.id, "cartItems": items, "isShipmentIncluded": False, "isTaxIncluded": True,
                       "shippingAmount": inv.delivery_amount, "taxAmount": 0, "totalAmount": goods + inv.delivery_amount}],
     }
-    data = _snapp("POST", "/api/online/payment/v1/token", json=body)
-    res = data.get("response") or {}
-    if not data.get("successful") or not res.get("paymentToken"):
-        raise RuntimeError(f"snapppay payment token: {str(data)[:300]}")
-    InvoicePayment.objects.create(invoice=inv, gateway=SNAPPPAY, amount=inv.payable_amount, authority=res["paymentToken"],
-                                  transaction_id=transaction_id)
-    return res["paymentPageUrl"]
+
+
+def _start_payment(inv: Invoice, key: str) -> str:
+    """Opens the gateway session and returns its page."""
+    record = hub.create(gateway=key, amount=inv.payable_amount, success=_back_here(True), failed=_back_here(False),
+                        source=PayRecord.Source.SITE, cell_phone=inv.customer.cellphone, customer_key=str(inv.customer_id),
+                        merchant_id=zarinpal_merchant() if key == ZARINPAL else "")
+    if key == ZARINPAL:
+        url = hub.start_zarinpal(record, str(inv.id), inv.payable_amount)
+        InvoicePayment.objects.create(invoice=inv, gateway=key, amount=inv.payable_amount, authority=record.authority)
+        return url
+    started = hub.start_snapp(record, str(inv.id), inv.payable_amount, snapp_order(inv))
+    InvoicePayment.objects.create(invoice=inv, gateway=key, amount=inv.payable_amount, authority=started["paymentToken"],
+                                  transaction_id=started["transactionId"])
+    return started["paymentPageUrl"]
+
+
+def _out_of_stock(inv: Invoice) -> bool:
+    from apps.samian.models import SamianBarcode, SamianInventory
+    from apps.website.models import online_warehouse_ids
+
+    wh_ids = online_warehouse_ids()
+    lines = list(inv.lines.all())
+    barcodes = {b.samian_id: b for b in SamianBarcode.objects.filter(samian_id__in=[ln.variant_id for ln in lines])}
+    for ln in lines:
+        if barcode := barcodes.get(ln.variant_id):
+            rows = SamianInventory.objects.filter(samian_barcode=barcode, warehouse_id__in=wh_ids).values_list("qty", flat=True)
+            if sum(rows, Decimal(0)) < ln.qty:
+                return True
+    return False
+
+
+def delivery_problem(record: PayRecord) -> str:
+    """Why this payment must not go through, for the customer; empty when all is well. Asked before the gateway is verified."""
+    inv = Invoice.objects.filter(id=record.transaction_id, is_deleted=False).first() if record.transaction_id.isdigit() else None
+    if not inv:
+        return "فاکتور این پرداخت پیدا نشد؛ مبلغ برگشت داده می‌شود."
+    if inv.state != S.PRE_INVOICE:
+        return "این فاکتور قبلاً پرداخت شده است؛ مبلغ این پرداخت برگشت داده می‌شود."
+    if inv.payable_amount != record.amount:
+        return "سبد خرید بعد از شروع پرداخت تغییر کرده است؛ مبلغ برگشت داده می‌شود."
+    if _out_of_stock(inv):
+        return "موجودی کالاهای سفارش به اتمام رسیده است؛ مبلغ برگشت داده می‌شود."
+    return ""
 
 
 # -----------------------------------------------------------------------------
@@ -308,28 +252,53 @@ class PayView(CustomerView):
         if key not in SUPPORTED or not _enabled(key):
             return answer(None, 400, "درگاه پرداخت انتخاب‌شده فعال نیست.")
         try:
-            url = zarinpal_request(inv) if key == ZARINPAL else snapp_request(inv)
-        except GatewayError as exc:
+            url = _start_payment(inv, key)
+        except hub.Refused as exc:
             logger.warning("pay request refused for invoice %s: %s", inv.id, exc)
-            return answer(None, 502, exc.customer_message or "اتصال به درگاه پرداخت برقرار نشد. لطفا دوباره تلاش کنید.")
+            return answer(None, 502, exc.message)
         except Exception:
             logger.exception("pay request failed for invoice %s", inv.id)
-            return answer(None, 502, "اتصال به درگاه پرداخت برقرار نشد. لطفا دوباره تلاش کنید.")
+            return answer(None, 502, hub.CONNECTION_FAILED)
         return answer(url, message="در حال انتقال به درگاه پرداخت")
+
+
+def _eligibility(amount: int) -> dict:
+    """Shown without any change, and only as SnappPay answers it (API document, questions 6)."""
+    reply = snapppay.eligible(amount)
+    return {"eligible": bool(reply.value("eligible")), "title_message": reply.value("title_message") or "",
+            "description": reply.value("description") or ""}
+
+
+NOT_ELIGIBLE = {"eligible": False, "title_message": "", "description": ""}
 
 
 class SnappEligibleView(CustomerView):
     def get(self, request):
         amount = request.query_params.get("Amount")
         if not _enabled(SNAPPPAY) or not str(amount or "").isdigit():
-            return answer({"eligible": False, "title_message": "", "description": ""})
-        try:
-            res = snapp_eligible(int(amount)).get("response") or {}
-        except Exception:
-            logger.exception("snapppay eligible failed")
-            res = {}
-        return answer({"eligible": bool(res.get("eligible")), "title_message": res.get("title_message", ""),
-                       "description": res.get("description", "")})
+            return answer(NOT_ELIGIBLE)
+        return answer(_eligibility(int(amount)))
+
+
+class OfferThrottle(AnonRateThrottle):
+    rate = "60/min"
+
+
+class SnappOfferView(PublicView):
+    """The product page's box: anyone can see it, so answers are shared for a few minutes."""
+
+    throttle_classes = [OfferThrottle]
+
+    def get(self, request):
+        amount = request.query_params.get("Amount")
+        if not str(amount or "").isdigit() or int(amount) <= 0 or not _enabled(SNAPPPAY):
+            return answer(NOT_ELIGIBLE)
+        key = f"snapppay:offer:{int(amount)}"
+        offer = cache.get(key)
+        if offer is None:
+            offer = _eligibility(int(amount))
+            cache.set(key, offer, OFFER_SECONDS)
+        return answer(offer)
 
 
 class ZeroAmountView(CustomerView):
@@ -347,59 +316,49 @@ class ZeroAmountView(CustomerView):
 
 def _finish(payment: InvoicePayment, success: bool, reference: str = "", card: str = "", error: str = "") -> None:
     with transaction.atomic():
-        payment.is_success, payment.reference, payment.card_pan = success, reference, card
-        payment.error_message, payment.verified_at = error[:2000], timezone.now()
-        payment.save()
-        if success and payment.invoice.state == S.PRE_INVOICE:
+        won = InvoicePayment.objects.filter(pk=payment.pk, verified_at__isnull=True).update(
+            is_success=success, reference=reference, card_pan=card, error_message=error[:2000], verified_at=timezone.now())
+        payment.refresh_from_db()
+        if won and success and payment.invoice.state == S.PRE_INVOICE:
             _mark_paid(payment.invoice)
 
 
-class ZarinpalCallbackView(PublicView):
+def _payment_of(record: PayRecord | None) -> InvoicePayment | None:
+    if not record or not record.transaction_id.isdigit():
+        return None
+    return InvoicePayment.objects.select_related("invoice").filter(
+        invoice_id=int(record.transaction_id), gateway=record.gateway, authority=record.payment_token or record.authority).first()
+
+
+def _gateway_reference(record: PayRecord) -> str:
+    return record.ref_id or record.gateway_transaction_id
+
+
+class PaymentVerificationView(PublicView):
+    """The hub's return address for this site: the token is secret, and confirm answers ok only once."""
+
     def get(self, request):
-        authority = request.query_params.get("Authority", "")
-        payment = InvoicePayment.objects.select_related("invoice").filter(gateway=ZARINPAL, authority=authority).first()
+        q = request.query_params
+        record = PayRecord.objects.filter(token=q.get("trackingToken", ""), source=PayRecord.Source.SITE).first()
+        payment = _payment_of(record)
         if not payment:
             return HttpResponseRedirect(_confirmation(False, None))
         if payment.verified_at:  # already handled (refresh or a second visit)
             return HttpResponseRedirect(_confirmation(payment.is_success, payment.invoice, payment.reference))
-        if request.query_params.get("Status") != "OK":
-            _finish(payment, False, error="لغو شده توسط کاربر")
+        if q.get("success") != "true":
+            _finish(payment, False, error=q.get("errorMessage") or record.error)
             return HttpResponseRedirect(_confirmation(False, payment.invoice))
-        try:
-            reply = zarinpal_verify(payment)
-        except Exception:
-            # Left unverified: coming back to this URL verifies again (Zarinpal returns 101 if it already was).
-            logger.exception("zarinpal verify failed for %s", authority)
-            return HttpResponseRedirect(_confirmation(False, payment.invoice))
-        data = reply.get("data") if isinstance(reply.get("data"), dict) else {}
-        ok_ = data.get("code") in (100, 101)  # 101: verified before
-        error = "" if ok_ else "{1} ({0})".format(*zarinpal_error(reply))
-        if not ok_:
-            logger.warning("zarinpal verify refused for %s: %s", authority, error)
-        _finish(payment, ok_, str(data.get("ref_id") or ""), data.get("card_pan") or "", error)
-        return HttpResponseRedirect(_confirmation(ok_, payment.invoice, str(data.get("ref_id") or "")))
 
-
-class SnappPayCallbackView(PublicView):
-    def post(self, request):
-        d = request.data
-        payment = InvoicePayment.objects.select_related("invoice").filter(
-            gateway=SNAPPPAY, transaction_id=str(d.get("transactionId") or "")).first()
-        if not payment:
-            return HttpResponseRedirect(_confirmation(False, None))
-        if payment.verified_at:
-            return HttpResponseRedirect(_confirmation(payment.is_success, payment.invoice, payment.reference))
-        if str(d.get("state") or "").upper() != "OK":
-            _finish(payment, False, error="ناموفق در اسنپ‌پی")
+        if problem := delivery_problem(record):
+            hub.abandon(record, problem)
+            _finish(payment, False, error=problem)
             return HttpResponseRedirect(_confirmation(False, payment.invoice))
-        try:
-            verified = _snapp("POST", "/api/online/payment/v1/verify", json={"paymentToken": payment.authority})
-            settled = _snapp("POST", "/api/online/payment/v1/settle", json={"paymentToken": payment.authority}) \
-                if verified.get("successful") else {}
-        except Exception:
-            logger.exception("snapppay verify/settle failed for %s", payment.transaction_id)
-            return HttpResponseRedirect(_confirmation(False, payment.invoice))
-        ok_ = bool(settled.get("successful"))
-        reference = str((settled.get("response") or {}).get("transactionId") or payment.transaction_id)
-        _finish(payment, ok_, reference, error="" if ok_ else str(verified if not verified.get("successful") else settled)[:500])
-        return HttpResponseRedirect(_confirmation(ok_, payment.invoice, reference))
+        result = hub.confirm(record, record.transaction_id, record.amount)
+        if result["status"] in ("ok", "duplicate"):
+            reference = _gateway_reference(record)
+            _finish(payment, True, reference, record.card_pan)
+            return HttpResponseRedirect(_confirmation(True, payment.invoice, reference))
+        logger.warning("payment %s not confirmed: %s (%s)", payment.pk, result["status"], record.error)
+        if record.state != hub.S.RETURNED:  # RETURNED: coming back to this URL confirms again
+            _finish(payment, False, error=record.error)
+        return HttpResponseRedirect(_confirmation(False, payment.invoice))

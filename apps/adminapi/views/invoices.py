@@ -11,8 +11,9 @@ code. Telling Mong's web orders from Lebaza's is still open (asked of Samian).
 The panel's state comes from the order's web status: awaiting payment is a
 pre-invoice (1), cancelled (or a voided/deleted receipt) is cancelled (4), and
 paid, processing, ready, sent and delivered are successful (3). Online payment
-rows, editing and cancelling come with the order phase (the panel only offers
-them for SnappPay orders).
+rows come with the order phase. Editing and cancelling are offered for orders
+paid with SnappPay (the panel asks the admin to confirm, as SnappPay requires:
+both are final), and they go to SnappPay through apps.payhub.
 
 Orders placed on the new site that have not reached Samian yet (website
 Invoice without samian_transaction_id) are listed too, with their own id and
@@ -23,19 +24,24 @@ looked up among those site orders first.
          &SearchText=&ShippingMethodIds=&pageNumber=&pageSize=
     GET  Invoice/GetInvoiceStatistics?invoiceState= | Invoice/InvoiceAmountRange | Invoice/InvoiceDetails/<id>
     GET  Invoice/RecentInvoicesForCustomer?customerId=&pageNumber=&pageSize= | Invoice/GetCorruptedInvoices
-    POST Invoice/UpdateInvoice/<id> | Invoice/CancelInvoice/<id> | Invoice/ValidateCorruptedInvoices (refused)
+    POST Invoice/UpdateInvoice/<id> | Invoice/CancelInvoice/<id> (SnappPay site orders)
+    POST Invoice/ValidateCorruptedInvoices (refused)
 """
 from __future__ import annotations
 
 import math
 from datetime import datetime
+from decimal import Decimal
 
+from django.db import transaction
 from django.db.models import BigIntegerField, Case, DecimalField, F, Max, Min, Q, Sum, Value, When
 from django.db.models.functions import Abs, Coalesce
 from django.utils import timezone
 
+from apps.payhub import service as payhub
 from apps.samian.models import SamianColor, SamianProduct, SamianSalesRow, SamianSalesTransaction
 from apps.storefront.envelope import jalali
+from apps.storefront.payments import SNAPPPAY, snapp_order
 from apps.website.models import City, CompanyInfo, Customer, Invoice, Product, ProductComment, ProductSamianLink, Province
 
 from ..envelope import fail, ok
@@ -129,7 +135,11 @@ def _filter(qs, q):
 # -----------------------------------------------------------------------------
 def _site():
     return (Invoice.objects.filter(is_deleted=False, samian_transaction_id__isnull=True)
-            .select_related("customer", "shipping_method__type", "address"))
+            .select_related("customer", "shipping_method__type", "address").prefetch_related("payments"))
+
+
+def _snapp_payment(inv: Invoice):
+    return next((p for p in inv.payments.all() if p.gateway == SNAPPPAY and p.is_success), None)
 
 
 def _site_filter(qs, q):
@@ -163,6 +173,7 @@ def _site_header(inv: Invoice) -> dict:
     m, c = inv.shipping_method, inv.customer
     lines = list(inv.lines.all())
     after = inv.amount - inv.reduction_amount
+    snapp = _snapp_payment(inv)
     return {
         "id": inv.id, "invoiceNumber": inv.number, "customerId": c.id, "customerName": c.first_name, "customerLastName": c.last_name,
         "qty": float(sum(ln.qty for ln in lines)), "createDate": inv.created.isoformat(),
@@ -178,7 +189,8 @@ def _site_header(inv: Invoice) -> dict:
         "amountAfterVatAndTax": after, "payableAmount": inv.payable_amount, "totalAmountPayable": inv.payable_amount,
         "finalAmount": inv.payable_amount, "giftCardId": None, "couponId": None,
         "description": "\n".join(x for x in (SITE_NOTE, inv.description) if x),
-        "commentCounts": 0, "hasComment": False, "snappPayTransactionId": None, "snappPayToken": None,
+        "commentCounts": 0, "hasComment": False,
+        "snappPayTransactionId": snapp.transaction_id if snapp else None, "snappPayToken": snapp.authority if snapp else None,
     }
 
 
@@ -430,3 +442,58 @@ class CorruptedView(AdminView):
 class NotYetView(AdminView):
     def post(self, request, invoice_id: int | None = None):
         return fail(NOT_YET, 400)
+
+
+def _snapp_order(invoice_id: int) -> tuple[Invoice | None, object]:
+    inv = _site().filter(id=invoice_id, state=SUCCESSFUL).first()
+    return inv, _snapp_payment(inv) if inv else None
+
+
+def _refused(message: str):
+    return fail(message, 400, {"errorMessage": [message]})
+
+
+class CancelView(AdminView):
+    def post(self, request, invoice_id: int):
+        inv, payment = _snapp_order(invoice_id)
+        if not payment:
+            return fail(NOT_YET, 400)
+        done, message = payhub.cancel(payment.authority)
+        if not done:
+            return _refused(message)
+        inv.state = CANCELLED
+        inv.save(update_fields=["state", "last_modified"])
+        return ok({"result": {"successful": True}})
+
+
+class UpdateView(AdminView):
+    """Lowers the quantities of a settled order; a row that goes to zero is removed from what SnappPay is sent."""
+
+    def post(self, request, invoice_id: int):
+        inv, payment = _snapp_order(invoice_id)
+        if not payment:
+            return fail(NOT_YET, 400)
+        wanted = {to_int(r.get("id")): r.get("qty") for r in request.data.get("invoiceDetails") or [] if isinstance(r, dict)}
+        lines = list(inv.lines.all())
+        for ln in lines:
+            qty = Decimal(str(wanted.get(ln.id) or 0))
+            if qty < 0 or qty > ln.qty or qty != qty.to_integral_value():
+                return _refused("تعداد ردیف‌ها فقط می‌تواند کم شود.")
+            ln.qty = qty
+        kept = [ln for ln in lines if ln.qty > 0]
+        if not kept:
+            return _refused("برای حذف همه‌ی ردیف‌ها، فاکتور را لغو کنید.")
+
+        order = snapp_order(inv, kept)
+        done, message = payhub.update(payment.authority, order)
+        if not done:
+            return _refused(message)
+        with transaction.atomic():
+            inv.lines.exclude(id__in=[ln.id for ln in kept]).delete()
+            for ln in kept:
+                ln.save(update_fields=["qty"])
+            inv.amount = sum(int(ln.price * ln.qty) for ln in kept)
+            inv.reduction_amount = inv.amount - sum(int(ln.price_after_reduction * ln.qty) for ln in kept)
+            inv.payable_amount = order["amount"]
+            inv.save(update_fields=["amount", "reduction_amount", "payable_amount", "last_modified"])
+        return ok({"result": {"successful": True}})

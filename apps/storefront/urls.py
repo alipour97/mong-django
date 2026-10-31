@@ -59,8 +59,8 @@ urlpatterns = [
     path("Bank/PayInvoiceById", pay.PayView.as_view()),
     path("Bank/SnappPayEligible", pay.SnappEligibleView.as_view()),
     path("Bank/GiftCardPayInvoiceById", pay.ZeroAmountView.as_view()),
-    path("Bank/ZarinpalCallback", pay.ZarinpalCallbackView.as_view()),
-    path("Bank/SnappPayCallback", pay.SnappPayCallbackView.as_view()),
+    path("Bank/SnappPayOffer", pay.SnappOfferView.as_view()),
+    path("Bank/PaymentVerification", pay.PaymentVerificationView.as_view()),
 
     # Blog
     path("Article/GetRecentArticles", blog.RecentView.as_view()),

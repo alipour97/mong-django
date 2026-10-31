@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "apps.legacy",
     "apps.website",
     "apps.adminapi",
+    "apps.payhub",
 ]
 
 MIDDLEWARE = [
@@ -237,9 +238,23 @@ SMSIR_INVOICE_PARAM = os.getenv("SMSIR_INVOICE_PARAM", "INVOICE")
 # (SITE_URL, defined at the top, is also the storefront the customer returns to after paying.)
 ZARINPAL_MERCHANT_ID = os.getenv("ZARINPAL_KEY", "")
 ZARINPAL_SANDBOX = os.getenv("ZARINPAL_SANDBOX", "false").lower() in ("1", "true", "yes")
-# SnappPay is offered only once SNAPPAY_BASE_URL (given by SnappPay with the merchant account) is set.
-SNAPPAY_BASE_URL = os.getenv("SNAPPAY_BASE_URL", "").rstrip("/")
+# The branded payment page (pay.mong.ir is a CNAME to Zarinpal). Empty: Zarinpal's own address.
+ZARINPAL_STARTPAY_BASE_URL = os.getenv("ZARINPAL_STARTPAY_BASE_URL", "https://pay.mong.ir/pg/StartPay").rstrip("/")
+# SnappPay is offered only once its address is set: SNAPPAY_BASE_URL in production, SNAPPAY_STAGE_URL until then.
+SNAPPAY_BASE_URL = (os.getenv("SNAPPAY_BASE_URL") or os.getenv("SNAPPAY_STAGE_URL", "")).rstrip("/")
 SNAPPAY_CLIENT_ID = os.getenv("SNAPPAY_CLIENT_ID", "")
 SNAPPAY_CLIENT_SECRET = os.getenv("SNAPPAY_CLIENT_SECRET", "")
 SNAPPAY_USERNAME = os.getenv("SNAPPAY_USERNAME", "")
 SNAPPAY_PASSWORD = os.getenv("SNAPPAY_PASSWORD", "")
+SNAPPAY_COMMISSION_TYPE = int(os.getenv("SNAPPAY_COMMISSION_TYPE", "100"))  # the document's default, one category
+SNAPPAY_TRANSACTION_ID_START = int(os.getenv("SNAPPAY_TRANSACTION_ID_START", "50000000"))  # 5-10 digits, unique
+
+# The payment hub (apps.payhub): one service for both sites. PAYHUB_PUBLIC_URL is the address both gateways
+# send the customer back to, so its domain must be the one registered with SnappPay and Zarinpal.
+PAYHUB_PUBLIC_URL = os.getenv("PAYHUB_PUBLIC_URL", SITE_URL).rstrip("/")
+if (_hub_host := urlsplit(PAYHUB_PUBLIC_URL).hostname) and _hub_host not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_hub_host)
+PAYHUB_ALLOWED_API_IPS = [h.strip() for h in os.getenv("PAYHUB_ALLOWED_API_IPS", "").split(",") if h.strip()]
+PAYHUB_ACCEPT_KEY = os.getenv("PAYHUB_ACCEPT_KEY", "")  # SnappPayForward.Key on Mong.Pay
+PAYHUB_ALLOWED_CALLBACK_HOSTS = [h.strip().lower() for h in os.getenv("PAYHUB_ALLOWED_CALLBACK_HOSTS", "api.mong.ir,api.mongnew.ir").split(",") if h.strip()]
+PAYHUB_OLD_HUB_URL = os.getenv("PAYHUB_OLD_HUB_URL", "").rstrip("/")  # while moving: Mong.Pay, for the tokens it made
