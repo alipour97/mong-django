@@ -656,44 +656,67 @@ SORT_CRITERIA = [
 ]
 
 
+def _safe_int(value) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def filter_rows(payload: dict) -> list[ListingRow]:
+    payload = payload if isinstance(payload, dict) else {}
     rows = listing_rows()
     tree = category_tree()
 
-    cat_ids = [int(c) for c in payload.get("filteredCategoryIds") or [] if c]
+    cat_ids = [_safe_int(c) for c in payload.get("filteredCategoryIds") or []]
+    cat_ids = [c for c in cat_ids if c is not None]
     if cat_ids:
         allowed = set().union(*(tree.descendants(c) for c in cat_ids))
         rows = [r for r in rows if r.category_id in allowed]
-    if payload.get("filteredBrandId") and int(payload["filteredBrandId"]) != MONG_BRAND["id"]:
+
+    brand_id = _safe_int(payload.get("filteredBrandId"))
+    if brand_id is not None and brand_id != MONG_BRAND["id"]:
         rows = []
-    coll_ids = [int(c) for c in payload.get("filteredCollectionIds") or [] if c]
+
+    coll_ids = [_safe_int(c) for c in payload.get("filteredCollectionIds") or []]
+    coll_ids = [c for c in coll_ids if c is not None]
     if coll_ids:
         links = ProductCollection.objects.filter(collection_id__in=coll_ids, is_deleted=False)
         pids = set(links.exclude(product_id=None).values_list("product_id", flat=True))
         # A collection that includes a brand includes every product (there is only Mong).
         if not links.exclude(brand_id=None).exists():
             rows = [r for r in rows if r.id in pids]
-    if payload.get("fromPrice"):
-        rows = [r for r in rows if r.price_after >= int(payload["fromPrice"])]
-    if payload.get("toPrice"):
-        rows = [r for r in rows if r.price_after <= int(payload["toPrice"])]
+
+    from_price = _safe_int(payload.get("fromPrice"))
+    if from_price is not None:
+        rows = [r for r in rows if r.price_after >= from_price]
+
+    to_price = _safe_int(payload.get("toPrice"))
+    if to_price is not None:
+        rows = [r for r in rows if r.price_after <= to_price]
+
     if payload.get("hasDiscount"):
         rows = [r for r in rows if r.reduction > 0]
     if payload.get("isInStock"):
         rows = [r for r in rows if r.in_stock]
-    feature_ids = expand_color_families({int(f) for f in payload.get("filteredFeatureId") or [] if f})
+
+    raw_feat = [_safe_int(f) for f in payload.get("filteredFeatureId") or []]
+    feat_ids = {f for f in raw_feat if f is not None}
+    feature_ids = expand_color_families(feat_ids)
     if feature_ids:
         rows = [r for r in rows if r.color_ids & feature_ids]
+
     if payload.get("search"):
         q = norm(payload["search"])
         rows = [r for r in rows if q in r.title]
 
-    return sorted(rows, key=SORT_KEYS.get(int(payload.get("sortCriteriaId") or 2), _newest))
+    sort_id = _safe_int(payload.get("sortCriteriaId")) or 2
+    return sorted(rows, key=SORT_KEYS.get(sort_id, _newest))
 
 
 def page_of(rows: list, page_number, page_size) -> tuple[list, int]:
-    size = max(1, int(page_size or 20))
-    number = max(1, int(page_number or 1))
+    size = max(1, _safe_int(page_size) or 20)
+    number = max(1, _safe_int(page_number) or 1)
     total_pages = math.ceil(len(rows) / size) if rows else 0
     return rows[(number - 1) * size: number * size], total_pages
 

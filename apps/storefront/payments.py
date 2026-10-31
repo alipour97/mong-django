@@ -33,8 +33,9 @@ from apps.website.models import BankGateway, Invoice, InvoicePayment
 
 from apps.adminapi.paging import to_int
 
+from . import catalog
 from .account import CustomerView, answer
-from .orders import S, assign_number
+from .orders import S, assign_number, snapshot_address
 from .views import PublicView
 
 logger = logging.getLogger(__name__)
@@ -101,12 +102,55 @@ def _payable_invoice(request, invoice_id) -> Invoice | None:
     return request.user.invoices.filter(id=invoice_id, state=S.PRE_INVOICE, is_deleted=False).first() if str(invoice_id or "").isdigit() else None
 
 
+def _deduct_inventory(inv: Invoice) -> None:
+    """Deduct ordered quantities from SamianInventory across online warehouses."""
+    from decimal import Decimal
+    from apps.samian.models import SamianBarcode, SamianInventory
+    from apps.website.models import online_warehouse_ids
+
+    wh_ids = online_warehouse_ids()
+    lines = list(inv.lines.all())
+    variant_ids = [ln.variant_id for ln in lines]
+    barcode_map = {b.samian_id: b for b in SamianBarcode.objects.filter(samian_id__in=variant_ids)}
+
+    for ln in lines:
+        barcode = barcode_map.get(ln.variant_id)
+        if not barcode:
+            continue
+        needed = Decimal(str(ln.qty or 0))
+        if needed <= 0:
+            continue
+        inv_rows = list(
+            SamianInventory.objects.select_for_update()
+            .filter(samian_barcode=barcode, warehouse_id__in=wh_ids)
+            .order_by("-qty")
+        )
+        for row in inv_rows:
+            if needed <= 0:
+                break
+            if row.qty <= 0:
+                continue
+            deduct = min(row.qty, needed)
+            row.qty -= deduct
+            needed -= deduct
+            row.save(update_fields=["qty", "last_updated"])
+
+        if needed > 0 and inv_rows:
+            row = inv_rows[0]
+            row.qty = max(Decimal("0.00"), row.qty - needed)
+            row.save(update_fields=["qty", "last_updated"])
+
+
 def _mark_paid(inv: Invoice) -> None:
     with transaction.atomic():
+        if inv.address and not inv.full_address:
+            snapshot_address(inv)
         inv.state, inv.paid_at = S.SUCCESSFUL, timezone.now()
-        inv.save(update_fields=["state", "paid_at", "last_modified"])
+        inv.save(update_fields=["state", "paid_at", "last_modified", "recipient_name", "recipient_mobile", "full_address", "postal_code", "province_name", "city_name"])
         number = assign_number(inv)
+        _deduct_inventory(inv)
     transaction.on_commit(lambda: _notify_admins(number))
+    transaction.on_commit(catalog.clear_caches)
 
 
 def _notify_admins(number: str) -> None:

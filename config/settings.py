@@ -13,7 +13,7 @@ load_dotenv(BASE_DIR / ".env")
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "mong-secret-key-development-stage-samian-erp-2026")
 
-DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in ("true", "1", "yes")
+DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() in ("true", "1", "yes")
 
 # The one address of the site (backend, panel and storefront behind one domain).
 # Moving to a new domain or VPS means changing SITE_URL in the root .env only;

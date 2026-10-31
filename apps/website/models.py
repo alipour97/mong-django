@@ -1213,6 +1213,12 @@ class Invoice(models.Model):
                                         verbose_name=_("روش ارسال"))
     address = models.ForeignKey("CustomerAddress", null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
                                 verbose_name=_("آدرس"))
+    recipient_name = models.CharField(_("نام گیرنده"), max_length=255, blank=True, default="")
+    recipient_mobile = models.CharField(_("موبایل گیرنده"), max_length=20, blank=True, default="")
+    full_address = models.TextField(_("نشانی کامل"), blank=True, default="")
+    postal_code = models.CharField(_("کد پستی"), max_length=32, blank=True, default="")
+    province_name = models.CharField(_("استان"), max_length=128, blank=True, default="")
+    city_name = models.CharField(_("شهر"), max_length=128, blank=True, default="")
     amount = models.BigIntegerField(_("مبلغ کل (ریال)"), default=0)
     reduction_amount = models.BigIntegerField(_("تخفیف کالاها (ریال)"), default=0)
     delivery_amount = models.BigIntegerField(_("هزینه ارسال (ریال)"), default=0)

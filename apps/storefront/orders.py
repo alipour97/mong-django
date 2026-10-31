@@ -213,6 +213,7 @@ class AddView(CustomerView):
             inv = _pre_invoice(customer) or Invoice(customer=customer)
             is_new = inv.pk is None
             inv.shipping_method, inv.address = method, address
+            snapshot_address(inv, address)
             inv.amount, inv.reduction_amount, inv.delivery_amount, inv.deduction_amount = amount, amount - after, delivery, 0
             inv.payable_amount = after + delivery
             inv.description = str(d.get("description") or "")[:2000]
@@ -230,6 +231,23 @@ class AddView(CustomerView):
         return reply(data, message="فاکتور شما با موفقیت ثبت شد.")
 
 
+def snapshot_address(inv: Invoice, address: CustomerAddress | None = None) -> None:
+    a = address or inv.address
+    if not a:
+        return
+    prov = Province.objects.filter(id=a.province_id).values_list("name", flat=True).first() or ""
+    cty = City.objects.filter(id=a.city_id).values_list("name", flat=True).first() or ""
+    recip = f"{a.first_name} {a.last_name}".strip()
+    if not recip and inv.customer:
+        recip = f"{inv.customer.first_name} {inv.customer.last_name}".strip()
+    inv.recipient_name = recip
+    inv.recipient_mobile = a.mobile or (inv.customer.cellphone if inv.customer else "")
+    inv.full_address = a.address or ""
+    inv.postal_code = a.zip_code or ""
+    inv.province_name = prov
+    inv.city_name = cty
+
+
 # -----------------------------------------------------------------------------
 # Rendering
 # -----------------------------------------------------------------------------
@@ -238,19 +256,30 @@ def _feature(feature_id: int, value_id, name: str, value: str = "", media=None) 
             "mediaAttachments": media, "id": value_id or 0, "created": None}
 
 
-def _address(a: CustomerAddress | None) -> dict | None:
-    if a is None:
-        return None
-    province = Province.objects.filter(id=a.province_id).values_list("name", flat=True).first() or ""
-    city = City.objects.filter(id=a.city_id).values_list("name", flat=True).first() or ""
-    return {
-        "id": a.id, "customerId": a.customer_id, "isDefault": a.is_default, "address": a.address,
-        "provinceId": a.province_id, "provinceTitle": province, "cityId": a.city_id, "cityTitle": city,
-        "isMyselfRecipient": a.is_myself_recipient, "firstName": a.first_name, "lastName": a.last_name,
-        "zipCode": a.zip_code, "mobile": a.mobile, "title": a.title,
-        "latitude": float(a.latitude) if a.latitude is not None else None,
-        "longitude": float(a.longitude) if a.longitude is not None else None,
-    }
+def _address(a: CustomerAddress | None, inv: Invoice | None = None) -> dict | None:
+    if a is not None:
+        province = Province.objects.filter(id=a.province_id).values_list("name", flat=True).first() or ""
+        city = City.objects.filter(id=a.city_id).values_list("name", flat=True).first() or ""
+        return {
+            "id": a.id, "customerId": a.customer_id, "isDefault": a.is_default, "address": a.address,
+            "provinceId": a.province_id, "provinceTitle": province, "cityId": a.city_id, "cityTitle": city,
+            "isMyselfRecipient": a.is_myself_recipient, "firstName": a.first_name, "lastName": a.last_name,
+            "zipCode": a.zip_code, "mobile": a.mobile, "title": a.title,
+            "latitude": float(a.latitude) if a.latitude is not None else None,
+            "longitude": float(a.longitude) if a.longitude is not None else None,
+        }
+    if inv and (inv.full_address or inv.recipient_name):
+        parts = (inv.recipient_name or "").split(None, 1)
+        first_name = parts[0] if parts else ""
+        last_name = parts[1] if len(parts) > 1 else ""
+        return {
+            "id": 0, "customerId": inv.customer_id, "isDefault": False, "address": inv.full_address,
+            "provinceId": 0, "provinceTitle": inv.province_name, "cityId": 0, "cityTitle": inv.city_name,
+            "isMyselfRecipient": True, "firstName": first_name, "lastName": last_name,
+            "zipCode": inv.postal_code, "mobile": inv.recipient_mobile, "title": "",
+            "latitude": None, "longitude": None,
+        }
+    return None
 
 
 def _customer(c) -> dict:
@@ -300,7 +329,7 @@ def full_invoice(inv: Invoice) -> dict:
         "id": inv.id, "created": inv.created.isoformat(), "customerId": inv.customer_id, "amount": inv.amount,
         "reduction": 0, "discount": inv.reduction_amount, "tax": 0, "vat": 0, "invoiceType": inv.state,
         "description": inv.description, "image": None, "customer": _customer(inv.customer),
-        "customerAddressId": inv.address_id, "customerAddress": _address(inv.address), "invoiceDetails": lines,
+        "customerAddressId": inv.address_id, "customerAddress": _address(inv.address, inv), "invoiceDetails": lines,
         "categoryId": lines[0]["categoryId"] if lines else None, "parentCategoryId": lines[0]["parentCategoryId"] if lines else None,
         "payableAmount": inv.payable_amount, "deliveryAmount": inv.delivery_amount, "shippingMethodId": inv.shipping_method_id,
     }
@@ -319,7 +348,7 @@ def invoice_summary(inv: Invoice) -> dict:
         "shippingMethodId": inv.shipping_method_id or 0, "shippingMethodName": m.name if m else "",
         "shippingMethodType": m.type.key if m and m.type else "", "shippingMethodTypeId": m.type_id if m else 0,
         "shippingMethodTypeTitle": m.type.name if m and m.type else "", "deliveryAmount": inv.delivery_amount,
-        "customerAddress": _address(inv.address), "customer": _customer(inv.customer),
+        "customerAddress": _address(inv.address, inv), "customer": _customer(inv.customer),
         "invoiceDetails": [
             {"invoiceId": inv.id, "name": ln["name"], "price": ln["price"], "totalPrice": ln["totalPrice"], "qty": ln["qty"],
              "productId": ln["productId"], "slug": ln["slug"], "image": ln["image"], "childFeatureValue": ln["childFeatureValue"],
