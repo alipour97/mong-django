@@ -26,6 +26,9 @@ urlpatterns = [
     path("api/samian/", include("apps.samian.urls")),
     path("api/v1/", include("apps.storefront.urls")),
     path("api/admin/v1/", include("apps.adminapi.urls")),
+    # SnappPay Crawler Feed & API (Legacy and Modern endpoints, handles both snappay and SnappPay)
+    re_path(r"^api/[Ss]napp[Pp]?ay/", include("apps.storefront.snappay_urls")),
+    re_path(r"^api/v1/[Ss]napp[Pp]?ay/", include("apps.storefront.snappay_urls")),
     re_path(r"^(?:api/)?img/(?P<key>.+)$", image_variant),
     re_path(r"^cdn/(?P<path>.*)$", serve, {"document_root": settings.LEGACY_CDN_ROOT}),
     re_path(r"^api/cdn/(?P<path>.*)$", serve, {"document_root": settings.LEGACY_CDN_ROOT}),

@@ -48,6 +48,7 @@ from apps.website.models import (
     CategoryTag,
     MediaAttachment,
     Product,
+    ProductAIProfile,
     ProductCollection,
     ProductComment,
     ProductSamianLink,
@@ -291,6 +292,7 @@ class ProductBundle:
     samian_images: dict[int, dict[int, list[dict]]] = field(default_factory=dict)  # product id -> colorinfo id -> images
     only_media: bool = False  # SiteSetting.only_has_media_products: hide colors that have no images
     min_qty: float = 0.0  # SiteSetting.min_qty: safety stock per variant that is never offered online
+    ai_profiles: dict[int, ProductAIProfile] = field(default_factory=dict)  # website product id -> ProductAIProfile
 
     @classmethod
     def load(cls, product_ids, *, with_images: bool = True, include_hidden: bool = False) -> "ProductBundle":
@@ -349,6 +351,7 @@ class ProductBundle:
             .values("samian_barcode_id").annotate(total=Sum("qty"))
         }
 
+        b.ai_profiles = {ap.product_id: ap for ap in ProductAIProfile.objects.filter(product_id__in=ids)}
         if with_images:
             b._load_images(ids, include_hidden)
         return b
@@ -469,6 +472,7 @@ class ProductBundle:
     def list_item(self, pid: int) -> dict:
         p = self.products[pid]
         pr = self.pricing(pid)
+        ai = self.ai_profiles.get(pid)
         return {
             "id": p.id,
             "slug": p.slug,
@@ -476,6 +480,7 @@ class ProductBundle:
             "parentCategoryId": p.category.parent_id if p.category else None,
             "brandId": MONG_BRAND["id"],
             "productName": p.title,
+            "aiTitle": (ai.title if ai and ai.title else ""),
             "longDescriptionHtml": none_if_blank(p.long_description_html),
             "shortDescriptionHtml": none_if_blank(p.short_description_html),
             "mainImages": self.main_images(pid),
@@ -518,6 +523,13 @@ class ProductBundle:
         comments = ProductComment.objects.filter(product_id=pid, is_deleted=False, status=1).count()
         tags = tags_for(ProductTag, "product_id", [pid]).get(pid, [])
         sp = self.samian.get(pid)
+        ai = self.ai_profiles.get(pid)
+
+        product_name = p.title
+        ai_title = ai.title if ai and ai.title else ""
+        description = ai.description if ai and ai.description else none_if_blank(p.description)
+        short_desc = ai.meta_description if ai and ai.meta_description else none_if_blank(p.short_desc)
+
         return {
             "id": p.id,
             "slug": p.slug,
@@ -527,7 +539,8 @@ class ProductBundle:
             "categoryId": p.category_id,
             "parentCategoryId": p.category.parent_id if p.category else None,
             "brandId": MONG_BRAND["id"],
-            "productName": p.title,
+            "productName": product_name,
+            "aiTitle": ai_title,
             "ProductName_En": none_if_blank(sp.name_en if sp else ""),
             "mainImages": self.main_images(pid),
             "productSizeGuid": self.size_guide(pid),
@@ -539,13 +552,20 @@ class ProductBundle:
             "priceAfterReduction": pr.after,
             "reductionPrice": pr.reduction_price,
             "details": self.details(pid, pr, with_barcode=True),
-            "description": none_if_blank(p.description),
-            "shortDesc": none_if_blank(p.short_desc),
+            "description": description,
+            "shortDesc": short_desc,
             "commentCount": comments,
             "promotionLabel": None,
             "productFeatures": None,
             "breadcrumbs": None,
             "tags": tags,
+            # AI Profile additions
+            "fab": ai.fab if ai else "",
+            "summaryBullets": ai.summary_bullets if ai else [],
+            "stylistNote": ai.stylist_note if ai else "",
+            "aiTags": ai.tags if ai else [],
+            "aiAttributes": ai.attributes if ai else {},
+            "metaDescription": ai.meta_description if ai else "",
         }
 
 

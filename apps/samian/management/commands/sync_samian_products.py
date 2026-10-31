@@ -95,6 +95,29 @@ class Command(BaseCommand):
                 batch.append(prod)
 
                 if len(batch) >= batch_size:
+                    # Preserve existing non-empty fields if incoming Samian data is empty
+                    batch_sids = [p.samian_id for p in batch]
+                    existing_sps = SamianProduct.objects.filter(samian_id__in=batch_sids).in_bulk(field_name="samian_id")
+                    for p in batch:
+                        old = existing_sps.get(p.samian_id)
+                        if old:
+                            if not p.subcode and old.subcode:
+                                p.subcode = old.subcode
+                            if not p.name and old.name:
+                                p.name = old.name
+                            if not p.name_en and old.name_en:
+                                p.name_en = old.name_en
+                            if not p.description and old.description:
+                                p.description = old.description
+                            if not p.season and old.season:
+                                p.season = old.season
+                            if not p.style and old.style:
+                                p.style = old.style
+                            if not p.brand_name and old.brand_name:
+                                p.brand_name = old.brand_name
+                            if not p.department_name and old.department_name:
+                                p.department_name = old.department_name
+
                     SamianProduct.objects.bulk_create(
                         batch,
                         update_conflicts=True,
@@ -110,6 +133,28 @@ class Command(BaseCommand):
                     batch = []
 
             if batch:
+                batch_sids = [p.samian_id for p in batch]
+                existing_sps = SamianProduct.objects.filter(samian_id__in=batch_sids).in_bulk(field_name="samian_id")
+                for p in batch:
+                    old = existing_sps.get(p.samian_id)
+                    if old:
+                        if not p.subcode and old.subcode:
+                            p.subcode = old.subcode
+                        if not p.name and old.name:
+                            p.name = old.name
+                        if not p.name_en and old.name_en:
+                            p.name_en = old.name_en
+                        if not p.description and old.description:
+                            p.description = old.description
+                        if not p.season and old.season:
+                            p.season = old.season
+                        if not p.style and old.style:
+                            p.style = old.style
+                        if not p.brand_name and old.brand_name:
+                            p.brand_name = old.brand_name
+                        if not p.department_name and old.department_name:
+                            p.department_name = old.department_name
+
                 SamianProduct.objects.bulk_create(
                     batch,
                     update_conflicts=True,

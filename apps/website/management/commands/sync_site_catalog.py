@@ -161,11 +161,32 @@ class Command(BaseCommand):
                         hidden.append((p, cat))
                     p.category_id = cat.id
                     changed = True
+                # Rule: If Samian is empty, do NOT overwrite existing values. Only fill empty values from Samian.
                 name = " ".join(sp.name.split())
-                if name and " ".join(p.title.split()) != name:
+                if not p.title and name:
                     p.title = name
                     retitled += 1
                     changed = True
+                elif name and not getattr(p, "has_manual_slug", False) and not hasattr(p, "ai_profile") and " ".join(p.title.split()) != name:
+                    p.title = name
+                    retitled += 1
+                    changed = True
+
+                desc = (sp.description or "").strip()
+                if not p.description and desc:
+                    p.description = desc
+                    changed = True
+
+                season = (sp.season or "").strip()
+                if not p.product_season_title and season:
+                    p.product_season_title = season
+                    changed = True
+
+                style = (sp.style or "").strip()
+                if not p.product_style_title and style:
+                    p.product_style_title = style
+                    changed = True
+
                 if changed:
                     updates.append(p)
             elif not sp.subcode.isdigit() or codes.get(sp.subcode):
@@ -178,12 +199,19 @@ class Command(BaseCommand):
                     title=name, slug=slugs.make_slug(name, taken, fallback=sp.subcode), category=cat,
                     brand_id=mong_brand, barcode=sp.subcode, is_active=sp.is_active, is_saleable=sp.is_saleable,
                     created=sp.create_date or timezone.now(), last_modified=timezone.now(),
+                    description=(sp.description or "").strip(),
+                    product_season_title=(sp.season or "").strip(),
+                    product_style_title=(sp.style or "").strip(),
                 )
                 p.slug_key = slugs.slug_key(p.slug)
                 taken.add(p.slug_key)
                 new_products.append((p, sp))
 
-        Product.objects.bulk_update(updates, ["category", "title"], batch_size=2000)
+        Product.objects.bulk_update(
+            updates,
+            ["category", "title", "description", "product_season_title", "product_style_title"],
+            batch_size=2000,
+        )
         for p, sp in new_products:
             p.save()
             new_links.append(ProductSamianLink(product=p, samian_product_id=sp.samian_id, method=ProductSamianLink.Method.AUTO))

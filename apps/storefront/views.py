@@ -534,16 +534,35 @@ class SearchEngineMetaView(PublicView):
         pr = bundle.pricing(p.id)
         images = bundle.main_images(p.id)
         category = p.category.title if p.category else ""
-        parts = [category, p.title, p.short_desc, f"قیمت {_toman(pr.after)} تومان"]
+        ai = getattr(p, "ai_profile", None)
+        product_name = p.title
+        ai_title = ai.title if ai and ai.title else ""
+        meta_desc = ai.meta_description if ai and ai.meta_description else p.short_desc
+        parts = [category, product_name, ai_title, meta_desc, f"قیمت {_toman(pr.after)} تومان"]
         reviews = ProductComment.objects.filter(product=p, is_deleted=False, status=1).count()
         url = f"/products-item/{p.slug}"
+
+        keywords = []
+        if ai and ai.search_keywords:
+            keywords.extend(ai.search_keywords)
+        if ai and ai.tags:
+            for t in ai.tags:
+                val = t.get("value")
+                if val and val not in keywords:
+                    keywords.append(val)
+        if not keywords:
+            keywords = [t["title"] for t in catalog.tags_for(ProductTag, "product_id", [p.id]).get(p.id, [])]
+        keywords_str = ", ".join(keywords) if keywords else ""
+
         return Response({
             "context": "https://schema.org/",
             "type": "Product",
-            "name": p.title,
+            "name": product_name,
+            "alternateName": ai_title or None,
             "image": [i["mediaUrl"] for i in images if not i["isVideo"]],
             "video": [i["mediaUrl"] for i in images if i["isVideo"]],
-            "description": " . ".join(x for x in parts if x),
+            "description": meta_desc or " . ".join(x for x in parts if x),
+            "keywords": keywords_str,
             "canonical": url,
             "brand": {"type": "Brand", "name": catalog.MONG_BRAND["title"]},
             "sku": p.barcode,
