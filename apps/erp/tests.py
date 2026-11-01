@@ -401,3 +401,33 @@ class ImportTests(TestCase):
         self.customers({"Id": 1, "CellPhone": "0912", "FirstName": "الف"})
         self.customers({"Id": 1, "CellPhone": "0912", "FirstName": "ب"})
         self.assertEqual(Customer.objects.get().first_name, "ب")
+
+
+@override_settings(ERP_WRITES_ENABLED=True)
+class PaidOrderTests(TestCase):
+    """From a paid order to the rows handed to the software, stock taken on the way."""
+
+    def test_the_whole_way(self):
+        from apps.storefront import payments
+
+        use_dadehfa(self)
+        customer = Customer.objects.create(first_name="ع", cellphone="09121234567")
+        address = CustomerAddress.objects.create(customer=customer, address="تهران", province_id=8, city_id=301)
+        variant = goods(qty=5)
+        invoice = order(customer, state=Invoice.State.PRE_INVOICE, address=address)
+        InvoicePayment.objects.create(invoice=invoice, gateway="zarinpal", amount=1900000, authority="A", reference="R", is_success=True)
+        with mock.patch("apps.storefront.payments._notify_admins"):
+            payments._mark_paid(invoice)
+        self.assertEqual(ErpStock.objects.get(variant=variant).qty, 3)
+
+        db, engine = FakeDb(), mock.Mock()
+        engine.begin.return_value = db
+        with mock.patch("apps.erp.dadehfa_write.get_engine", return_value=engine), \
+                mock.patch("apps.erp.outbox.get_connector", return_value=DadehfaConnector()), \
+                mock.patch.object(DadehfaConnector, "follow"):
+            outbox.run(lambda line: None)
+            outbox.run(lambda line: None)
+        self.assertEqual(db.tables().count("Invoices"), 1)
+        invoice.refresh_from_db()
+        self.assertIsNotNone(invoice.erp_invoice_id)
+        self.assertFalse(outbox.waiting().exists())

@@ -1,0 +1,12 @@
+# The dadeh service on Runflare (ERP_CONNECTOR=dadehfa).
+# Prices, stock and images: every 5 minutes. Titles and new products: hourly.
+*/5 * * * * cd /app && python manage.py sync_erp >> /app/public/sync.log 2>&1
+7 * * * * cd /app && python manage.py sync_erp --full >> /app/public/sync.log 2>&1
+# The rest of the catalog, new LEBAZAI images and AI copy, and building new images: nightly.
+30 3 * * * cd /app && python manage.py import_dadehfa --only catalog --upsert >> /app/public/sync.log 2>&1
+0 4 * * * cd /app && python manage.py sync_lebazai_images >> /app/public/sync.log 2>&1
+30 4 * * * cd /app && python manage.py sync_ai_profiles >> /app/public/sync.log 2>&1
+0 5 * * * cd /app && python manage.py build_images >> /app/public/sync.log 2>&1
+# Paid orders on their way to the software, and the payment hub's unclear payments.
+* * * * * cd /app && python manage.py erp_outbox >> /app/public/outbox.log 2>&1
+*/5 * * * * cd /app && python manage.py payhub_reconcile >> /app/public/payhub.log 2>&1

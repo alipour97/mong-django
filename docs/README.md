@@ -14,6 +14,7 @@
 | [04_third_party_partner_api.md](./04_third_party_partner_api.md) | **ماژول ۳: سرویس همکاران و کراولرها (`third-party.mong.ir`)** | اتصالات ترب، ایمالز، شاپینو (Shopino)، اسنپ‌پی و فید کالاها |
 | [05_new_erp_migration_blueprint.md](./05_new_erp_migration_blueprint.md) | **راهنمای مهاجرت به ERP جدید و جنگو** | نگاشت دیتابیس، استراتژی سینک موجودی، راه‌اندازی موازی و سوییچ نهایی |
 | [06_payhub.md](./06_payhub.md) | **سرویس پرداخت واحد (`payhub.mong.ir`)** | زرین‌پال و اسنپ‌پی برای هر دو سایت، قرارداد، وضعیت‌ها و مراحل انتقال |
+| [07_independent_site.md](./07_independent_site.md) | **سایت مستقل و دو رابط** | رابط داده‌فا و سامیان، نوشتن فاکتور، نصب، تست و سوییچ |
 
 ---
 
