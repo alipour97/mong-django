@@ -37,8 +37,8 @@ def get_lebazai_config() -> dict:
 
 
 def _update_product_tags(product: Product, keywords: list[str]) -> None:
-    """Link search keywords as ProductTags if not already present."""
-    if not keywords:
+    """Link search keywords as ProductTags if not already present. On Dadehfa the tags are the software's own."""
+    if not keywords or settings.ERP_CONNECTOR == "dadehfa":
         return
     existing_tags = set(
         ProductTag.objects.filter(product=product, is_deleted=False)
