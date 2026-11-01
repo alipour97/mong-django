@@ -1,10 +1,16 @@
+import io
+import tempfile
 from datetime import timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest import mock
 
+from django.conf import settings
+from django.contrib.auth.models import User
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
+from PIL import Image
 from rest_framework.test import APIClient
 from sqlalchemy.exc import OperationalError
 
@@ -14,11 +20,13 @@ from apps.website.models import (
     BankGateway, BankInfo, Category, Customer, CustomerAddress, Invoice, InvoiceLine, InvoicePayment, Product, SiteSetting,
 )
 
-from . import dadehfa, dadehfa_write as write, outbox, store, vouchers
+from apps.website import images
+
+from . import dadehfa, dadehfa_write as write, lebazai, outbox, store, vouchers
 from .connector import Connector, Coupon, GiftCard, Held, Refused, SourceError
 from .dadehfa import DadehfaConnector
 from .management.commands.import_dadehfa_orders import Command as ImportOrders
-from .models import ErpImage, ErpProduct, ErpStock, ErpVariant, LebazaiImage
+from .models import ErpImage, ErpProduct, ErpStock, ErpVariant, LebazaiImage, ManualPhoto, SiteCoupon, SiteGiftCard
 
 
 def use_dadehfa(case: TestCase) -> None:
@@ -347,7 +355,7 @@ class VoucherTests(TestCase):
         self.customer = Customer.objects.create(first_name="ع", cellphone="09121234567")
         self.client = APIClient()
         self.client.force_authenticate(self.customer)
-        for patcher in (mock.patch("apps.storefront.orders.get_connector", return_value=VoucherConnector()),
+        for patcher in (mock.patch("apps.erp.vouchers.get_connector", return_value=VoucherConnector()),
                         mock.patch("apps.storefront.catalog.listing_rows", return_value=[SimpleNamespace(id=1)])):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -450,7 +458,7 @@ class DadehfaVoucherTests(TestCase):
             self.read_card(UseCompelete=True)
 
     def test_another_invoice_in_a_payment_page_holds_the_card(self):
-        other = self.invoice(gift_card_id=7, voucher_held_until=timezone.now() + vouchers.HOLD)
+        other = self.invoice(gift_card_id=7, voucher_held_until=timezone.now() + vouchers.hold())
         with self.assertRaises(Held):
             self.read_card()
         self.assertEqual(self.read_card(other.id).balance, 1000000)
@@ -462,7 +470,7 @@ class DadehfaVoucherTests(TestCase):
                 self.read_card(**row)
 
     def test_the_card_list_shows_a_hold_and_drops_a_spent_card(self):
-        self.invoice(gift_card_id=7, voucher_held_until=timezone.now() + vouchers.HOLD)
+        self.invoice(gift_card_id=7, voucher_held_until=timezone.now() + vouchers.hold())
         self.invoice(gift_card_id=8, deduction_amount=1000000, paid_at=timezone.now(), state=Invoice.State.SUCCESSFUL)
         with mock.patch("apps.erp.dadehfa.fetch_all", return_value=[self.card(), self.card(Id=8)]):
             cards = self.connector.gift_cards(self.customer)
@@ -477,7 +485,7 @@ class VoucherPaymentTests(TestCase):
         self.client.force_authenticate(self.customer)
         self.gateways = {key: BankGateway.objects.create(bank=BankInfo.objects.create(id=number, name=key, key=key))
                          for number, key in ((1, "zarinpal"), (14, "snapppay"))}
-        for patcher in (mock.patch("apps.storefront.payments.get_connector", return_value=VoucherConnector()),
+        for patcher in (mock.patch("apps.erp.vouchers.get_connector", return_value=VoucherConnector()),
                         mock.patch("apps.storefront.payments._enabled", return_value=True)):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -504,7 +512,7 @@ class VoucherPaymentTests(TestCase):
         self.assertIsNone(invoice.voucher_held_until)
 
     def test_a_failed_payment_lets_it_go(self):
-        invoice = self.invoice(voucher_held_until=timezone.now() + vouchers.HOLD)
+        invoice = self.invoice(voucher_held_until=timezone.now() + vouchers.hold())
         payment = InvoicePayment.objects.create(invoice=invoice, gateway="zarinpal", amount=500000)
         payments._finish(payment, False)
         invoice.refresh_from_db()
@@ -555,6 +563,106 @@ class CouponPanelTests(TestCase):
     def test_a_silent_software_is_said_so(self):
         self.connector.gift_card_labels.side_effect = OperationalError("x", {}, Exception())
         self.assertEqual(self.get("Customer/GetGiftCardLable").status_code, 502)
+
+
+class SiteVoucherTests(TestCase):
+    def setUp(self):
+        self.customer = Customer.objects.create(first_name="ع", cellphone="09121234567")
+        self.coupon = SiteCoupon.objects.create(serial="SITE", reduction=Decimal(20))
+        self.card = SiteGiftCard.objects.create(number="C1", mobile="+989121234567", amount=1000000)
+
+    def paid(self, **fields):
+        return Invoice.objects.create(customer=self.customer, paid_at=timezone.now(), state=Invoice.State.SUCCESSFUL, **fields)
+
+    def test_a_site_coupon_answers_without_the_software(self):
+        with mock.patch("apps.erp.vouchers.get_connector", side_effect=AssertionError):
+            coupon = vouchers.find_coupon("SITE", self.customer)
+        self.assertEqual((coupon.id, coupon.reduction), (None, Decimal(20)))
+
+    def test_any_other_code_goes_to_the_software(self):
+        with mock.patch("apps.erp.vouchers.get_connector", return_value=VoucherConnector()):
+            self.assertEqual(vouchers.find_coupon("OK", self.customer).id, 9)
+
+    def test_once_per_customer_and_never_for_a_test_payment(self):
+        self.paid(coupon_serial="SITE", is_test=True)
+        vouchers.find_coupon("SITE", self.customer)
+        self.paid(coupon_serial="SITE")
+        with self.assertRaises(Refused):
+            vouchers.find_coupon("SITE", self.customer)
+
+    def test_a_coupon_for_someone_else(self):
+        SiteCoupon.objects.filter(pk=self.coupon.pk).update(mobile="09120000000")
+        with self.assertRaises(Refused):
+            vouchers.find_coupon("SITE", self.customer)
+
+    def test_the_card_keeps_what_is_left(self):
+        self.paid(gift_card_number="C1", deduction_amount=300000)
+        self.assertEqual(vouchers.find_gift_card("C1", self.customer).balance, 700000)
+
+    def test_the_list_shows_the_sites_cards_first(self):
+        with mock.patch("apps.erp.vouchers.get_connector", return_value=VoucherConnector()):
+            self.assertEqual([c["GCNum"] for c in vouchers.gift_cards(self.customer)], ["C1", "G1"])
+
+    def test_a_hold_stops_a_second_invoice(self):
+        Invoice.objects.create(customer=self.customer, state=Invoice.State.PRE_INVOICE, gift_card_number="C1",
+                               voucher_held_until=timezone.now() + timedelta(minutes=5))
+        with self.assertRaises(Held):
+            vouchers.find_gift_card("C1", self.customer)
+
+    @override_settings(VOUCHER_HOLD_MINUTES=0)
+    def test_no_hold_when_the_setting_is_zero(self):
+        invoice = Invoice.objects.create(customer=self.customer, state=Invoice.State.PRE_INVOICE, gift_card_number="C1", deduction_amount=1000)
+        payments._hold_voucher(invoice)
+        invoice.refresh_from_db()
+        self.assertIsNone(invoice.voucher_held_until)
+
+    def test_a_site_coupon_is_no_row_in_the_software(self):
+        invoice = Invoice(customer=self.customer, coupon_serial="SITE")
+        self.assertIsNone(write._use_coupon(None, invoice, 1, timezone.now()))
+
+
+class ManualPhotoTests(TestCase):
+    def setUp(self):
+        self.client.force_login(User.objects.create_superuser("root", password="x"))
+
+    def test_the_nightly_sync_leaves_a_manual_photo_alone(self):
+        ManualPhoto.objects.create(product_id=1, color_id=2, key="up/a", source_url="manual:x")
+        LebazaiImage.objects.create(product_id=1, color_id=2, key="lz/old", source_url="http://x")
+        with mock.patch("apps.erp.lebazai.lebazai_images", return_value={"B": []}), \
+                mock.patch("apps.erp.lebazai.get_connector", return_value=mock.Mock(barcodes=lambda: [])):
+            lebazai.sync_images(lambda line: None)
+        self.assertEqual(list(LebazaiImage.objects.values_list("key", flat=True)), ["up/a"])
+
+    def test_a_barcode_finds_its_product_and_color(self):
+        picture = io.BytesIO()
+        Image.new("RGB", (900, 900)).save(picture, "PNG")
+        picture.name = "a.png"
+        picture.seek(0)
+        with tempfile.TemporaryDirectory() as folder, override_settings(MEDIA_ROOT=folder), \
+                mock.patch("apps.erp.admin.get_connector", return_value=mock.Mock(barcodes=lambda: [("B1", 5, 7)])):
+            reply = self.client.post("/django-admin/erp/manualphoto/add/", {"barcode": "B1", "photo": picture, "position": 0})
+            self.assertEqual(reply.status_code, 302)
+            photo = ManualPhoto.objects.get()
+            self.assertEqual((photo.product_id, photo.color_id, photo.key[:3]), (5, 7, "up/"))
+            self.assertTrue(images.is_built(photo.key))
+
+    def test_the_admin_pages_open(self):
+        for page in ("sitecoupon", "sitegiftcard", "manualphoto"):
+            self.assertEqual(self.client.get(f"/django-admin/erp/{page}/").status_code, 200)
+            self.assertEqual(self.client.get(f"/django-admin/erp/{page}/add/").status_code, 200)
+
+
+class TimingTests(TestCase):
+    def test_a_measured_request(self):
+        with tempfile.TemporaryDirectory() as folder, override_settings(REQUEST_TIMING=True, REQUEST_TIMING_FILE=f"{folder}/t.log", MIDDLEWARE=["config.timing.RequestTiming", *settings.MIDDLEWARE[1:]]):
+            reply = self.client.get("/api/v1/Category/GetAll")
+            self.assertIn("db;dur=", reply["Server-Timing"])
+            out = io.StringIO()
+            call_command("timing_report", stdout=out)
+            self.assertIn("GET /api/v1/Category/GetAll", out.getvalue())
+
+    def test_off_by_default(self):
+        self.assertNotIn("Server-Timing", self.client.get("/api/health/"))
 
 
 class ImportTests(TestCase):

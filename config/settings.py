@@ -51,6 +51,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "config.timing.RequestTiming",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -254,6 +255,11 @@ ERP_CONNECTOR = os.getenv("ERP_CONNECTOR", "dadehfa")
 ERP_CONNECTORS = {"samian": "apps.erp.samian.SamianConnector", "dadehfa": "apps.erp.dadehfa.DadehfaConnector"}
 # Off until the writing code is reviewed and a real test order is agreed: paid orders wait in the site.
 ERP_WRITES_ENABLED = os.getenv("ERP_WRITES_ENABLED", "false").lower() in ("1", "true", "yes")
+# How long a gift card or coupon stays out of reach while its order is in a payment page; 0 for no hold.
+VOUCHER_HOLD_MINUTES = int(os.getenv("VOUCHER_HOLD_MINUTES", "11"))
+# Measures every API request (config/timing.py). For a debugging session, not for leaving on.
+REQUEST_TIMING = os.getenv("REQUEST_TIMING", "false").lower() in ("1", "true", "yes")
+REQUEST_TIMING_FILE = os.getenv("REQUEST_TIMING_FILE") or str(MEDIA_ROOT.parent / "timing.log")
 LEBAZAI_API_URL = os.getenv("LEBAZAI_API_URL", "https://office.lebazacenter.com/api").rstrip("/")
 LEBAZAI_API_KEY = os.getenv("LEBAZAI_API_KEY", "")
 LEBAZAI_IMAGE_BRAND = os.getenv("LEBAZAI_IMAGE_BRAND", "mong")

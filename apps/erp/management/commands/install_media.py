@@ -80,7 +80,7 @@ class Command(BaseCommand):
             elif row["model"] == "dadehfa.aiprofile" and fields["product"] in barcodes:
                 profiles.append((fields["product"], {name: fields[name] for name in AI_FIELDS}))
         with transaction.atomic():
-            LebazaiImage.objects.all().delete()
+            LebazaiImage.objects.filter(key__startswith="lz/").delete()
             LebazaiImage.objects.bulk_create(images, batch_size=2000)
             for product_id, values in profiles:
                 ProductAIProfile.objects.update_or_create(

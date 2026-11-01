@@ -72,7 +72,7 @@ def sync_images(log: Log = logger.info) -> dict:
         LebazaiImage.objects.update_or_create(product_id=product_id, color_id=color_id, key=key,
                                               defaults={"source_url": url, "position": position})
     removed = 0
-    for image in LebazaiImage.objects.all():
+    for image in LebazaiImage.objects.filter(key__startswith="lz/"):
         if (image.product_id, image.color_id, image.key) not in keep:
             image.delete()
             removed += 1

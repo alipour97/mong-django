@@ -34,7 +34,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from apps import smsir
 from apps.erp import outbox, store as erp_store, vouchers
-from apps.erp.connector import Refused, get_connector
+from apps.erp.connector import Refused
 from apps.payhub import service as hub
 from apps.payhub import snapppay, zarinpal
 from apps.erp.models import ErpVariant
@@ -172,12 +172,13 @@ def _hold_voucher(inv: Invoice) -> None:
     with transaction.atomic():
         Customer.objects.select_for_update().filter(pk=inv.customer_id).first()  # one customer, one hold at a time
         if inv.gift_card_number:
-            card = get_connector().gift_card(inv.gift_card_number, inv.customer, inv.id)
+            card = vouchers.find_gift_card(inv.gift_card_number, inv.customer, inv.id)
             if card.balance < inv.deduction_amount:
                 raise Refused("موجودی کارت هدیه تغییر کرده است. لطفا سبد خرید را دوباره ثبت کنید.")
         else:
-            get_connector().coupon(inv.coupon_serial, inv.customer, inv.id)
-        Invoice.objects.filter(pk=inv.pk).update(voucher_held_until=timezone.now() + vouchers.HOLD)
+            vouchers.find_coupon(inv.coupon_serial, inv.customer, inv.id)
+        if vouchers.hold():
+            Invoice.objects.filter(pk=inv.pk).update(voucher_held_until=timezone.now() + vouchers.hold())
 
 
 def _release_voucher(inv: Invoice) -> None:

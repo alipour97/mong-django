@@ -35,7 +35,7 @@ class Coupon:
 
 @dataclass(frozen=True)
 class GiftCard:
-    id: int
+    id: int | None  # None: a card made on this site
     number: str
     balance: Decimal
     min_price: Decimal

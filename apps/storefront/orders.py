@@ -38,7 +38,7 @@ from django.utils import timezone
 from sqlalchemy.exc import SQLAlchemyError
 
 from apps.erp import vouchers
-from apps.erp.connector import Held, Refused, get_connector
+from apps.erp.connector import Held, Refused
 from apps.erp.models import ErpVariant
 from apps.erp.store import online_stock
 from apps.website.models import City, CustomerAddress, Invoice, InvoiceLine, Province, ShippingMethod, SiteSetting
@@ -258,13 +258,13 @@ def _voucher(gift_number: str, serial: str, customer, amount: int, after: int, d
         raise Refused("یا از کارت هدیه و یا از کوپن استفاده کنید.")
     setting = SiteSetting.objects.filter(is_deleted=False).first()
     if gift_number:
-        card = get_connector().gift_card(gift_number, customer, invoice_id)
+        card = vouchers.find_gift_card(gift_number, customer, invoice_id)
         if card.min_price > amount:
             raise Refused("مبلغ فاکتور کمتر از حد مجاز کارت هدیه میباشد.")
         with_delivery = setting is None or setting.gift_card_use_type == WITH_DELIVERY
         return Voucher(deduction=int(min(after + delivery if with_delivery else after, card.balance)), gift_card_id=card.id)
     if serial:
-        coupon = get_connector().coupon(serial, customer, invoice_id)
+        coupon = vouchers.find_coupon(serial, customer, invoice_id)
         if coupon.min_price > amount:
             raise Refused("مبلغ فاکتور کمتر از حد مجاز کوپن میباشد.")
         before = setting is not None and setting.coupon_calculation_type == BEFORE_REDUCTION
@@ -410,7 +410,7 @@ class CouponValidationView(CustomerView):
     def get(self, request):
         serial = (request.query_params.get("serial") or "").strip()
         try:
-            coupon = get_connector().coupon(serial, request.user)
+            coupon = vouchers.find_coupon(serial, request.user)
         except Held as exc:
             return answer({"reduction": float(exc.coupon.reduction), "valid": False, "minPrice": float(exc.coupon.min_price),
                            "maxPrice": float(exc.coupon.max_price) if exc.coupon.max_price is not None else None,
@@ -427,7 +427,7 @@ class CouponValidationView(CustomerView):
 class GiftCardsView(CustomerView):
     def get(self, request):
         try:
-            cards = get_connector().gift_cards(request.user)
+            cards = vouchers.gift_cards(request.user)
         except SQLAlchemyError:
             return answer(None, 502, NO_ANSWER)
         return answer([{

@@ -26,6 +26,8 @@ from sqlalchemy.engine import Engine
 
 from apps.website.models import Invoice
 
+from .models import SiteCoupon
+
 GIFT_CARD_BANK = 13
 BANKS = {"zarinpal": 1, "snapppay": 14, "PayTypeGiftCard": GIFT_CARD_BANK}
 SYSTEM = "Created By System"
@@ -178,7 +180,7 @@ def _address_id(db, invoice: Invoice, customer_id: int, at) -> int:
 
 
 def _use_coupon(db, invoice: Invoice, customer_id: int, at) -> int | None:
-    if not invoice.coupon_serial:
+    if not invoice.coupon_serial or SiteCoupon.objects.filter(serial=invoice.coupon_serial).exists():
         return None
     if invoice.coupon_id:
         db.execute(text("UPDATE Coupons SET IsUsed = 1, UsedDate = :at WHERE Id = :id"), {"at": at.replace(tzinfo=None), "id": invoice.coupon_id})
