@@ -37,7 +37,8 @@ from django.db.models import Sum
 from django.utils import timezone
 from sqlalchemy.exc import SQLAlchemyError
 
-from apps.erp.connector import Refused, get_connector
+from apps.erp import vouchers
+from apps.erp.connector import Held, Refused, get_connector
 from apps.erp.models import ErpVariant
 from apps.erp.store import online_stock
 from apps.website.models import City, CustomerAddress, Invoice, InvoiceLine, Province, ShippingMethod, SiteSetting
@@ -214,7 +215,7 @@ class AddView(CustomerView):
         after = sum(int(ln.price_after_reduction * ln.qty) for ln in lines)
         delivery = delivery_cost(method)
         try:
-            voucher = _voucher(gift_number, serial, customer, amount, after, delivery)
+            voucher = _voucher(gift_number, serial, customer, amount, after, delivery, getattr(_pre_invoice(customer), "pk", None))
         except Refused as exc:
             return reply(None, 400, str(exc))
         except SQLAlchemyError:
@@ -251,17 +252,19 @@ class Voucher:
     coupon_reduction: Decimal = Decimal(0)
 
 
-def _voucher(gift_number: str, serial: str, customer, amount: int, after: int, delivery: int) -> Voucher:
+def _voucher(gift_number: str, serial: str, customer, amount: int, after: int, delivery: int, invoice_id: int | None = None) -> Voucher:
     """What a gift card or coupon takes off, by the rules in SiteSetting."""
+    if gift_number and serial:
+        raise Refused("یا از کارت هدیه و یا از کوپن استفاده کنید.")
     setting = SiteSetting.objects.filter(is_deleted=False).first()
     if gift_number:
-        card = get_connector().gift_card(gift_number, customer)
+        card = get_connector().gift_card(gift_number, customer, invoice_id)
         if card.min_price > amount:
             raise Refused("مبلغ فاکتور کمتر از حد مجاز کارت هدیه میباشد.")
         with_delivery = setting is None or setting.gift_card_use_type == WITH_DELIVERY
         return Voucher(deduction=int(min(after + delivery if with_delivery else after, card.balance)), gift_card_id=card.id)
     if serial:
-        coupon = get_connector().coupon(serial, customer)
+        coupon = get_connector().coupon(serial, customer, invoice_id)
         if coupon.min_price > amount:
             raise Refused("مبلغ فاکتور کمتر از حد مجاز کوپن میباشد.")
         before = setting is not None and setting.coupon_calculation_type == BEFORE_REDUCTION
@@ -371,6 +374,9 @@ def full_invoice(inv: Invoice) -> dict:
         "customerAddressId": inv.address_id, "customerAddress": _address(inv.address, inv), "invoiceDetails": lines,
         "categoryId": lines[0]["categoryId"] if lines else None, "parentCategoryId": lines[0]["parentCategoryId"] if lines else None,
         "payableAmount": inv.payable_amount, "deliveryAmount": inv.delivery_amount, "shippingMethodId": inv.shipping_method_id,
+        "deductionAmount": inv.deduction_amount, "giftCardId": inv.gift_card_id, "couponId": inv.coupon_id,
+        "giftCard": {"gcNum": inv.gift_card_number, "gcBalance": inv.deduction_amount} if inv.gift_card_number else None,
+        "coupon": {"serial": inv.coupon_serial, "reduction": float(inv.coupon_reduction)} if inv.coupon_serial else None,
     }
 
 
@@ -405,6 +411,10 @@ class CouponValidationView(CustomerView):
         serial = (request.query_params.get("serial") or "").strip()
         try:
             coupon = get_connector().coupon(serial, request.user)
+        except Held as exc:
+            return answer({"reduction": float(exc.coupon.reduction), "valid": False, "minPrice": float(exc.coupon.min_price),
+                           "maxPrice": float(exc.coupon.max_price) if exc.coupon.max_price is not None else None,
+                           "bankPortalEndTime": vouchers.left(exc.until)}, message=str(exc))
         except Refused as exc:
             return answer({"reduction": None, "valid": False, "minPrice": None, "maxPrice": None, "bankPortalEndTime": None}, message=str(exc))
         except SQLAlchemyError:
@@ -423,7 +433,7 @@ class GiftCardsView(CustomerView):
         return answer([{
             "gcNum": c["GCNum"], "startDate": c["StartDate"], "expDate": c["ExpDate"], "gcBalance": float(c["GCBalance"]),
             "isActive": c["IsActive"], "customerId": request.user.id, "useDepCode": c["UseDepCode"], "minPrice": None, "maxPrice": None,
-            "minFactorPrice": float(c["MinFactorPrice"] or 0), "useCompelete": c["UseCompelete"], "bankPortalEndTime": None,
+            "minFactorPrice": float(c["MinFactorPrice"] or 0), "useCompelete": c["UseCompelete"], "bankPortalEndTime": c.get("Left"),
             "customer": _customer(request.user),
         } for c in cards])
 

@@ -6,8 +6,7 @@ the sales of the Samian customer linked to them by mobile. Site invoices come
 with the order phase.
 
 Customers sign in with a one-time code, so the password the panel may send on
-add/update is ignored. Gift cards (Customer/GetAllGiftCard) are in Samian
-(retail/giftcard) and wait for the gift card phase.
+add/update is ignored. Gift cards are in views/coupons.py.
 
     GET  Customer/GetCustomerLablesReport
     GET  Customer/GetCustomers?RegistrationDateFrom=&RegistrationDateTo=&JobId=&SearchText=&InvoiceNumberFrom=&InvoiceNumberTo=&IsActive=&pageNumber=&pageSize=

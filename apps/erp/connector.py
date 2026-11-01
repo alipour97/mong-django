@@ -46,6 +46,14 @@ class Refused(ValueError):
     """Why a coupon or gift card cannot be used, for the customer."""
 
 
+class Held(Refused):
+    """The voucher is in another payment page until this moment."""
+
+    def __init__(self, message: str, until: datetime, coupon: Coupon | None = None):
+        super().__init__(message)
+        self.until, self.coupon = until, coupon
+
+
 class Connector:
     name = ""
     all_warehouses = False  # every warehouse's stock is offered online
@@ -65,14 +73,31 @@ class Connector:
     def follow(self, log: Log) -> None:
         """Marks the invoices the software has taken."""
 
-    def coupon(self, serial: str, customer) -> Coupon:
+    def coupon(self, serial: str, customer, invoice_id: int | None = None) -> Coupon:
         raise Refused("استفاده از کوپن به‌زودی فعال می‌شود.")
 
-    def gift_card(self, number: str, customer) -> GiftCard:
+    def gift_card(self, number: str, customer, invoice_id: int | None = None) -> GiftCard:
         raise Refused("استفاده از کارت هدیه به‌زودی فعال می‌شود.")
 
     def gift_cards(self, customer) -> list[dict]:
         return []
+
+    def coupon_page(self, *, search: str, created_from, expires_to, page: int, size: int) -> tuple[int, list[dict]]:
+        """(total, one page of coupons) for the panel."""
+        return 0, []
+
+    def coupon_labels(self) -> dict:
+        return {"total": 0, "active": 0, "used": 0}
+
+    def coupon_info(self, coupon_id: int) -> dict | None:
+        return None
+
+    def gift_card_page(self, filters: dict, page: int, size: int) -> tuple[int, list[dict]]:
+        """(total, one page of gift cards) for the panel."""
+        return 0, []
+
+    def gift_card_labels(self) -> dict:
+        return {"total": 0, "active": 0, "used": 0}
 
 
 @lru_cache(maxsize=1)

@@ -334,8 +334,9 @@ class CustomerInvoicesView(AdminView):
             return fail("مشتری یافت نشد.", 404)
         qs = _invoices().filter(samian_customer_id=customer.samian_customer_id) if customer.samian_customer_id else _invoices().none()
         site = _site().filter(customer=customer)
-        if to_int(q.get("couponId")) or to_int(q.get("giftCardId")):
-            qs, site = qs.none(), site.none()  # coupons and gift cards are not linked yet
+        coupon, gift_card = to_int(q.get("couponId")), to_int(q.get("giftCardId"))
+        if coupon or gift_card:
+            qs, site = qs.none(), site.filter(coupon_id=coupon) if coupon else site.filter(gift_card_id=gift_card)
         return ok({"result": _page(qs, q, site)})
 
 

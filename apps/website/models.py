@@ -1269,6 +1269,7 @@ class Invoice(models.Model):
     erp_invoice_id = models.BigIntegerField(_("شناسه فاکتور در نرم‌افزار فروش"), null=True, blank=True, db_index=True)
     erp_sent_at = models.DateTimeField(_("زمان ارسال به نرم‌افزار فروش"), null=True, blank=True)
     erp_taken_at = models.DateTimeField(_("زمان ثبت در نرم‌افزار فروش"), null=True, blank=True, db_index=True)
+    voucher_held_until = models.DateTimeField(_("قفل کارت هدیه یا کوپن تا"), null=True, blank=True)
     erp_error = models.TextField(_("خطای ارسال به نرم‌افزار فروش"), blank=True, default="")
     # Paid in a gateway's test mode: no money moved, so it never reaches the software.
     is_test = models.BooleanField(_("سفارش تست"), default=False, db_index=True)

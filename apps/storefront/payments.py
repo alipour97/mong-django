@@ -30,14 +30,16 @@ from django.http import HttpResponseRedirect
 from django.db.models import Sum
 from django.utils import timezone
 from rest_framework.throttling import AnonRateThrottle
+from sqlalchemy.exc import SQLAlchemyError
 
 from apps import smsir
-from apps.erp import outbox, store as erp_store
+from apps.erp import outbox, store as erp_store, vouchers
+from apps.erp.connector import Refused, get_connector
 from apps.payhub import service as hub
 from apps.payhub import snapppay, zarinpal
 from apps.erp.models import ErpVariant
 from apps.payhub.models import PayRecord
-from apps.website.models import BankGateway, Invoice, InvoicePayment
+from apps.website.models import BankGateway, Customer, Invoice, InvoicePayment
 
 from apps.adminapi.paging import to_int
 
@@ -163,6 +165,25 @@ def snapp_order(inv: Invoice, lines=None) -> dict:
     }
 
 
+def _hold_voucher(inv: Invoice) -> None:
+    """A voucher on its way through a payment is out of reach until the payment ends or the hold runs out."""
+    if not (inv.gift_card_number or inv.coupon_serial):
+        return
+    with transaction.atomic():
+        Customer.objects.select_for_update().filter(pk=inv.customer_id).first()  # one customer, one hold at a time
+        if inv.gift_card_number:
+            card = get_connector().gift_card(inv.gift_card_number, inv.customer, inv.id)
+            if card.balance < inv.deduction_amount:
+                raise Refused("موجودی کارت هدیه تغییر کرده است. لطفا سبد خرید را دوباره ثبت کنید.")
+        else:
+            get_connector().coupon(inv.coupon_serial, inv.customer, inv.id)
+        Invoice.objects.filter(pk=inv.pk).update(voucher_held_until=timezone.now() + vouchers.HOLD)
+
+
+def _release_voucher(inv: Invoice) -> None:
+    Invoice.objects.filter(pk=inv.pk).update(voucher_held_until=None)
+
+
 def _start_payment(inv: Invoice, key: str) -> str:
     """Opens the gateway session and returns its page."""
     record = hub.create(gateway=key, amount=inv.payable_amount, success=_back_here(True), failed=_back_here(False),
@@ -217,13 +238,23 @@ class PayView(CustomerView):
         key = g.bank.key if g else None
         if key not in SUPPORTED or not _enabled(key):
             return answer(None, 400, "درگاه پرداخت انتخاب‌شده فعال نیست.")
+        if key == SNAPPPAY and inv.gift_card_number:
+            return answer(None, 409, "امکان استفاده همزمان از کارت هدیه و اعتبار اسنپ‌پی وجود ندارد.")
+        try:
+            _hold_voucher(inv)
+        except Refused as exc:
+            return answer(None, 409, str(exc))
+        except SQLAlchemyError:
+            return answer(None, 502, hub.CONNECTION_FAILED)
         try:
             url = _start_payment(inv, key)
         except hub.Refused as exc:
             logger.warning("pay request refused for invoice %s: %s", inv.id, exc)
+            _release_voucher(inv)
             return answer(None, 502, exc.message)
         except Exception:
             logger.exception("pay request failed for invoice %s", inv.id)
+            _release_voucher(inv)
             return answer(None, 502, hub.CONNECTION_FAILED)
         return answer(url, message="در حال انتقال به درگاه پرداخت")
 
@@ -276,6 +307,12 @@ class ZeroAmountView(CustomerView):
             return answer(None, 404, "فاکتور یافت نشد")
         if inv.payable_amount > 0:
             return answer(None, 400, "این فاکتور باید از درگاه پرداخت شود.")
+        try:
+            _hold_voucher(inv)
+        except Refused as exc:
+            return answer(None, 409, str(exc))
+        except SQLAlchemyError:
+            return answer(None, 502, hub.CONNECTION_FAILED)
         _mark_paid(inv)
         return answer(_confirmation(True, inv), message="پرداخت موفق با کارت هدیه.")
 
@@ -287,6 +324,8 @@ def _finish(payment: InvoicePayment, success: bool, reference: str = "", card: s
         payment.refresh_from_db()
         if won and success and payment.invoice.state == S.PRE_INVOICE:
             _mark_paid(payment.invoice, test=_test_money(payment.gateway))
+        elif won and not success:
+            _release_voucher(payment.invoice)
 
 
 def _payment_of(record: PayRecord | None) -> InvoicePayment | None:

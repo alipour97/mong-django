@@ -12,7 +12,7 @@ from apps.storefront import views as storefront
 from apps.website.models import MediaAttachment
 
 from .views import (
-    auth, banners, blog, categories, collections, comments, configs, cooperation, customers, customize, dashboard, gallery,
+    auth, banners, blog, categories, collections, comments, configs, cooperation, coupons, customers, customize, dashboard, gallery,
     invoices, products, tags, users,
 )
 
@@ -91,7 +91,12 @@ urlpatterns = [
     path("Customer/Validation", customers.ValidationView.as_view()),
     path("Customer/SoftDelete", customers.DeleteView.as_view()),
     path("Customer/BulletinMembers", customers.BulletinView.as_view()),
+    path("Customer/GetAllGiftCard", coupons.GiftCardListView.as_view()),
+    path("Customer/GetGiftCardLable", coupons.GiftCardLabelView.as_view()),
     path("Customer/<int:customer_id>", customers.DetailView.as_view()),
+    path("Coupon/GetAll", coupons.CouponListView.as_view()),
+    path("Coupon/GetLable", coupons.CouponLabelView.as_view()),
+    path("Coupon/GetGeneralCouponInfo", coupons.CouponInfoView.as_view()),
     path("Job/JobDropdown", customers.JobsView.as_view()),
     path("Favorite/GetLable", customers.FavoriteLabelView.as_view()),
     path("Favorite/GetFavoriteMainCategories", customers.FavoriteMainCategoriesView.as_view()),

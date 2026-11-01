@@ -24,6 +24,11 @@ def int_list(values) -> list[int]:
     return [int(v) for v in values or [] if str(v).lstrip("-").isdigit()]
 
 
+def one_page(items: list, total: int, page_number: int, page_size: int) -> dict:
+    """PaginatedResult<T> for a page the source has already cut."""
+    return {"totalCount": total, "totalPages": math.ceil(total / page_size), "pageNumber": page_number, "pageSize": page_size, "items": items}
+
+
 def paginated(items: list, page_number: int, page_size: int, convert=None) -> dict:
     """PaginatedResult<T>: {totalCount, totalPages, pageNumber, pageSize, items} for one page of items."""
     page_number, page_size = max(page_number or 1, 1), max(page_size or 1, 1)

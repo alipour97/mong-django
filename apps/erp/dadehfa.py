@@ -12,6 +12,7 @@ The rules below were worked out against the shop's own API, row by row:
 """
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 
 from django.core.management import call_command
@@ -20,8 +21,8 @@ from django.utils import timezone
 from apps.legacy.db import fetch_all
 from apps.website.models import Invoice
 
-from . import dadehfa_write, store
-from .connector import Connector, Coupon, GiftCard, Log, Refused
+from . import dadehfa_write, store, vouchers
+from .connector import Connector, Coupon, GiftCard, Held, Log, Refused
 from .models import ErpImage, ErpProduct, ErpStock, ErpVariant, LebazaiImage
 
 PRICE_STEP = 10_000
@@ -30,6 +31,34 @@ ON_SALE = """
     FROM Products p JOIN Categories1 c ON c.Id = p.CategoryId
     WHERE p.IsDeleted = 0 AND p.IsActive = 1 AND p.IsSaleable = 1 AND c.IsOnlineActive = 1 AND p.Price > 0
 """
+
+
+# What the panel lists: a general coupon stands for its customers' copies, and counts as used once one of them is.
+LISTED_COUPONS = """
+    WITH taken AS (SELECT DISTINCT Serial FROM Coupons WHERE CustomerId IS NOT NULL AND IsUsed = 1 AND IsDeleted = 0),
+    general AS (SELECT DISTINCT Serial FROM Coupons WHERE CustomerId IS NULL AND IsDeleted = 0),
+    listed AS (
+        SELECT c.Id, c.CustomerId, c.Serial, c.Reduction, c.ExpiredDate, c.UsedDate, c.MinPrice, c.MaxPrice, c.IsActive,
+               c.BankPortalEndTime, c.Created, u.FirstName, u.LastName,
+               CASE WHEN c.IsUsed = 1 OR (c.CustomerId IS NULL AND t.Serial IS NOT NULL) THEN 1 ELSE 0 END AS IsUsed
+        FROM Coupons c LEFT JOIN Customers u ON u.Id = c.CustomerId LEFT JOIN taken t ON t.Serial = c.Serial
+        WHERE c.IsDeleted = 0 AND (c.CustomerId IS NULL OR c.Serial NOT IN (SELECT Serial FROM general)))
+"""
+
+
+def _now():
+    return timezone.localtime().replace(tzinfo=None)
+
+
+def _like(search: str) -> str:
+    """The software's names are spelled with Arabic ي and ك, the panel's keyboard types Persian ones."""
+    return "%" + re.sub("[یي]", "[یي]", re.sub("[کك]", "[کك]", search)) + "%"
+
+
+def _held(row: dict):
+    """The old site's own hold: it switches the voucher off until the time written beside it."""
+    until = row["BankPortalEndTime"]
+    return until if until and not row["IsActive"] and until > timezone.now() else None
 
 
 def after_discount(price: float, reduction: float) -> int:
@@ -130,10 +159,10 @@ class DadehfaConnector(Connector):
         Invoice.objects.filter(pk__in=[sent[i] for i in taken]).update(erp_taken_at=timezone.now())
         log(f"{len(taken)} of {len(sent)} sent invoices are in the ERP")
 
-    def coupon(self, serial: str, customer) -> Coupon:
+    def coupon(self, serial: str, customer, invoice_id: int | None = None) -> Coupon:
         """The customer's own coupon, else a general one (the customer's copy is made when it is used)."""
-        columns = "Id, Serial, Reduction, MinPrice, MaxPrice, ExpiredDate, IsUsed, IsActive"
-        own = fetch_all(f"SELECT TOP 1 {columns} FROM Coupons WHERE Serial = :s AND CustomerId = :c AND IsDeleted = 0",
+        columns = "Id, Serial, Reduction, MinPrice, MaxPrice, ExpiredDate, IsUsed, IsActive, BankPortalEndTime"
+        own = fetch_all(f"SELECT TOP 1 {columns} FROM Coupons WHERE Serial = :s AND CustomerId = :c AND IsDeleted = 0 ORDER BY IsUsed",
                         {"s": serial, "c": customer.erp_customer_id or customer.id})
         general = [] if own else fetch_all(
             f"SELECT TOP 1 {columns} FROM Coupons WHERE Serial = :s AND CustomerId IS NULL AND IsDeleted = 0 AND IsActive = 1",
@@ -141,33 +170,110 @@ class DadehfaConnector(Connector):
         row = (own or general or [None])[0]
         if row is None:
             raise Refused("کوپن وجود ندارد.")
-        if own and row["IsUsed"]:
+        if (own and row["IsUsed"]) or vouchers.coupon_taken(serial, customer):
             raise Refused("کوپن استفاده شده است.")
-        if not row["IsActive"]:
-            raise Refused("کوپن غیر فعال است.")
-        if row["ExpiredDate"] and row["ExpiredDate"] < timezone.localtime().replace(tzinfo=None):
+        if row["ExpiredDate"] and row["ExpiredDate"] < _now():
             raise Refused("مهلت استفاده از این کوپن تمام شده است.")
-        return Coupon(id=row["Id"] if own else None, serial=row["Serial"], reduction=row["Reduction"] or Decimal(0),
-                      min_price=row["MinPrice"] or Decimal(0), max_price=row["MaxPrice"], expires=row["ExpiredDate"])
+        coupon = Coupon(id=row["Id"] if own else None, serial=row["Serial"], reduction=row["Reduction"] or Decimal(0),
+                        min_price=row["MinPrice"] or Decimal(0), max_price=row["MaxPrice"], expires=row["ExpiredDate"])
+        until = _held(row) or vouchers.held_until(invoice_id, coupon_serial=serial, customer=customer)
+        if until:
+            raise Held("این کوپن در حالت تعلیق قرار دارد.", until, coupon)
+        if not row["IsActive"] and not row["BankPortalEndTime"]:
+            raise Refused("کوپن غیر فعال است.")
+        return coupon
 
-    def _gift_rows(self, customer, number: str | None = None) -> list[dict]:
-        where = "AND GCNum = :n" if number else ""
+    def _gift_rows(self, customer, where: str = "", **params) -> list[dict]:
         return fetch_all(f"""
-            SELECT Id, GCNum, StartDate, ExpDate, GCBalance, IsActive, CustomerId, UseDepCode, MinFactorPrice, UseCompelete
+            SELECT Id, GCNum, StartDate, ExpDate, GCBalance, IsActive, CustomerId, UseDepCode, MinFactorPrice, UseCompelete, BankPortalEndTime
             FROM GiftCards WHERE IsDeleted = 0 AND (CustomerId = :c OR CustomerMobile = :m) {where}
-            ORDER BY Id DESC""", {"c": customer.erp_customer_id or customer.id, "m": customer.cellphone, "n": number})
+            ORDER BY Id DESC""", {"c": customer.erp_customer_id or customer.id, "m": customer.cellphone, **params})
+
+    def _balance(self, row: dict) -> Decimal:
+        spent = vouchers.spent_on_card(row["Id"])
+        return Decimal(0) if spent and row["UseCompelete"] else max(row["GCBalance"] - spent, Decimal(0))
 
     def gift_cards(self, customer) -> list[dict]:
-        return self._gift_rows(customer)
+        """What the customer can spend now, as the old site listed it."""
+        rows = self._gift_rows(customer, """AND IsActive = 1 AND GCBalance > 0 AND CAST(StartDate AS date) <= CAST(:now AS date)
+                                            AND (ExpDate IS NULL OR CAST(ExpDate AS date) >= CAST(:now AS date))""", now=_now())
+        cards = []
+        for row in rows:
+            until = _held(row) or vouchers.held_until(gift_card_id=row["Id"])
+            cards.append({**row, "GCBalance": self._balance(row), "Left": vouchers.left(until) if until else None})
+        return [c for c in cards if c["GCBalance"] > 0]
 
-    def gift_card(self, number: str, customer) -> GiftCard:
-        rows = self._gift_rows(customer, number)
+    def gift_card(self, number: str, customer, invoice_id: int | None = None) -> GiftCard:
+        rows = self._gift_rows(customer, "AND GCNum = :n", n=number)
         if not rows:
             raise Refused("کارت هدیه پیدا نشد.")
         row = rows[0]
-        if not row["IsActive"] or not row["GCBalance"]:
+        balance = self._balance(row)
+        if balance <= 0 or (not row["IsActive"] and not row["BankPortalEndTime"]):
             raise Refused("این کارت هدیه قابل استفاده نیست.")
-        if row["ExpDate"] and row["ExpDate"] < timezone.localtime().replace(tzinfo=None):
+        until = _held(row) or vouchers.held_until(invoice_id, gift_card_id=row["Id"])
+        if until:
+            raise Held("این کارت هدیه در حالت تعلیق قرار دارد.", until)
+        if row["StartDate"] and row["StartDate"].date() > _now().date():
+            raise Refused("زمان استفاده از این کارت هدیه هنوز نرسیده است.")
+        if row["ExpDate"] and row["ExpDate"] < _now():
             raise Refused("مهلت استفاده از این کارت هدیه تمام شده است.")
-        return GiftCard(id=row["Id"], number=row["GCNum"], balance=row["GCBalance"], min_price=row["MinFactorPrice"] or Decimal(0),
+        return GiftCard(id=row["Id"], number=row["GCNum"], balance=balance, min_price=row["MinFactorPrice"] or Decimal(0),
                         use_whole=bool(row["UseCompelete"]))
+
+    def coupon_page(self, *, search: str, created_from, expires_to, page: int, size: int) -> tuple[int, list[dict]]:
+        where, params = ["1 = 1"], {}
+        if search:
+            where.append("(Serial LIKE :q OR FirstName LIKE :q OR LastName LIKE :q)")
+            params["q"] = _like(search)
+        if created_from:
+            where.append("Created >= :start")
+            params["start"] = created_from
+        if expires_to:
+            where.append("ExpiredDate <= :end")
+            params["end"] = expires_to
+        where = " AND ".join(where)
+        total = fetch_all(f"{LISTED_COUPONS} SELECT COUNT(*) AS n FROM listed WHERE {where}", params)[0]["n"]
+        rows = fetch_all(f"""{LISTED_COUPONS} SELECT * FROM listed WHERE {where}
+                             ORDER BY Id DESC OFFSET {(page - 1) * size} ROWS FETCH NEXT {size} ROWS ONLY""", params)
+        return total, rows
+
+    def coupon_labels(self) -> dict:
+        row = fetch_all(f"""{LISTED_COUPONS} SELECT COUNT(*) AS total, ISNULL(SUM(CAST(IsActive AS int)), 0) AS active,
+                            ISNULL(SUM(IsUsed), 0) AS used FROM listed""")[0]
+        return dict(row)
+
+    def coupon_info(self, coupon_id: int) -> dict | None:
+        """Who took a general coupon."""
+        source = fetch_all("SELECT Serial FROM Coupons WHERE Id = :id", {"id": coupon_id})
+        if not source:
+            return None
+        rows = fetch_all("""SELECT c.Id, c.CustomerId, c.IsActive, c.IsUsed, u.FirstName, u.LastName
+                            FROM Coupons c LEFT JOIN Customers u ON u.Id = c.CustomerId
+                            WHERE c.Serial = :s AND c.CustomerId IS NOT NULL AND c.IsDeleted = 0 ORDER BY c.Id DESC""", {"s": source[0]["Serial"]})
+        return {"rows": rows, "active": sum(bool(r["IsActive"]) for r in rows), "used": sum(bool(r["IsUsed"]) for r in rows)}
+
+    def gift_card_page(self, filters: dict, page: int, size: int) -> tuple[int, list[dict]]:
+        where, params = ["c.IsDeleted = 0"], {}
+        if filters.get("search"):
+            where.append("(CAST(c.CustomerId AS varchar(20)) LIKE :q OR u.LastName LIKE :q OR u.FirstName LIKE :q OR c.CustomerMobile LIKE :q OR c.GCNum LIKE :q)")
+            params["q"] = _like(filters["search"])
+        for key, column, operator in (("start_from", "c.StartDate", ">="), ("start_to", "c.StartDate", "<="), ("exp_from", "c.ExpDate", ">="),
+                                      ("exp_to", "c.ExpDate", "<="), ("balance_from", "c.GCBalance", ">="), ("balance_to", "c.GCBalance", "<=")):
+            if filters.get(key) is not None:
+                where.append(f"{column} {operator} :{key}")
+                params[key] = filters[key]
+        source = f"FROM GiftCards c LEFT JOIN Customers u ON u.Id = c.CustomerId WHERE {' AND '.join(where)}"
+        total = fetch_all(f"SELECT COUNT(*) AS n {source}", params)[0]["n"]
+        rows = fetch_all(f"""SELECT c.Id, c.GCNum, c.StartDate, c.ExpDate, c.GCBalance, c.IsActive, c.CustomerId, c.UseDepCode, c.MinFactorPrice,
+                                    c.GiftGroupMapId, c.CustomerMapId, c.UseCompelete, ISNULL(u.CellPhone, c.CustomerMobile) AS Mobile,
+                                    u.FirstName, u.LastName,
+                                    (SELECT COUNT(*) FROM Invoices i WHERE i.GiftCardId = c.Id AND i.InvoiceType = 3 AND i.IsDeleted = 0) AS InvoiceCount
+                             {source} ORDER BY c.Created DESC, c.Id DESC OFFSET {(page - 1) * size} ROWS FETCH NEXT {size} ROWS ONLY""", params)
+        return total, rows
+
+    def gift_card_labels(self) -> dict:
+        row = fetch_all("""SELECT COUNT(*) AS total, ISNULL(SUM(CAST(IsActive AS int)), 0) AS active,
+                                  ISNULL(SUM(CASE WHEN GCBalance = 0 THEN 1 ELSE 0 END), 0) AS used
+                           FROM GiftCards WHERE IsDeleted = 0""")[0]
+        return dict(row)
