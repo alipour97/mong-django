@@ -688,5 +688,5 @@ def clear_caches():
 
 
 def in_erp(products):
-    """Restrict a Product queryset to what the sales software lists."""
-    return products.filter(erp__listed=True)
+    """Restrict a Product queryset to what the sales software has."""
+    return products.filter(erp__isnull=False)

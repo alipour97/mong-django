@@ -48,7 +48,6 @@ class Connector:
     name = ""
     all_warehouses = False  # every warehouse's stock is offered online
     holds_stock = False  # a paid order is missing from the software's stock until it has taken the invoice
-    takes_vouchers = False  # gift cards and coupons work
 
     def sync(self, *, full: bool, log: Log) -> dict:
         raise NotImplementedError
@@ -64,6 +63,9 @@ class Connector:
 
     def gift_card(self, number: str, customer) -> GiftCard:
         raise Refused("استفاده از کارت هدیه به‌زودی فعال می‌شود.")
+
+    def gift_cards(self, customer) -> list[dict]:
+        return []
 
 
 @lru_cache(maxsize=1)

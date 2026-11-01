@@ -14,8 +14,7 @@ def health_check(request):
         "erp": "Samian ERP (Development Port 8087)",
     })
 
-from django.views.static import serve
-
+from apps.website.media import cdn_file
 from apps.website.views import image_variant
 from django.urls import re_path
 
@@ -32,8 +31,7 @@ urlpatterns = [
     re_path(r"^api/[Ss]napp[Pp]?ay/", include("apps.storefront.snappay_urls")),
     re_path(r"^api/v1/[Ss]napp[Pp]?ay/", include("apps.storefront.snappay_urls")),
     re_path(r"^(?:api/)?img/(?P<key>.+)$", image_variant),
-    re_path(r"^cdn/(?P<path>.*)$", serve, {"document_root": settings.LEGACY_CDN_ROOT}),
-    re_path(r"^api/cdn/(?P<path>.*)$", serve, {"document_root": settings.LEGACY_CDN_ROOT}),
+    re_path(r"^(?:api/)?cdn/(?P<path>.+)$", cdn_file),
 ]
 
 if settings.DEBUG:

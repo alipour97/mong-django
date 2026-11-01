@@ -696,9 +696,11 @@ class SiteEligibleTests(SiteCase):
 
 class StockTests(SiteCase):
     def test_counts_only_online_warehouses(self):
+        from apps.erp.connector import Connector
         from apps.erp.models import ErpProduct, ErpStock, ErpVariant
 
         self.stock_patch.stop()
+        mock.patch("apps.erp.store.get_connector", return_value=Connector()).start()
         line = self.invoice.lines.get()
         ErpProduct.objects.create(product_id=line.product_id, erp_id=1, synced_at=timezone.now())
         variant = ErpVariant.objects.create(id=line.variant_id, product_id=line.product_id)

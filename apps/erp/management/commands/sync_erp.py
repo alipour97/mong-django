@@ -2,7 +2,7 @@
 Management command: refresh what the site sells from the sales software in use.
 
     python manage.py sync_erp          # prices, stock, variants, images (every few minutes)
-    python manage.py sync_erp --full   # plus what changes rarely (nightly)
+    python manage.py sync_erp --full   # plus titles and new products (hourly)
 """
 from __future__ import annotations
 

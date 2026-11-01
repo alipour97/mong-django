@@ -8,6 +8,10 @@ imported too (with is_deleted=True) so references between tables resolve.
     python manage.py import_dadehfa                    # everything except customers
     python manage.py import_dadehfa --only catalog     # one group
     python manage.py import_dadehfa --only customers   # site accounts, addresses, favorites (explicit only)
+    python manage.py import_dadehfa --only catalog --upsert   # update in place, delete nothing
+
+--upsert is how the Dadehfa connector keeps the catalog fresh: rows the site has
+gained stay, and tables can be picked one by one (--tables Category Product).
 """
 from __future__ import annotations
 
@@ -379,23 +383,36 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--only", choices=GROUPS, action="append", help="فقط این گروه(ها)")
+        parser.add_argument("--tables", nargs="+", help="فقط این مدل‌ها، با نام کلاس")
+        parser.add_argument("--upsert", action="store_true", help="به‌روزرسانی در جا، بدون حذف")
 
     def handle(self, *args, **options):
         only = set(options.get("only") or DEFAULT_GROUPS)
-        specs = [s for s in SPECS if s.group in only]
+        tables = set(options.get("tables") or [])
+        specs = [s for s in SPECS if s.model.__name__ in tables] if tables else [s for s in SPECS if s.group in only]
         if not specs:
             raise CommandError("هیچ جدولی انتخاب نشد")
 
+        self.upsert = options.get("upsert", False)
+        self.quiet = options.get("verbosity", 1) == 0
         t0 = time.time()
         with transaction.atomic():
-            for spec in reversed(specs):
-                spec.model.objects.all().delete()
+            if not self.upsert:
+                for spec in reversed(specs):
+                    spec.model.objects.all().delete()
             known: dict[type, set] = {}
             for spec in specs:
                 known[spec.model] = self._import(spec, known)
         if any(s.model in (m.Product, m.Category) for s in specs):
-            call_command("fix_slugs")
-        self.stdout.write(self.style.SUCCESS(f"تمام شد در {time.time() - t0:.1f} ثانیه"))
+            call_command("fix_slugs", verbosity=options.get("verbosity", 1), stdout=self.stdout)
+        if not self.quiet:
+            self.stdout.write(self.style.SUCCESS(f"تمام شد در {time.time() - t0:.1f} ثانیه"))
+
+    def _write(self, model, rows: list, columns: list[str]) -> None:
+        if self.upsert:
+            model.objects.bulk_create(rows, update_conflicts=True, unique_fields=["id"], update_fields=columns)
+        else:
+            model.objects.bulk_create(rows)
 
     def _ids_of(self, model, known):
         if model not in known:
@@ -406,7 +423,7 @@ class Command(BaseCommand):
         model = spec.model
         started = time.time()
         self_ref = _SELF_REF in spec.fks and spec.fks[_SELF_REF][0] is model
-        ids, batch, parents, skipped, nulled = set(), [], {}, 0, 0
+        ids, batch, parents, skipped, nulled, columns = set(), [], {}, 0, 0, None
 
         for row in iter_rows(spec.sql):
             data = {k: _dt(v) if isinstance(v, datetime) else v for k, v in spec.build(row).items()}
@@ -428,11 +445,12 @@ class Command(BaseCommand):
                 parents[data["id"]] = data.pop(_SELF_REF)
             ids.add(data["id"])
             batch.append(model(**data))
+            columns = columns or [k for k in data if k != "id"]
             if len(batch) >= BATCH:
-                model.objects.bulk_create(batch)
+                self._write(model, batch, columns)
                 batch = []
         if batch:
-            model.objects.bulk_create(batch)
+            self._write(model, batch, columns)
 
         if parents:
             fixed = {}
@@ -444,6 +462,8 @@ class Command(BaseCommand):
             for parent, children in fixed.items():
                 model.objects.filter(id__in=children).update(parent_id=parent)
 
+        if self.quiet:
+            return ids
         note = []
         if skipped:
             note.append(f"{skipped} رد شد (مرجع ناموجود)")

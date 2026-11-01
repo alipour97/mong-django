@@ -2,7 +2,7 @@
 Django settings for mong_samian project.
 """
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 import os
 from dotenv import load_dotenv
 
@@ -11,7 +11,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load .env file
 load_dotenv(BASE_DIR / ".env")
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "mong-secret-key-development-stage-samian-erp-2026")
+SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 
 DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() in ("true", "1", "yes")
 
@@ -53,6 +53,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -82,16 +83,30 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
-# Database: SQLite for development / staging default, easily switched to Postgres
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-        # WAL lets the site read while a sync writes; timeout waits for locks instead of failing.
-        # Temporary: production should run on PostgreSQL (see TODO.md).
-        "OPTIONS": {"timeout": 30, "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;"},
+# PostgreSQL when DATABASE_URL is set (Runflare); SQLite otherwise.
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+if DATABASE_URL:
+    _db = urlsplit(DATABASE_URL)
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": _db.path.lstrip("/"),
+            "USER": unquote(_db.username or ""),
+            "PASSWORD": unquote(_db.password or ""),
+            "HOST": _db.hostname or "",
+            "PORT": _db.port or 5432,
+            "CONN_MAX_AGE": 60,
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+            # WAL lets the site read while a sync writes; timeout waits for locks instead of failing.
+            "OPTIONS": {"timeout": 30, "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;"},
+        }
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -109,9 +124,13 @@ USE_TZ = True
 
 # Public site address, used to turn local media paths into absolute URLs when
 # answering. The database keeps only relative paths (/media/..., /img/...).
-PUBLIC_BASE_URL = SITE_URL
+# Where this service answers; differs from SITE_URL when the API has its own address.
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/") or SITE_URL
 # Where /media/, /img/ and /cdn/ are served from; set to a CDN address to move them there.
-PUBLIC_MEDIA_BASE_URL = os.getenv("PUBLIC_MEDIA_BASE_URL", "").rstrip("/") or SITE_URL
+PUBLIC_MEDIA_BASE_URL = os.getenv("PUBLIC_MEDIA_BASE_URL", "").rstrip("/") or PUBLIC_BASE_URL
+for _url in (PUBLIC_BASE_URL, PUBLIC_MEDIA_BASE_URL):
+    if (_host := urlsplit(_url).hostname) and _host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_host)
 # Hosts whose URLs are ours: stored as relative paths. Old domains go in OLD_SITE_HOSTS
 # so URLs saved under them are recognised (strip_hardcoded_domains, uploads, panel saves).
 OWN_HOSTS = {
@@ -133,7 +152,7 @@ STATIC_ROOT = BASE_DIR / "static"
 # Media files
 # Matching Nginx config: location /media/ -> /mnt/sda2/mong_samian/media/
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", BASE_DIR / "media"))  # the persistent disk on Runflare
 
 # Logs directory
 LOGS_DIR = BASE_DIR / "logs"
@@ -181,6 +200,9 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 20,
 }
 
+# Runflare's proxy ends TLS in front of the service.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 # Cache Configuration
 CACHES = {
     "default": {
@@ -196,8 +218,8 @@ CACHES = {
 # Development server MUST be 8087 (Port 8086 is strictly reserved for production)
 SAMIAN_BASE_URL = os.getenv("SAMIAN_BASE_URL", "http://78.109.198.8:8087").rstrip("/")
 SAMIAN_API_URL = os.getenv("SAMIAN_API_URL", SAMIAN_BASE_URL).rstrip("/")
-SAMIAN_USERNAME = os.getenv("SAMIAN_USERNAME", "REMOVED")
-SAMIAN_PASSWORD = os.getenv("SAMIAN_PASSWORD", "REMOVED")
+SAMIAN_USERNAME = os.getenv("SAMIAN_USERNAME", "")
+SAMIAN_PASSWORD = os.getenv("SAMIAN_PASSWORD", "")
 SAMIAN_TIMEOUT = int(os.getenv("SAMIAN_TIMEOUT", "60"))
 SAMIAN_STORE_RAW_DATA = os.getenv("SAMIAN_STORE_RAW_DATA", "False").lower() in ("true", "1")
 
@@ -230,7 +252,12 @@ ERP_CONNECTOR = os.getenv("ERP_CONNECTOR", "samian")
 ERP_CONNECTORS = {"samian": "apps.erp.samian.SamianConnector", "dadehfa": "apps.erp.dadehfa.DadehfaConnector"}
 # Off until the writing code is reviewed and a real test order is agreed: paid orders wait in the site.
 ERP_WRITES_ENABLED = os.getenv("ERP_WRITES_ENABLED", "false").lower() in ("1", "true", "yes")
+LEBAZAI_API_URL = os.getenv("LEBAZAI_API_URL", "https://office.lebazacenter.com/api").rstrip("/")
+LEBAZAI_API_KEY = os.getenv("LEBAZAI_API_KEY", "")
 LEBAZAI_IMAGE_BRAND = os.getenv("LEBAZAI_IMAGE_BRAND", "mong")
+# A login of its own for the invoice write, limited to the tables it needs. Never the reading one.
+DADEHFA_WRITE_DB_USER = os.getenv("DADEHFA_WRITE_DB_USER", "")
+DADEHFA_WRITE_DB_PASSWORD = os.getenv("DADEHFA_WRITE_DB_PASSWORD", "")
 
 # Admin panel API (apps/adminapi)
 ADMIN_TOKEN_MINUTES = int(os.getenv("ADMIN_TOKEN_MINUTES", "600"))

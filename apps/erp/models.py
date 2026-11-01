@@ -20,7 +20,6 @@ class ErpProduct(models.Model):
     attributes = models.JSONField("ویژگی‌ها", default=dict, blank=True)
     size_guide_key = models.CharField("کلید عکس راهنمای سایز", max_length=255, blank=True, default="")
     sold = models.FloatField("فروش اخیر", default=0)
-    listed = models.BooleanField("در فهرست سایت", default=True)
     synced_at = models.DateTimeField("آخرین همگام‌سازی")
 
     class Meta:

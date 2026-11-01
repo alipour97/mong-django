@@ -17,25 +17,30 @@ The Invoice/* endpoints answer HTTP 200 with the status in statusCode, as the
 old InvoiceController did: the site reads 403/409/404 there (with no
 pre-invoice, statusCode 404 makes it push the guest cart to the server).
 
-Gift cards and coupons are refused until their Samian side is settled.
+Gift cards and coupons are checked with the sales software (a connector that has
+none refuses them), and take their amount off what the customer pays.
 
     POST Invoice/Add {productVariants: [{productVariantId, qty, name}], ShippingMethodId, description, gcNum?, serial?}
          -> {id, payableAmount, shippingMethodId, failedItems}
     GET  Invoice/GetLastPreInvoice | Invoice/SoftDelete/<id> | Invoice/GetAllCustomerInvoice?invoiceType=
     GET  Invoice/GetCustomerInvoiceById/<id>      POST Invoice/ClearCart
+    GET  Coupon/Validation?serial=                GET  GiftCard/GetAll
     POST ShipingMethod/GetAllShipingMethod [{productVariantId, qty, name}]
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
+from sqlalchemy.exc import SQLAlchemyError
 
+from apps.erp.connector import Refused, get_connector
 from apps.erp.models import ErpVariant
 from apps.erp.store import online_stock
-from apps.website.models import City, CustomerAddress, Invoice, InvoiceLine, Province, ShippingMethod
+from apps.website.models import City, CustomerAddress, Invoice, InvoiceLine, Province, ShippingMethod, SiteSetting
 
 from . import catalog
 from .account import CustomerView, answer
@@ -47,10 +52,10 @@ S = Invoice.State
 def reply(data=None, status: int = 200, message: str | None = None):
     """Invoice/* style: always HTTP 200, the outcome in statusCode."""
     return envelope(data, status_code=status, message=message or MSG_FETCHED, http_status=200)
-NOT_YET = "استفاده از کارت هدیه و کوپن به‌زودی فعال می‌شود."
-
 
 FIRST_IN_MONTH = 101
+NO_ANSWER = "فعلا امکان بررسی کارت هدیه و کوپن نیست؛ کمی بعد دوباره امتحان کنید."
+WITH_DELIVERY, BEFORE_REDUCTION = 1, 1  # SiteSetting.gift_card_use_type, coupon_calculation_type
 
 
 def number_prefix(at) -> str:
@@ -161,8 +166,9 @@ class AddView(CustomerView):
         customer = request.user
         method_id = _int(d.get("ShippingMethodId") or d.get("shippingMethodId"))
         method_id = method_id or None  # 0 means "not chosen yet"
-        if (d.get("gcNum") or "").strip() or (d.get("serial") or "").strip():
-            return reply(None, 400, NOT_YET)
+        gift_number, serial = (d.get("gcNum") or "").strip(), (d.get("serial") or "").strip()
+        if gift_number and serial:
+            return reply(None, 400, "یا از کارت هدیه و یا از کوپن استفاده کنید.")
         if method_id and not (customer.first_name.strip() or customer.last_name.strip()):
             return reply(None, 403, "اجازه ایجاد فاکتور را ندارید. ابتدا اطلاعات پروفایل را تکمیل نمایید.")
         address = customer.addresses.filter(is_deleted=False).order_by("-is_default", "-id").first()
@@ -207,13 +213,21 @@ class AddView(CustomerView):
         amount = sum(int(ln.price * ln.qty) for ln in lines)
         after = sum(int(ln.price_after_reduction * ln.qty) for ln in lines)
         delivery = delivery_cost(method)
+        try:
+            voucher = _voucher(gift_number, serial, customer, amount, after, delivery)
+        except Refused as exc:
+            return reply(None, 400, str(exc))
+        except SQLAlchemyError:
+            return reply(None, 502, NO_ANSWER)
         with transaction.atomic():
             inv = _pre_invoice(customer) or Invoice(customer=customer)
             is_new = inv.pk is None
             inv.shipping_method, inv.address = method, address
             snapshot_address(inv, address)
-            inv.amount, inv.reduction_amount, inv.delivery_amount, inv.deduction_amount = amount, amount - after, delivery, 0
-            inv.payable_amount = after + delivery
+            inv.amount, inv.reduction_amount, inv.delivery_amount, inv.deduction_amount = amount, amount - after, delivery, voucher.deduction
+            inv.gift_card_number, inv.gift_card_id = gift_number, voucher.gift_card_id
+            inv.coupon_serial, inv.coupon_id, inv.coupon_reduction = serial, voucher.coupon_id, voucher.coupon_reduction
+            inv.payable_amount = after + delivery - voucher.deduction
             inv.description = str(d.get("description") or "")[:2000]
             inv.save()
             inv.lines.all().delete()
@@ -227,6 +241,33 @@ class AddView(CustomerView):
         if failed:
             return reply(data, 409, "موجودی بعضی از کالاهای سبد کافی نیست؛ آن‌ها از سبد حذف شدند. لطفا سبد را دوباره بررسی کنید.")
         return reply(data, message="فاکتور شما با موفقیت ثبت شد.")
+
+
+@dataclass
+class Voucher:
+    deduction: int = 0
+    gift_card_id: int | None = None
+    coupon_id: int | None = None
+    coupon_reduction: Decimal = Decimal(0)
+
+
+def _voucher(gift_number: str, serial: str, customer, amount: int, after: int, delivery: int) -> Voucher:
+    """What a gift card or coupon takes off, by the rules in SiteSetting."""
+    setting = SiteSetting.objects.filter(is_deleted=False).first()
+    if gift_number:
+        card = get_connector().gift_card(gift_number, customer)
+        if card.min_price > amount:
+            raise Refused("مبلغ فاکتور کمتر از حد مجاز کارت هدیه میباشد.")
+        with_delivery = setting is None or setting.gift_card_use_type == WITH_DELIVERY
+        return Voucher(deduction=int(min(after + delivery if with_delivery else after, card.balance)), gift_card_id=card.id)
+    if serial:
+        coupon = get_connector().coupon(serial, customer)
+        if coupon.min_price > amount:
+            raise Refused("مبلغ فاکتور کمتر از حد مجاز کوپن میباشد.")
+        before = setting is not None and setting.coupon_calculation_type == BEFORE_REDUCTION
+        return Voucher(deduction=int((amount if before else after) * coupon.reduction / 100), coupon_id=coupon.id,
+                       coupon_reduction=coupon.reduction)
+    return Voucher()
 
 
 def snapshot_address(inv: Invoice, address: CustomerAddress | None = None) -> None:
@@ -357,6 +398,34 @@ def invoice_summary(inv: Invoice) -> dict:
         "reduction": 0, "snappPayToken": None, "snappPayTransactionId": None, "tax": 0, "taxAmount": 0, "variableAmount": 0,
         "vat": 0, "vatAmount": 0, "qty": sum(ln["qty"] for ln in lines),
     }
+
+
+class CouponValidationView(CustomerView):
+    def get(self, request):
+        serial = (request.query_params.get("serial") or "").strip()
+        try:
+            coupon = get_connector().coupon(serial, request.user)
+        except Refused as exc:
+            return answer({"reduction": None, "valid": False, "minPrice": None, "maxPrice": None, "bankPortalEndTime": None}, message=str(exc))
+        except SQLAlchemyError:
+            return answer(None, 502, NO_ANSWER)
+        return answer({"reduction": float(coupon.reduction), "valid": True, "minPrice": float(coupon.min_price),
+                       "maxPrice": float(coupon.max_price) if coupon.max_price is not None else None, "bankPortalEndTime": None},
+                      message="میتوانید از این کوپن استفاده کنید.")
+
+
+class GiftCardsView(CustomerView):
+    def get(self, request):
+        try:
+            cards = get_connector().gift_cards(request.user)
+        except SQLAlchemyError:
+            return answer(None, 502, NO_ANSWER)
+        return answer([{
+            "gcNum": c["GCNum"], "startDate": c["StartDate"], "expDate": c["ExpDate"], "gcBalance": float(c["GCBalance"]),
+            "isActive": c["IsActive"], "customerId": request.user.id, "useDepCode": c["UseDepCode"], "minPrice": None, "maxPrice": None,
+            "minFactorPrice": float(c["MinFactorPrice"] or 0), "useCompelete": c["UseCompelete"], "bankPortalEndTime": None,
+            "customer": _customer(request.user),
+        } for c in cards])
 
 
 class LastPreInvoiceView(CustomerView):

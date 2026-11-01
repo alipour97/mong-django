@@ -30,7 +30,7 @@ DEFAULT_APL_KEY = "mong_website_app"
 def get_lebazai_config() -> dict:
     return {
         "api_url": getattr(settings, "LEBAZAI_API_URL", DEFAULT_API_URL).rstrip("/"),
-        "api_key": getattr(settings, "LEBAZAI_API_KEY", DEFAULT_API_KEY),
+        "api_key": getattr(settings, "LEBAZAI_API_KEY", "") or DEFAULT_API_KEY,
         "brand": getattr(settings, "LEBAZAI_BRAND", DEFAULT_BRAND),
         "apl_key": getattr(settings, "LEBAZAI_APL_KEY", DEFAULT_APL_KEY),
     }
