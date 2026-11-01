@@ -156,6 +156,9 @@ class ContractTests(HubCase):
     def test_routes_ignore_case_and_trailing_slash(self):
         self.assertEqual(self.post("/generatetoken/", {}).status_code, 200)
 
+    def test_routes_leave_the_django_admin_working(self):
+        self.assertEqual(self.client.get("/django-admin/login/").status_code, 200)
+
     def test_get_payment_token_sends_our_return_url_and_a_fresh_id(self):
         record = self.started()
         body = self.snapp.body("token")

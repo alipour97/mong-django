@@ -70,12 +70,24 @@ python manage.py import_dadehfa_admins
 python manage.py import_dadehfa_orders
 python manage.py install_media /app/public/media_pack.zip
 python manage.py sync_erp --full
+python manage.py sync_lebazai_images
+python manage.py createsuperuser
+python manage.py create_admin 09xxxxxxxxx --password
 ```
 
 5. خط‌های `deploy/runflare/crontab.txt` را در کران‌جاب `dadeh` بگذارید.
 6. متغیرهای `dadeh-front` را از `dist/runflare/frontend.env` با Use case برابر `All` وارد کنید و `frontend.zip` را آپلود کنید.
 
 بستهٔ رسانه همان فایل قبلی است و لازم نیست دوباره ساخته شود. فرانت و کران قبلی با این نسخه جایگزین می‌شوند.
+
+## بعد از هر آپلود
+
+دستورهای بالا فقط برای نصب اول‌اند. دیتابیس و پوشهٔ `/app/public` با آپلود پاک نمی‌شوند و کران کارهای دوره‌ای را انجام می‌دهد.
+
+- **`frontend.zip`:** هیچ دستوری لازم نیست.
+- **`backend.zip`:** فقط اگر مایگریشن تازه‌ای آمده باشد، `python manage.py migrate` را بزنید.
+- **`install_media`:** دوباره اجرا نشود. این دستور ردیف‌های عکس را با محتوای زیپ جایگزین می‌کند و عکس‌های جدیدتر تا سینک شبانه از سایت می‌روند.
+- **پنل جنگو:** آدرس `https://api.dadeh.mong.ir/django-admin/` است و با حساب `createsuperuser` وارد می‌شوید. `DJANGO_DEBUG` روی سرور باید خاموش بماند.
 
 ## متغیرهای `dadeh`
 

@@ -148,6 +148,8 @@ LEGACY_CDN_ROOT = os.getenv("LEGACY_CDN_ROOT", "/mnt/sda2/cdn.samian.mong.ir/pub
 # Matching Nginx config: location /static-backend/ -> /mnt/sda2/mong_samian/static/
 STATIC_URL = "/static-backend/"
 STATIC_ROOT = BASE_DIR / "static"
+# The Django admin's files come straight from the packages, so no collectstatic after an upload.
+WHITENOISE_USE_FINDERS = True
 
 # Media files
 # Matching Nginx config: location /media/ -> /mnt/sda2/mong_samian/media/
@@ -172,7 +174,7 @@ CORS_ALLOWED_ORIGINS = list(dict.fromkeys([
     f"http://{SITE_HOST}",
 ]))
 CORS_ALLOW_CREDENTIALS = True
-CSRF_TRUSTED_ORIGINS = list(dict.fromkeys([SITE_URL, f"https://{SITE_HOST}"]))
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys([SITE_URL, f"https://{SITE_HOST}", PUBLIC_BASE_URL]))
 CORS_ALLOW_HEADERS = [
     "accept",
     "accept-encoding",
