@@ -110,17 +110,23 @@ def _payable_invoice(request, invoice_id) -> Invoice | None:
     return request.user.invoices.filter(id=invoice_id, state=S.PRE_INVOICE, is_deleted=False).first() if str(invoice_id or "").isdigit() else None
 
 
-def _mark_paid(inv: Invoice) -> None:
+def _test_money(gateway: str) -> bool:
+    return settings.ZARINPAL_SANDBOX if gateway == ZARINPAL else settings.SNAPPAY_IS_STAGE
+
+
+def _mark_paid(inv: Invoice, *, test: bool = False) -> None:
     with transaction.atomic():
         if inv.address and not inv.full_address:
             snapshot_address(inv)
-        inv.state, inv.paid_at = S.SUCCESSFUL, timezone.now()
-        inv.save(update_fields=["state", "paid_at", "last_modified", "recipient_name", "recipient_mobile", "full_address", "postal_code", "province_name", "city_name"])
+        inv.state, inv.paid_at, inv.is_test = S.SUCCESSFUL, timezone.now(), test
+        inv.save(update_fields=["state", "paid_at", "is_test", "last_modified", "recipient_name", "recipient_mobile", "full_address", "postal_code", "province_name", "city_name"])
         number = assign_number(inv)
         for line in inv.lines.all():
             erp_store.take(line.variant_id, line.qty)
-    transaction.on_commit(lambda: _notify_admins(number))
     transaction.on_commit(catalog.clear_caches)
+    if test:
+        return
+    transaction.on_commit(lambda: _notify_admins(number))
     transaction.on_commit(lambda: outbox.send_soon(inv.id))
 
 
@@ -280,7 +286,7 @@ def _finish(payment: InvoicePayment, success: bool, reference: str = "", card: s
             is_success=success, reference=reference, card_pan=card, error_message=error[:2000], verified_at=timezone.now())
         payment.refresh_from_db()
         if won and success and payment.invoice.state == S.PRE_INVOICE:
-            _mark_paid(payment.invoice)
+            _mark_paid(payment.invoice, test=_test_money(payment.gateway))
 
 
 def _payment_of(record: PayRecord | None) -> InvoicePayment | None:

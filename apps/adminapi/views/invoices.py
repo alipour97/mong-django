@@ -167,6 +167,7 @@ def _site_filter(qs, q):
 
 
 SITE_NOTE = "سفارش سایت؛ هنوز به سامیان ارسال نشده"
+TEST_NOTE = "سفارش تست: پولی جابه‌جا نشده و به نرم‌افزار فروش نمی‌رود"
 
 
 def _site_header(inv: Invoice) -> dict:
@@ -188,9 +189,9 @@ def _site_header(inv: Invoice) -> dict:
         "fixedAmount": 0, "variableAmount": 0, "insuranceFee": 0, "tax": 0, "taxAmount": 0, "vat": 0, "vatAmount": 0,
         "amountAfterVatAndTax": after, "payableAmount": inv.payable_amount, "totalAmountPayable": inv.payable_amount,
         "finalAmount": inv.payable_amount, "giftCardId": inv.gift_card_id, "couponId": inv.coupon_id,
-        "erpInvoiceId": inv.erp_invoice_id, "erpError": inv.erp_error,
+        "erpInvoiceId": inv.erp_invoice_id, "erpError": inv.erp_error, "isTest": inv.is_test,
         "erpTakenAt": inv.erp_taken_at.isoformat() if inv.erp_taken_at else None,
-        "description": "\n".join(x for x in (SITE_NOTE, inv.description) if x),
+        "description": "\n".join(x for x in (TEST_NOTE if inv.is_test else SITE_NOTE, inv.description) if x),
         "commentCounts": 0, "hasComment": False,
         "snappPayTransactionId": snapp.transaction_id if snapp else None, "snappPayToken": snapp.authority if snapp else None,
     }

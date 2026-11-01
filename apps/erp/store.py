@@ -65,7 +65,7 @@ def take(variant_id: int, qty: Decimal) -> None:
 def open_orders():
     """Paid orders the software's stock does not show yet."""
     settled = timezone.now() - SETTLES_AFTER
-    return (Invoice.objects.filter(state=Invoice.State.SUCCESSFUL, is_deleted=False)
+    return (Invoice.objects.filter(state=Invoice.State.SUCCESSFUL, is_deleted=False, is_test=False)
             .exclude(erp_taken_at__lte=settled))
 
 

@@ -207,7 +207,7 @@ def _use_gift_card(db, invoice: Invoice) -> int | None:
 
 def push(invoice: Invoice) -> None:
     """Writes one paid invoice. Does nothing until ERP_WRITES_ENABLED; safe to call again."""
-    if not settings.ERP_WRITES_ENABLED or invoice.erp_sent_at:
+    if not settings.ERP_WRITES_ENABLED or invoice.erp_sent_at or invoice.is_test:
         return
     rows = plan(invoice)
     at = timezone.localtime()

@@ -60,28 +60,30 @@ python manage.py sync_erp --full
 ```
 
 5. خط‌های `deploy/runflare/crontab.txt` را در کران‌جاب `dadeh` بگذارید.
-6. متغیرهای `dadeh-front` را از `dist/runflare/frontend.env` وارد کنید و `frontend.zip` را آپلود کنید.
+6. متغیرهای `dadeh-front` را از `dist/runflare/frontend.env` با Use case برابر `All` وارد کنید و `frontend.zip` را آپلود کنید.
 
 بستهٔ رسانه همان فایل قبلی است و لازم نیست دوباره ساخته شود. فرانت و کران قبلی با این نسخه جایگزین می‌شوند.
 
 ## متغیرهای `dadeh`
 
-| نام | مقدار |
+| نام | مقدار در تست |
 |---|---|
 | `ERP_CONNECTOR` | `dadehfa` |
-| `ERP_WRITES_ENABLED` | `false` تا تست خرید |
+| `ERP_WRITES_ENABLED` | `false` تا مرحلهٔ خرید واقعی |
 | `SITE_URL` | `https://dadeh.mong.ir` |
-| `PUBLIC_BASE_URL`، `PUBLIC_MEDIA_BASE_URL`، `PAYHUB_PUBLIC_URL` | `https://api.dadeh.mong.ir` |
+| `PUBLIC_BASE_URL`، `PUBLIC_MEDIA_BASE_URL` | `https://api.dadeh.mong.ir` |
+| `PAYHUB_PUBLIC_URL` | `https://payhub.mong.ir` |
 | `MEDIA_ROOT` | `/app/public/media` |
 | `LEGACY_CDN_ROOT` | `/app/public/media/cdn` |
 | `DADEHFA_DB_USER`، `DADEHFA_DB_PASSWORD` | لاگین `mong_reader` |
 | `DADEHFA_WRITE_DB_USER`، `DADEHFA_WRITE_DB_PASSWORD` | لاگین `mong_writer` |
 | `SMS_KEY` | کلید sms.ir برای کد ورود |
-| `ZARINPAL_KEY` | مرچنت زرین‌پال |
-
-بقیهٔ متغیرها مثل قبل می‌مانند. تا وقتی متغیرهای `SNAPPAY_*` خالی باشند اسنپ‌پی نشان داده نمی‌شود و درخواستی به آن نمی‌رود.
+| `ZARINPAL_SANDBOX` | `true` در تست |
+| `SNAPPAY_STAGE_URL` و `SNAPPAY_CLIENT_ID`، `SNAPPAY_CLIENT_SECRET`، `SNAPPAY_USERNAME`، `SNAPPAY_PASSWORD` | حساب تست اسنپ‌پی |
 
 ## متغیرهای `dadeh-front`
+
+Use case هر سه باید `All` باشد. این مقدارها موقع build در فرانت کاشته می‌شوند، پس با ری‌استارت عوض نمی‌شوند و بعد از هر تغییر باید `frontend.zip` دوباره آپلود شود.
 
 | نام | مقدار |
 |---|---|
@@ -89,13 +91,30 @@ python manage.py sync_erp --full
 | `API_ORIGIN` | `https://api.dadeh.mong.ir` |
 | `SITE_NOINDEX` | `true` برای مخفی ماندن از گوگل، `false` برای سنجش واقعی یا سوییچ |
 
-## تست پیش از سوییچ
+## دامنهٔ `payhub.mong.ir`
 
-1. ورود با کد پیامکی، ساخت سبد و دیدن تاریخچهٔ یک مشتری قدیمی را امتحان کنید.
-2. با `ERP_WRITES_ENABLED=false` یک خرید کم‌مبلغ با زرین‌پال انجام دهید. سفارش باید در پنل جنگو دیده شود و در `.NET` نه. مبلغ این خرید واقعی است و باید دستی ثبت یا برگشت داده شود.
-3. به انبار خبر بدهید، `ERP_WRITES_ENABLED=true` کنید و سرویس را ری‌استارت کنید. `erp_outbox` همان سفارش را می‌نویسد.
-4. در پنل قدیم فاکتور باید با وضعیت پرداخت‌شده دیده شود و بعد از جاب ساعتی `MapId` بگیرد و در PTC بیاید.
-5. بعد از آن `erp_taken_at` سفارش پر می‌شود و کوپن یا کارت هدیه را هم با یک خرید دیگر امتحان کنید.
+بازگشت زرین‌پال و اسنپ‌پی به این دامنه می‌آید و در همین سرویس `dadeh` پاسخ داده می‌شود.
+
+1. در رانفلر: پروژه ← تنظیم دامنه ← `mong.ir` ← مدیریت زیر دامنه‌ها: `payhub` را اضافه و به سرویس `dadeh` وصل کنید.
+2. رکورد A دامنهٔ `payhub.mong.ir` را در پنل DNS به همان IP دامنهٔ `dadeh.mong.ir` تغییر دهید و SSL را فعال کنید.
+3. در کانفیگ‌مپ `dadeh` فایل `default`: مقدار `proxy_read_timeout` را حداقل `120s` بگذارید. تأیید اسنپ‌پی ممکن است طول بکشد.
+4. `https://payhub.mong.ir/__health` باید `sandbox=True snapppay=set` نشان بدهد.
+
+## تست پرداخت
+
+با `ZARINPAL_SANDBOX=true` یا اسنپ‌پی روی آدرس تست، سفارش با `is_test` علامت می‌خورد: در پنل با یادداشت «سفارش تست» دیده می‌شود، پیامک مدیران نمی‌رود و **هرگز** به `DadehfaOnlineShop` نوشته نمی‌شود، حتی اگر `ERP_WRITES_ENABLED` روشن باشد.
+
+1. ورود با کد پیامکی، ساخت سبد و دیدن تاریخچهٔ یک مشتری قدیمی.
+2. خرید با زرین‌پال sandbox: موفق، و یک بار با انصراف از پرداخت.
+3. خرید با اسنپ‌پی تست: موفق و انصراف. بعد لغو و تغییر سفارش از پنل.
+4. پیش از رفتن به خرید واقعی: `python manage.py delete_test_orders`.
+
+## تست خرید واقعی پیش از سوییچ
+
+1. `ZARINPAL_SANDBOX=false` و به‌جای `SNAPPAY_STAGE_URL` مقدار `SNAPPAY_BASE_URL` را با حساب اصلی بگذارید.
+2. به انبار خبر بدهید و `ERP_WRITES_ENABLED=true` کنید.
+3. یک خرید کم‌مبلغ بزنید. فاکتور باید در پنل قدیم با وضعیت پرداخت‌شده دیده شود، بعد از جاب ساعتی `MapId` بگیرد و در PTC بیاید.
+4. بعد از آن `erp_taken_at` سفارش پر می‌شود. کوپن و کارت هدیه را هم با یک خرید دیگر امتحان کنید.
 
 ## سوییچ به `mong.ir`
 

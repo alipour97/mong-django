@@ -431,3 +431,53 @@ class PaidOrderTests(TestCase):
         invoice.refresh_from_db()
         self.assertIsNotNone(invoice.erp_invoice_id)
         self.assertFalse(outbox.waiting().exists())
+
+
+class TestPaymentTests(TestCase):
+    """Sandbox money is not money: nothing of such an order may reach the software."""
+
+    def setUp(self):
+        use_dadehfa(self)
+        self.customer = Customer.objects.create(cellphone="09121234567")
+
+    def test_never_sent_and_never_held(self):
+        order(self.customer, is_test=True)
+        self.assertFalse(outbox.waiting().exists())
+        self.assertFalse(store.open_orders().exists())
+
+    @override_settings(ERP_WRITES_ENABLED=True)
+    def test_the_writer_refuses_it_too(self):
+        invoice = order(self.customer, is_test=True)
+        with mock.patch("apps.erp.dadehfa_write.get_engine", side_effect=AssertionError):
+            write.push(invoice)
+
+    def finish(self, gateway: str) -> Invoice:
+        from apps.storefront import payments
+
+        invoice = order(self.customer, state=Invoice.State.PRE_INVOICE)
+        goods()
+        payment = InvoicePayment.objects.create(invoice=invoice, gateway=gateway, amount=1900000)
+        with mock.patch("apps.storefront.payments._notify_admins") as notify, self.captureOnCommitCallbacks(execute=True), \
+                mock.patch("apps.erp.outbox.send_soon"), mock.patch("apps.storefront.catalog.clear_caches"):
+            payments._finish(payment, True, "R")
+        invoice.refresh_from_db()
+        self.notified = notify.called
+        return invoice
+
+    @override_settings(ZARINPAL_SANDBOX=True)
+    def test_a_sandbox_zarinpal_payment_is_a_test(self):
+        self.assertTrue(self.finish("zarinpal").is_test)
+        self.assertFalse(self.notified)
+
+    @override_settings(ZARINPAL_SANDBOX=False)
+    def test_a_live_zarinpal_payment_is_real(self):
+        self.assertFalse(self.finish("zarinpal").is_test)
+        self.assertTrue(self.notified)
+
+    @override_settings(SNAPPAY_IS_STAGE=True)
+    def test_a_stage_snapppay_payment_is_a_test(self):
+        self.assertTrue(self.finish("snapppay").is_test)
+
+    @override_settings(SNAPPAY_IS_STAGE=False)
+    def test_a_live_snapppay_payment_is_real(self):
+        self.assertFalse(self.finish("snapppay").is_test)

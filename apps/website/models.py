@@ -1270,6 +1270,8 @@ class Invoice(models.Model):
     erp_sent_at = models.DateTimeField(_("زمان ارسال به نرم‌افزار فروش"), null=True, blank=True)
     erp_taken_at = models.DateTimeField(_("زمان ثبت در نرم‌افزار فروش"), null=True, blank=True, db_index=True)
     erp_error = models.TextField(_("خطای ارسال به نرم‌افزار فروش"), blank=True, default="")
+    # Paid in a gateway's test mode: no money moved, so it never reaches the software.
+    is_test = models.BooleanField(_("سفارش تست"), default=False, db_index=True)
     coupon_id = models.BigIntegerField(_("شناسه کوپن در نرم‌افزار فروش"), null=True, blank=True)
     gift_card_id = models.BigIntegerField(_("شناسه کارت هدیه در نرم‌افزار فروش"), null=True, blank=True)
     coupon_reduction = models.DecimalField(_("درصد کوپن"), max_digits=8, decimal_places=3, default=0)

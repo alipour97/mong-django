@@ -277,6 +277,7 @@ ZARINPAL_SANDBOX = os.getenv("ZARINPAL_SANDBOX", "false").lower() in ("1", "true
 ZARINPAL_STARTPAY_BASE_URL = os.getenv("ZARINPAL_STARTPAY_BASE_URL", "https://pay.mong.ir/pg/StartPay").rstrip("/")
 # SnappPay is offered only once its address is set: SNAPPAY_BASE_URL in production, SNAPPAY_STAGE_URL until then.
 SNAPPAY_BASE_URL = (os.getenv("SNAPPAY_BASE_URL") or os.getenv("SNAPPAY_STAGE_URL", "")).rstrip("/")
+SNAPPAY_IS_STAGE = not os.getenv("SNAPPAY_BASE_URL")
 SNAPPAY_CLIENT_ID = os.getenv("SNAPPAY_CLIENT_ID", "")
 SNAPPAY_CLIENT_SECRET = os.getenv("SNAPPAY_CLIENT_SECRET", "")
 SNAPPAY_USERNAME = os.getenv("SNAPPAY_USERNAME", "")
