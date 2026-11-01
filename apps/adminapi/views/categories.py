@@ -61,7 +61,7 @@ class _Tree:
 def _rows(tree: _Tree, cats: list[Category], with_descriptions: bool) -> list[dict]:
     ids = [c.id for c in cats]
     counts: dict[int, int] = defaultdict(int)
-    for cid in catalog.in_samian(Product.objects.filter(is_deleted=False)).values_list("category_id", flat=True):
+    for cid in catalog.in_erp(Product.objects.filter(is_deleted=False)).values_list("category_id", flat=True):
         counts[cid] += 1
     media: dict[int, list[dict]] = defaultdict(list)
     atts = list(MediaAttachment.objects.filter(

@@ -494,7 +494,7 @@ def _by_slug(qs, slug: str, preferred=()):
 
 def _product_by_slug(slug: str) -> Product | None:
     listed = {r.id for r in catalog.listing_rows()}
-    qs = catalog.in_samian(Product.objects.filter(is_deleted=False)).select_related("category", "brand")
+    qs = catalog.in_erp(Product.objects.filter(is_deleted=False)).select_related("category", "brand")
     return _by_slug(qs, slug, listed)
 
 

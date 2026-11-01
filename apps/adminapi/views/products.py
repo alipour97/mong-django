@@ -24,7 +24,7 @@ from decimal import Decimal, InvalidOperation
 from django.db.models import Max, Min, Sum
 from django.utils import timezone
 
-from apps.samian.models import SamianInventory, SamianWarehouse
+from apps.erp.store import online_stock
 from apps.storefront import catalog
 from apps.website import slugs
 from apps.website.models import (
@@ -35,7 +35,6 @@ from apps.website.models import (
     ProductCollection,
     ProductTag,
     SelectedProduct,
-    online_warehouse_ids,
 )
 
 from .. import products as index
@@ -54,18 +53,17 @@ def _number(value) -> float | None:
 
 
 def _warehouses(bundle: catalog.ProductBundle, pids: list[int]) -> dict[int, dict[int, list[dict]]]:
-    """product id -> variant (barcode pk) -> [{warehouseId, warehouseTitle, qty, realQty}] in the online branches."""
-    variant_of = {v.pk: (pid, v) for pid in pids for v in bundle.variants.get(pid, [])}
-    titles = dict(SamianWarehouse.objects.values_list("samian_id", "title"))
+    """product id -> variant id -> [{warehouseId, warehouseTitle, qty, realQty}] in the online warehouses."""
+    variant_of = {v.id: (pid, v) for pid in pids for v in bundle.variants.get(pid, [])}
     out: dict[int, dict[int, list[dict]]] = defaultdict(lambda: defaultdict(list))
     for r in (
-        SamianInventory.objects.filter(samian_barcode_id__in=variant_of, warehouse_id__in=online_warehouse_ids(), qty__gt=0)
-        .values("samian_barcode_id", "warehouse_id").annotate(total=Sum("qty"))
+        online_stock().filter(variant_id__in=variant_of, qty__gt=0)
+        .values("variant_id", "warehouse_id", "warehouse_title").annotate(total=Sum("qty"))
     ):
-        pid, v = variant_of[r["samian_barcode_id"]]
+        pid, v = variant_of[r["variant_id"]]
         real = float(r["total"] or 0)
-        out[pid][v.pk].append({
-            "productVariantId": v.id, "warehouseId": r["warehouse_id"], "warehouseTitle": titles.get(r["warehouse_id"], ""),
+        out[pid][v.id].append({
+            "productVariantId": v.id, "warehouseId": r["warehouse_id"], "warehouseTitle": r["warehouse_title"],
             "qty": max(0.0, real - bundle.min_qty), "realQty": real,
         })
     return out
@@ -187,7 +185,7 @@ class DetailView(AdminView):
             for item in group["items"]:
                 v = variants.get(item.get("productVariantId"))
                 if v is not None:
-                    ws = stock.get(v.pk, [])
+                    ws = stock.get(v.id, [])
                     item["warehouses"] = ws
                     item["realQty"] = sum(w["realQty"] for w in ws)
         category = p.category

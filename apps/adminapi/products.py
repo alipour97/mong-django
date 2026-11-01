@@ -43,7 +43,7 @@ def admin_rows() -> list[AdminRow]:
 def _build() -> list[AdminRow]:
     tree = catalog.category_tree()
     ids = list(
-        catalog.in_samian(Product.objects.filter(is_deleted=False, is_active=True, category_id__in=tree.nodes.keys()))
+        catalog.in_erp(Product.objects.filter(is_deleted=False, is_active=True, category_id__in=tree.nodes.keys()))
         .values_list("id", flat=True)
     )
     bundle = catalog.ProductBundle.load(ids)

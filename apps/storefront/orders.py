@@ -2,9 +2,9 @@
 Cart, pre-invoice and the customer's orders (Invoice/*, ShipingMethod/*), as api.mong.ir.
 
 The cart lives in the browser. At checkout the site posts it to Invoice/Add,
-which (re)builds the customer's one pre-invoice: each line is a Samian barcode
-(productVariantId), priced from Samian and capped at the stock of the online
-branches less the safety stock. Lines that are gone or short come back in
+which (re)builds the customer's one pre-invoice: each line is a variant
+(productVariantId), priced from the sales software and capped at the online
+stock less the safety stock. Lines that are gone or short come back in
 failedItems ({productVariantId: message}); a short line is kept at the stock
 left. Delivery costs the method's fixed cost when its type includes costs.
 
@@ -33,10 +33,9 @@ from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 
-from apps.samian.models import SamianBarcode, SamianInventory
-from apps.website.models import (
-    City, CustomerAddress, Invoice, InvoiceLine, ProductSamianLink, Province, ShippingMethod, online_warehouse_ids,
-)
+from apps.erp.models import ErpVariant
+from apps.erp.store import online_stock
+from apps.website.models import City, CustomerAddress, Invoice, InvoiceLine, Province, ShippingMethod
 
 from . import catalog
 from .account import CustomerView, answer
@@ -97,14 +96,14 @@ def _cart(raw) -> list[tuple[int, Decimal, str]]:
 
 
 def _bundle_for(variant_ids) -> tuple[catalog.ProductBundle, dict[int, tuple[int, catalog.Variant]]]:
-    """The products of the given Samian barcodes, and barcode id -> (site product id, variant)."""
-    sp_of = dict(SamianBarcode.objects.filter(samian_id__in=variant_ids).values_list("samian_id", "samian_product__samian_id"))
-    pid_of_sp = dict(ProductSamianLink.objects.filter(samian_product_id__in=set(sp_of.values())).values_list("samian_product_id", "product_id"))
-    bundle = catalog.ProductBundle.load(set(pid_of_sp.values()))
+    """The products of the given variants, and variant id -> (site product id, variant)."""
+    wanted = set(variant_ids)
+    pids = ErpVariant.objects.filter(id__in=wanted).values_list("product_id", flat=True)
+    bundle = catalog.ProductBundle.load(set(pids))
     found = {}
     for pid in bundle.products:
         for v in bundle.visible_variants(pid):
-            if v.id in sp_of:
+            if v.id in wanted:
                 found[v.id] = (pid, v)
     return bundle, found
 
@@ -117,17 +116,16 @@ def delivery_cost(method: ShippingMethod | None) -> int:
 
 
 def _single_warehouse(cart) -> bool:
-    """Whether one online branch has every cart line in stock (needed by methods that depend on the source)."""
+    """Whether one online warehouse has every cart line in stock (needed by methods that depend on the source)."""
     if not cart:
         return True
-    pks = dict(SamianBarcode.objects.filter(samian_id__in=[v for v, _, _ in cart]).values_list("samian_id", "pk"))
     stock: dict[int, dict[int, float]] = {}
-    for bpk, wh, qty in (
-        SamianInventory.objects.filter(samian_barcode_id__in=pks.values(), warehouse_id__in=online_warehouse_ids())
-        .values("samian_barcode_id", "warehouse_id").annotate(q=Sum("qty")).values_list("samian_barcode_id", "warehouse_id", "q")
+    for variant, wh, qty in (
+        online_stock().filter(variant_id__in=[v for v, _, _ in cart])
+        .values("variant_id", "warehouse_id").annotate(q=Sum("qty")).values_list("variant_id", "warehouse_id", "q")
     ):
-        stock.setdefault(wh, {})[bpk] = float(qty or 0)
-    return any(all(per_wh.get(pks.get(v), 0) >= float(q) for v, q, _ in cart) for per_wh in stock.values())
+        stock.setdefault(wh, {})[variant] = float(qty or 0)
+    return any(all(per_wh.get(v, 0) >= float(q) for v, q, _ in cart) for per_wh in stock.values())
 
 
 def shipping_dict(m: ShippingMethod) -> dict:
@@ -197,7 +195,7 @@ class AddView(CustomerView):
                 qty = available
                 failed[str(vid)] = "موجودی کالا کم است."
             lines.append(InvoiceLine(
-                product_id=pid, variant_id=vid, barcode=v.barcode, name=name or bundle.products[pid].title,
+                product_id=pid, variant_id=vid, erp_ref=v.erp_ref, barcode=v.barcode, name=name or bundle.products[pid].title,
                 color_id=v.color_id, color_name=v.color.name if v.color else "", color_value=v.color.value if v.color else "",
                 size_name=v.size.name if v.size else "", qty=qty, price=int(pricing.base), reduction=Decimal(str(pricing.reduction)),
                 price_after_reduction=pricing.after,

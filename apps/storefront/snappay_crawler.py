@@ -26,7 +26,6 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 
-from apps.samian.models import SamianProduct
 from apps.storefront import catalog
 from apps.website.models import Product, ProductAIProfile
 
@@ -183,10 +182,10 @@ def format_title(title: str, category_title: str | None, brand_title: str = "م�
     return f"{prefix} {title}"
 
 
-def parse_description(p: Product, sp: SamianProduct | None = None) -> dict[str, str]:
+def parse_description(p: Product, attributes: dict | None = None) -> dict[str, str]:
     """
     Build structured key-value description object according to PDF specification.
-    Extracts attributes from p.short_desc, SamianProduct, and p.description.
+    Extracts attributes from p.short_desc, the sales software, and p.description.
     """
     desc_dict: dict[str, str] = {"برند": "مانگ"}
 
@@ -213,14 +212,10 @@ def parse_description(p: Product, sp: SamianProduct | None = None) -> dict[str, 
             if k and v:
                 desc_dict[k] = v
 
-    # Add attributes from Samian ERP
-    if sp:
-        if sp.material and "جنس" not in desc_dict:
-            desc_dict["جنس"] = sp.material.strip()
-        if sp.style and "سبک" not in desc_dict:
-            desc_dict["سبک"] = sp.style.strip()
-        if sp.season and "فصل" not in desc_dict:
-            desc_dict["فصل"] = str(sp.season).strip()
+    # Add attributes from the sales software
+    for name, value in (attributes or {}).items():
+        if value and name not in desc_dict:
+            desc_dict[name] = str(value).strip()
 
     # Add long description if present
     if p.description and p.description.strip():
@@ -265,7 +260,8 @@ def build_snappay_product(
         base_url = get_base_url()
 
     pr = bundle.pricing(p.id)
-    sp = bundle.samian.get(p.id)
+    erp = bundle.erp.get(p.id)
+    name_en = erp.name_en if erp else ""
     imgs = bundle.main_images(p.id)
     in_stk = bundle.in_stock(p.id)
 
@@ -293,8 +289,8 @@ def build_snappay_product(
         title = format_title(p.title, cat_title, brand_title="مانگ")
 
     # 3. Subtitle: Model name or English name
-    if sp and sp.name_en:
-        subtitle = sp.name_en
+    if name_en:
+        subtitle = name_en
     elif ai and ai.title and p.title:
         subtitle = p.title
     else:
@@ -330,7 +326,7 @@ def build_snappay_product(
         if ai.fab:
             desc_dict["مزایا و کاربرد"] = ai.fab
     else:
-        desc_dict.update(parse_description(p, sp))
+        desc_dict.update(parse_description(p, erp.attributes if erp else None))
 
     # Add general description if not already in dictionary
     if p.description and p.description.strip() and "توضیحات تکمیلی" not in desc_dict:
@@ -370,8 +366,8 @@ def build_snappay_product(
         "category": category_str,
         "description": desc_dict,
         "brand": "مانگ",
-        "GTIN": p.barcode or (sp.subcode if sp else "") or "",
-        "gtin": p.barcode or (sp.subcode if sp else "") or "",
+        "GTIN": p.barcode or (erp.subcode if erp else "") or "",
+        "gtin": p.barcode or (erp.subcode if erp else "") or "",
     }
 
     if colors:

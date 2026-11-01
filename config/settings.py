@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "corsheaders",
 
     # Local apps
+    "apps.erp",
     "apps.samian",
     "apps.storefront",
     "apps.legacy",
@@ -223,6 +224,13 @@ BEST_SELLER_DAYS = int(os.getenv("BEST_SELLER_DAYS", "90"))
 STOREFRONT_STOCK_WAREHOUSE_IDS = [
     int(x) for x in os.getenv("STOREFRONT_STOCK_WAREHOUSE_IDS", "2,3,26,28,29").split(",") if x.strip()
 ]
+
+# The sales software this site sells through, and what is needed to reach it (apps/erp)
+ERP_CONNECTOR = os.getenv("ERP_CONNECTOR", "samian")
+ERP_CONNECTORS = {"samian": "apps.erp.samian.SamianConnector", "dadehfa": "apps.erp.dadehfa.DadehfaConnector"}
+# Off until the writing code is reviewed and a real test order is agreed: paid orders wait in the site.
+ERP_WRITES_ENABLED = os.getenv("ERP_WRITES_ENABLED", "false").lower() in ("1", "true", "yes")
+LEBAZAI_IMAGE_BRAND = os.getenv("LEBAZAI_IMAGE_BRAND", "mong")
 
 # Admin panel API (apps/adminapi)
 ADMIN_TOKEN_MINUTES = int(os.getenv("ADMIN_TOKEN_MINUTES", "600"))

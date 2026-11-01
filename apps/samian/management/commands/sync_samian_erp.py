@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import time
 
+from django.conf import settings
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
 from apps.samian.services.erp_sync import (
@@ -114,6 +116,9 @@ class Command(BaseCommand):
                     f"\n  موجودی: {result['inventory'].get('synced', 0)} ردیف از {result['inventory'].get('total', 0)}"
                     f"\n  مدت زمان: {time.time() - t0:.1f} ثانیه"
                 ))
+
+            if settings.ERP_CONNECTOR == "samian":
+                call_command("sync_erp", stdout=self.stdout)
 
         except Exception as exc:
             self.stdout.write(self.style.ERROR(f"سینک ناموفق: {exc}"))

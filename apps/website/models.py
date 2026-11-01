@@ -972,6 +972,7 @@ class Customer(LegacyMixin):
         related_name="site_customers", verbose_name=_("مشتری سامیان"),
     )
     samian_checked_at = models.DateTimeField(_("آخرین جستجو در سامیان"), null=True, blank=True)
+    erp_customer_id = models.BigIntegerField(_("شناسه در نرم‌افزار فروش"), null=True, blank=True, db_index=True)
     # A Django password hash; empty until the customer sets one (sign-in is by SMS code otherwise).
     # Dadehfa's own hashes were not carried over.
     password = models.CharField(_("رمز عبور"), max_length=256, blank=True, default="")
@@ -1030,6 +1031,7 @@ class CustomerAddress(LegacyMixin):
     is_myself_recipient = models.BooleanField(_("گیرنده خودم هستم"), default=True)
     # Samian contactinfo row this address was written to (set by the order flow).
     samian_contact_id = models.BigIntegerField(_("شناسه آدرس در سامیان"), null=True, blank=True, db_index=True)
+    erp_address_id = models.BigIntegerField(_("شناسه آدرس در نرم‌افزار فروش"), null=True, blank=True, db_index=True)
 
     class Meta:
         verbose_name = _("آدرس مشتری سایت")
@@ -1229,8 +1231,9 @@ class ArticleLike(LegacyMixin):
 
 
 # -----------------------------------------------------------------------------
-# Site orders (cart -> pre-invoice -> paid). Sending a paid order to Samian is
-# the write phase; until then samian_transaction_id stays empty.
+# Site orders (cart -> pre-invoice -> paid). A paid order goes to the sales software
+# through its connector (apps/erp); erp_* follow that. Sending to Samian is still to
+# be built: until then samian_transaction_id stays empty.
 # -----------------------------------------------------------------------------
 class Invoice(models.Model):
     class State(models.IntegerChoices):
@@ -1263,6 +1266,13 @@ class Invoice(models.Model):
     # Given when paid: Persian year (3 digits) + month + a sequence from 101 in that month, e.g. 40508101.
     number = models.CharField(_("شماره فاکتور"), max_length=20, null=True, blank=True, unique=True)
     samian_transaction_id = models.BigIntegerField(_("شناسه رسید در سامیان"), null=True, blank=True, db_index=True)
+    erp_invoice_id = models.BigIntegerField(_("شناسه فاکتور در نرم‌افزار فروش"), null=True, blank=True, db_index=True)
+    erp_sent_at = models.DateTimeField(_("زمان ارسال به نرم‌افزار فروش"), null=True, blank=True)
+    erp_taken_at = models.DateTimeField(_("زمان ثبت در نرم‌افزار فروش"), null=True, blank=True, db_index=True)
+    erp_error = models.TextField(_("خطای ارسال به نرم‌افزار فروش"), blank=True, default="")
+    coupon_id = models.BigIntegerField(_("شناسه کوپن در نرم‌افزار فروش"), null=True, blank=True)
+    gift_card_id = models.BigIntegerField(_("شناسه کارت هدیه در نرم‌افزار فروش"), null=True, blank=True)
+    coupon_reduction = models.DecimalField(_("درصد کوپن"), max_digits=8, decimal_places=3, default=0)
     is_deleted = models.BooleanField(_("حذف شده"), default=False, db_index=True)
     created = models.DateTimeField(_("ایجاد"), auto_now_add=True)
     last_modified = models.DateTimeField(_("آخرین تغییر"), auto_now=True)
@@ -1279,7 +1289,8 @@ class Invoice(models.Model):
 class InvoiceLine(models.Model):
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="lines")
     product = models.ForeignKey(Product, on_delete=models.DO_NOTHING, db_constraint=False, related_name="+")
-    variant_id = models.BigIntegerField(_("شناسه بارکد سامیان (productVariantId)"))
+    variant_id = models.BigIntegerField(_("شناسه تنوع (productVariantId)"))
+    erp_ref = models.BigIntegerField(_("شناسه تنوع در فاکتور نرم‌افزار"), null=True, blank=True)
     barcode = models.CharField(max_length=255, blank=True, default="")
     name = models.CharField(max_length=512, blank=True, default="")
     color_id = models.BigIntegerField(null=True, blank=True)

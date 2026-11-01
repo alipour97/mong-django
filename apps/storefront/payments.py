@@ -13,8 +13,7 @@ Each pay request is an InvoicePayment row and a hub record. Back from the gatewa
 the hub finishes the payment once (Zarinpal verify, SnappPay settle); then the
 invoice is successful and the customer lands on
 /order-confirmation?success=...&InvoiceId=...&TrackingToken=... like before. A paid
-invoice is not yet sent to Samian: that is the write phase (Invoice.samian_transaction_id
-stays empty until then).
+invoice goes to the sales software through its connector (apps/erp/outbox.py).
 """
 from __future__ import annotations
 
@@ -28,12 +27,15 @@ from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
 from django.http import HttpResponseRedirect
+from django.db.models import Sum
 from django.utils import timezone
 from rest_framework.throttling import AnonRateThrottle
 
 from apps import smsir
+from apps.erp import outbox, store as erp_store
 from apps.payhub import service as hub
 from apps.payhub import snapppay, zarinpal
+from apps.erp.models import ErpVariant
 from apps.payhub.models import PayRecord
 from apps.website.models import BankGateway, Invoice, InvoicePayment
 
@@ -108,45 +110,6 @@ def _payable_invoice(request, invoice_id) -> Invoice | None:
     return request.user.invoices.filter(id=invoice_id, state=S.PRE_INVOICE, is_deleted=False).first() if str(invoice_id or "").isdigit() else None
 
 
-def _deduct_inventory(inv: Invoice) -> None:
-    """Deduct ordered quantities from SamianInventory across online warehouses."""
-    from decimal import Decimal
-    from apps.samian.models import SamianBarcode, SamianInventory
-    from apps.website.models import online_warehouse_ids
-
-    wh_ids = online_warehouse_ids()
-    lines = list(inv.lines.all())
-    variant_ids = [ln.variant_id for ln in lines]
-    barcode_map = {b.samian_id: b for b in SamianBarcode.objects.filter(samian_id__in=variant_ids)}
-
-    for ln in lines:
-        barcode = barcode_map.get(ln.variant_id)
-        if not barcode:
-            continue
-        needed = Decimal(str(ln.qty or 0))
-        if needed <= 0:
-            continue
-        inv_rows = list(
-            SamianInventory.objects.select_for_update()
-            .filter(samian_barcode=barcode, warehouse_id__in=wh_ids)
-            .order_by("-qty")
-        )
-        for row in inv_rows:
-            if needed <= 0:
-                break
-            if row.qty <= 0:
-                continue
-            deduct = min(row.qty, needed)
-            row.qty -= deduct
-            needed -= deduct
-            row.save(update_fields=["qty", "last_updated"])
-
-        if needed > 0 and inv_rows:
-            row = inv_rows[0]
-            row.qty = max(Decimal("0.00"), row.qty - needed)
-            row.save(update_fields=["qty", "last_updated"])
-
-
 def _mark_paid(inv: Invoice) -> None:
     with transaction.atomic():
         if inv.address and not inv.full_address:
@@ -154,9 +117,11 @@ def _mark_paid(inv: Invoice) -> None:
         inv.state, inv.paid_at = S.SUCCESSFUL, timezone.now()
         inv.save(update_fields=["state", "paid_at", "last_modified", "recipient_name", "recipient_mobile", "full_address", "postal_code", "province_name", "city_name"])
         number = assign_number(inv)
-        _deduct_inventory(inv)
+        for line in inv.lines.all():
+            erp_store.take(line.variant_id, line.qty)
     transaction.on_commit(lambda: _notify_admins(number))
     transaction.on_commit(catalog.clear_caches)
+    transaction.on_commit(lambda: outbox.send_soon(inv.id))
 
 
 def _notify_admins(number: str) -> None:
@@ -208,18 +173,13 @@ def _start_payment(inv: Invoice, key: str) -> str:
 
 
 def _out_of_stock(inv: Invoice) -> bool:
-    from apps.samian.models import SamianBarcode, SamianInventory
-    from apps.website.models import online_warehouse_ids
-
-    wh_ids = online_warehouse_ids()
     lines = list(inv.lines.all())
-    barcodes = {b.samian_id: b for b in SamianBarcode.objects.filter(samian_id__in=[ln.variant_id for ln in lines])}
-    for ln in lines:
-        if barcode := barcodes.get(ln.variant_id):
-            rows = SamianInventory.objects.filter(samian_barcode=barcode, warehouse_id__in=wh_ids).values_list("qty", flat=True)
-            if sum(rows, Decimal(0)) < ln.qty:
-                return True
-    return False
+    stock = dict(
+        erp_store.online_stock().filter(variant__in=[ln.variant_id for ln in lines])
+        .values("variant_id").annotate(total=Sum("qty")).values_list("variant_id", "total")
+    )
+    known = set(ErpVariant.objects.filter(id__in=[ln.variant_id for ln in lines]).values_list("id", flat=True))
+    return any(ln.variant_id in known and stock.get(ln.variant_id, Decimal(0)) < ln.qty for ln in lines)
 
 
 def delivery_problem(record: PayRecord) -> str:

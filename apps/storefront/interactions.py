@@ -3,7 +3,7 @@ What signed-in customers (and visitors) add on the site, as api.mong.ir took it.
 
 New product and article comments wait for approval in the admin (status 0).
 A product comment is marked "buyer" when the customer has bought the product
-(any Mong sale in Samian, store or online).
+(any Mong sale in Samian, store or online, or a paid site order).
 
     POST Comment/add?productId=&featureValueId= {comment, score, title, isAnonymous, parentId}   (customer)
     POST Comment/Reaction {commentId, liked}        liked null undoes the reaction            (customer)
@@ -25,7 +25,7 @@ from django.utils import timezone
 from apps.samian.models import SamianSalesRow
 from apps.website.models import (
     Article, ArticleComment, ArticleLike, CooperationRequest, MediaAttachment, Product, ProductComment, ProductCommentLike,
-    ProductSamianLink, ThirdPartyLog,
+    Invoice, ProductSamianLink, ThirdPartyLog,
 )
 
 from . import blog
@@ -47,6 +47,8 @@ def _text(d: dict, key: str, limit: int | None = None) -> str:
 
 
 def bought(customer, product_id: int) -> bool:
+    if customer.invoices.filter(state=Invoice.State.SUCCESSFUL, is_deleted=False, lines__product_id=product_id).exists():
+        return True
     if not customer.samian_customer_id:
         return False
     samian_product = ProductSamianLink.objects.filter(product_id=product_id).values_list("samian_product_id", flat=True).first()

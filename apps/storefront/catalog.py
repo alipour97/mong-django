@@ -3,19 +3,18 @@ Read side of the storefront: builds the JSON objects the legacy API returned.
 
 Sources:
 - website.*  (imported from DadehfaOnlineShop): category tree, slugs, titles,
-  descriptions, variants (color/size) and website media.
-- samian.*   (synced from Samian ERP): price, stock per barcode, product images.
+  descriptions and website media.
+- erp.*      (filled by the connector, apps/erp): price, variants, stock and
+  product images, whichever sales software the site runs on.
 
 Rules:
-- Samian is the reference: a website product is shown only when it is linked
-  to a Samian product (ProductBundle.load drops the others). Price and stock
-  come only from Samian.
-- Images: Samian gallery first, website media as fallback; both served as
-  pre-built WebP from /img/ (apps/website/images.py) once build_images ran.
-- Stock is the sum over the branches marked sells_online (website.Branch), minus
-  SiteSetting.min_qty kept back per variant.
-- Only Mong products exist here (Samian brands مانگ and توليد, synced with
-  SAMIAN_BRAND_IDS); customers always see the one brand MONG_BRAND. Listing
+- The sales software is the reference: a website product is shown only when the
+  connector has it (ProductBundle.load drops the others).
+- Images are served as pre-built WebP from /img/ (apps/website/images.py) once
+  build_images ran, else from their source.
+- Stock is the sum over the warehouses sold online (apps.erp.store.online_stock),
+  minus SiteSetting.min_qty kept back per variant.
+- Only Mong products exist here; customers always see the one brand MONG_BRAND. Listing
   shows products in an online category, and (when SiteSetting.only_has_media_products is on) only products
   that have images.
 """
@@ -24,24 +23,13 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import timedelta
-from pathlib import Path
 
 from django.conf import settings
 from django.core.cache import cache
-from django.db.models import Avg, Q, Sum
-from django.utils import timezone
+from django.db.models import Avg, Sum
 
-from apps.samian.models import (
-    SamianBarcode,
-    SamianColor,
-    SamianInventory,
-    SamianPriceListItem,
-    SamianProduct,
-    SamianProductColor,
-    SamianSalesRow,
-    SamianSize,
-)
+from apps.erp.models import ErpImage, ErpProduct, ErpVariant
+from apps.erp.store import online_stock
 from apps.website import images as site_images
 from apps.website.models import (
     Category,
@@ -51,12 +39,10 @@ from apps.website.models import (
     ProductAIProfile,
     ProductCollection,
     ProductComment,
-    ProductSamianLink,
     ProductTag,
     HiddenImage,
     SelectedProduct,
     SiteSetting,
-    online_warehouse_ids,
 )
 
 from . import warm
@@ -64,8 +50,8 @@ from . import warm
 # مانگ and توليد are one brand for customers: every product is shown as Mong.
 MONG_BRAND = {"id": 15, "title": "مانگ"}
 
-LISTING_CACHE_KEY = "storefront:listing:v11"
-LISTING_CACHE_TTL = 300  # Samian syncs every 15 minutes; a stale listing is rebuilt in the background
+LISTING_CACHE_KEY = "storefront:listing:v12"
+LISTING_CACHE_TTL = 300  # the connector syncs every few minutes; a stale listing is rebuilt in the background
 TREE_CACHE_KEY = "storefront:category-tree:v1"
 TREE_CACHE_TTL = 300
 
@@ -86,11 +72,6 @@ def absolute_url(url: str) -> str:
     if url.startswith("/"):
         return settings.PUBLIC_BASE_URL.rstrip("/") + url
     return url
-
-
-def round_price(rial) -> int:
-    """Discounted prices are rounded to 1,000 toman (10,000 rial) like the legacy site."""
-    return int((float(rial) + 5000) // 10000 * 10000)
 
 
 def none_if_blank(text: str | None):
@@ -254,10 +235,10 @@ class Option:
 
 @dataclass(frozen=True)
 class Variant:
-    """A sellable barcode of a Samian product, with its Samian color and size."""
+    """A sellable color and size of a product."""
 
-    id: int        # Samian barcodemain_id (productVariantId on the site)
-    pk: int        # SamianBarcode pk
+    id: int        # productVariantId on the site
+    erp_ref: int | None
     barcode: str
     color: Option | None
     size: Option | None
@@ -271,13 +252,24 @@ class Variant:
         return self.size.id if self.size else None
 
 
-def _color_option(color_id: int | None, fallback_name: str, colors: dict[int, SamianColor]) -> Option | None:
-    if not color_id:
-        return None
-    c = colors.get(color_id)
-    if c is None:
-        return Option(color_id, fallback_name, "", 0)
-    return Option(c.samian_id, c.name, c.hex_code, c.display_priority)
+def _variant(row: ErpVariant) -> Variant:
+    return Variant(
+        id=row.id, erp_ref=row.erp_ref, barcode=row.barcode,
+        color=Option(row.color_id, row.color_name, row.color_value, row.color_priority) if row.color_id else None,
+        size=Option(row.size_id, row.size_name, row.size_value, row.size_priority) if row.size_id else None,
+    )
+
+
+def _image_dict(img: ErpImage, hidden: set[str], include_hidden: bool) -> dict:
+    url = site_images.public_url(img.key) if img.key and site_images.is_built(img.key) else site_images.site_media_url(img.source)
+    return {
+        "id": img.source_id,
+        "mediaUrl": absolute_url(url),
+        "isVideo": img.is_video,
+        "alternative": img.alternative,
+        "tooltipTitle": img.tooltip_title,
+        **({"key": img.key, "isHidden": img.key in hidden} if include_hidden else {}),
+    }
 
 
 @dataclass
@@ -286,10 +278,10 @@ class ProductBundle:
 
     products: dict[int, Product]
     variants: dict[int, list[Variant]] = field(default_factory=dict)
-    samian: dict[int, SamianProduct] = field(default_factory=dict)  # website product id -> SamianProduct
-    list_price: dict[int, int] = field(default_factory=dict)  # samian product pk -> final price
-    stock: dict[int, float] = field(default_factory=dict)  # SamianBarcode pk -> qty in the online branches
-    samian_images: dict[int, dict[int, list[dict]]] = field(default_factory=dict)  # product id -> colorinfo id -> images
+    erp: dict[int, ErpProduct] = field(default_factory=dict)  # website product id -> what the connector read
+    stock: dict[int, float] = field(default_factory=dict)  # variant id -> qty in the online warehouses
+    color_gallery: dict[int, dict[int, list[dict]]] = field(default_factory=dict)  # product id -> color id -> images
+    own_gallery: dict[int, list[dict]] = field(default_factory=dict)  # product id -> images of no one color
     only_media: bool = False  # SiteSetting.only_has_media_products: hide colors that have no images
     min_qty: float = 0.0  # SiteSetting.min_qty: safety stock per variant that is never offered online
     ai_profiles: dict[int, ProductAIProfile] = field(default_factory=dict)  # website product id -> ProductAIProfile
@@ -308,47 +300,19 @@ class ProductBundle:
         if not products:
             return b
 
-        links = dict(ProductSamianLink.objects.filter(product_id__in=ids).values_list("product_id", "samian_product_id"))
-        sps = {sp.samian_id: sp for sp in SamianProduct.objects.filter(samian_id__in=links.values())}
-        b.samian = {pid: sps[sid] for pid, sid in links.items() if sid in sps}
-        # Not in Samian -> not on the site (the Dadehfa copy is only kept for comparison).
-        b.products = {pid: p for pid, p in products.items() if pid in b.samian}
+        b.erp = ErpProduct.objects.filter(product_id__in=ids).in_bulk()
+        # Not in the sales software -> not on the site.
+        b.products = {pid: p for pid, p in products.items() if pid in b.erp}
         ids = list(b.products)
         if not ids:
             return b
 
-        now = timezone.now()
-        valid = Q(price_list__isnull=True) | Q(
-            price_list__is_active=True, price_list__valid_from__lte=now, price_list__valid_to__gte=now
-        )
-        for spk, final in (
-            SamianPriceListItem.objects.filter(valid, samian_product_id__in=[sp.pk for sp in b.samian.values()])
-            .exclude(final_price__isnull=True)
-            .values_list("samian_product_id", "final_price")
-        ):
-            if spk not in b.list_price or final < b.list_price[spk]:
-                b.list_price[spk] = final
-
-        # Variants: the product's active Samian barcodes, color and size as Samian has them.
-        pid_by_sp = {sp.pk: pid for pid, sp in b.samian.items()}
-        colors = {c.samian_id: c for c in SamianColor.objects.all()}
-        sizes = {sz.name: sz for sz in SamianSize.objects.all()}
-        barcodes = (
-            SamianBarcode.objects.filter(samian_product_id__in=pid_by_sp, is_active=True)
-            .only("samian_id", "barcode", "size", "color", "colorinfo_id", "samian_product_id").order_by("samian_id")
-        )
-        for bc in barcodes:
-            sz = sizes.get(bc.size)
-            b.variants.setdefault(pid_by_sp[bc.samian_product_id], []).append(Variant(
-                id=bc.samian_id, pk=bc.pk, barcode=bc.barcode,
-                color=_color_option(bc.colorinfo_id, bc.color, colors),
-                size=Option(sz.pk, sz.name, sz.name, sz.display_priority) if sz else None,
-            ))
-        barcode_pks = [v.pk for vs in b.variants.values() for v in vs]
+        for row in ErpVariant.objects.filter(product_id__in=ids).order_by("id"):
+            b.variants.setdefault(row.product_id, []).append(_variant(row))
+        variant_ids = [v.id for vs in b.variants.values() for v in vs]
         b.stock = {
-            r["samian_barcode_id"]: float(r["total"] or 0)
-            for r in SamianInventory.objects.filter(samian_barcode_id__in=barcode_pks, warehouse_id__in=online_warehouse_ids())
-            .values("samian_barcode_id").annotate(total=Sum("qty"))
+            r["variant_id"]: float(r["total"] or 0)
+            for r in online_stock().filter(variant_id__in=variant_ids).values("variant_id").annotate(total=Sum("qty"))
         }
 
         b.ai_profiles = {ap.product_id: ap for ap in ProductAIProfile.objects.filter(product_id__in=ids)}
@@ -357,58 +321,34 @@ class ProductBundle:
         return b
 
     def _load_images(self, ids, include_hidden: bool = False):
-        pmid_to_pid = {sp.samian_id: pid for pid, sp in self.samian.items()}
         hidden = set(HiddenImage.objects.values_list("key", flat=True))
-        colors = (
-            SamianProductColor.objects.filter(productmain_id__in=pmid_to_pid.keys(), has_gallery=True)
-            .only("samian_id", "productmain_id", "colorinfo_id", "colorsgalery").order_by("samian_id")
-        )
-        for color in colors:
-            pid = pmid_to_pid[color.productmain_id]
-            imgs = []
-            for idx, item in enumerate(color.colorsgalery or []):
-                fp = item.get("filePath", "") if isinstance(item, dict) else ""
-                if not fp or Path(fp).suffix.lower() not in site_images.IMAGE_EXT:
-                    continue
-                key = site_images.samian_key(color.productmain_id, fp)
-                if key in hidden and not include_hidden:
-                    continue
-                # Built nightly by build_images; until then the original through the proxy.
-                url = site_images.public_url(key) if site_images.is_built(key) else f"/api/samian/media/{color.samian_id}/{idx}/"
-                imgs.append({
-                    "id": color.samian_id * 100 + idx,
-                    "mediaUrl": absolute_url(url),
-                    "isVideo": False,
-                    "alternative": "",
-                    "tooltipTitle": "",
-                    **({"key": key, "isHidden": key in hidden} if include_hidden else {}),
-                })
-            if imgs:
-                self.samian_images.setdefault(pid, {}).setdefault(color.colorinfo_id, []).extend(imgs)
+        for img in ErpImage.objects.filter(product_id__in=ids):
+            if img.key in hidden and not include_hidden:
+                continue
+            entry = _image_dict(img, hidden, include_hidden)
+            if img.is_main:
+                self.own_gallery.setdefault(img.product_id, []).append(entry)
+            else:
+                self.color_gallery.setdefault(img.product_id, {}).setdefault(img.color_id, []).append(entry)
 
     # -- per product -------------------------------------------------------
     def pricing(self, pid: int) -> Pricing:
-        sp = self.samian.get(pid)
-        if not sp or not sp.sale_price:
+        row = self.erp.get(pid)
+        if not row:
             return Pricing(0.0, 0.0, 0)
-        base = sp.sale_price
-        final = self.list_price.get(sp.pk)
-        if final and final < base:
-            return Pricing(float(base), round((base - final) * 100 / base, 3), round_price(final))
-        return Pricing(float(base), 0.0, int(base))
+        return Pricing(float(row.base_price), float(row.reduction), row.sale_price)
 
     def variant_stock(self, pid: int, v: Variant) -> float:
-        return max(0.0, self.stock.get(v.pk, 0.0) - self.min_qty)
+        return max(0.0, self.stock.get(v.id, 0.0) - self.min_qty)
 
     def has_images(self, pid: int) -> bool:
-        return bool(self.samian_images.get(pid))
+        return bool(self.color_gallery.get(pid))
 
     def main_images(self, pid: int) -> list[dict]:
-        return [img for imgs in self.samian_images.get(pid, {}).values() for img in imgs]
+        return self.own_gallery.get(pid) or [img for imgs in self.color_gallery.get(pid, {}).values() for img in imgs]
 
     def color_images(self, pid: int, v: Variant) -> list[dict]:
-        """The Samian gallery of the variant's color (product/colors, same colorinfo id as the barcode)."""
-        return self.samian_images.get(pid, {}).get(v.color_id) or []
+        return self.color_gallery.get(pid, {}).get(v.color_id) or []
 
     def visible_variants(self, pid: int) -> list[Variant]:
         """Variants the site shows: with a color, and (like the legacy site) only colors that have images."""
@@ -497,13 +437,11 @@ class ProductBundle:
         }
 
     def size_guide(self, pid: int) -> dict | None:
-        """The size chart: Samian's (onlinestoresizehelp), else one set in the admin for the product, else for its category."""
-        sp = self.samian.get(pid)
-        if sp and sp.size_help_path:
-            key = site_images.samian_key(sp.samian_id, sp.size_help_path)
-            if site_images.is_built(key):
-                return {"id": 0, "isVideo": False, "mediaUrl": absolute_url(site_images.public_url(key)),
-                        "alternative": "راهنمای سایز", "tooltipTitle": ""}
+        """The size chart: the sales software's, else one set in the admin for the product, else for its category."""
+        key = self.erp[pid].size_guide_key if pid in self.erp else ""
+        if key and site_images.is_built(key):
+            return {"id": 0, "isVideo": False, "mediaUrl": absolute_url(site_images.public_url(key)),
+                    "alternative": "راهنمای سایز", "tooltipTitle": ""}
         guide = MediaAttachment.objects.filter(
             table=MediaAttachment.Table.PRODUCTS, record_id=pid, is_product_guid=True, is_deleted=False,
         ).order_by("-id").first()
@@ -522,7 +460,6 @@ class ProductBundle:
         pr = self.pricing(pid)
         comments = ProductComment.objects.filter(product_id=pid, is_deleted=False, status=1).count()
         tags = tags_for(ProductTag, "product_id", [pid]).get(pid, [])
-        sp = self.samian.get(pid)
         ai = self.ai_profiles.get(pid)
 
         product_name = p.title
@@ -541,7 +478,7 @@ class ProductBundle:
             "brandId": MONG_BRAND["id"],
             "productName": product_name,
             "aiTitle": ai_title,
-            "ProductName_En": none_if_blank(sp.name_en if sp else ""),
+            "ProductName_En": none_if_blank(self.erp[pid].name_en),
             "mainImages": self.main_images(pid),
             "productSizeGuid": self.size_guide(pid),
             "product_Base_Price": pr.base,
@@ -582,7 +519,7 @@ class ListingRow:
     in_stock: bool
     color_ids: frozenset
     created: object
-    sold: float          # Mong units sold in the last BEST_SELLER_DAYS, every branch, returns subtracted
+    sold: float          # recent sales, as the connector counts them
     featured: float      # SelectedProduct.sorting_weight; inf when not selected
     buyer_score: float
 
@@ -597,26 +534,14 @@ def _build_listing_rows() -> list[ListingRow]:
     only_media = bool(setting and setting.only_has_media_products)
 
     ids = list(
-        Product.objects.filter(
-            is_deleted=False, is_active=True, category_id__in=tree.nodes.keys()
-        ).values_list("id", flat=True)
+        in_erp(Product.objects.filter(is_deleted=False, is_active=True, category_id__in=tree.nodes.keys()))
+        .values_list("id", flat=True)
     )
-    if only_media:
-        # Like the legacy site: only products that have a gallery per color (in Samian).
-        with_media = set(
-            ProductSamianLink.objects.filter(
-                product_id__in=ids,
-                samian_product_id__in=SamianProductColor.objects.filter(has_gallery=True).values("productmain_id"),
-            ).values_list("product_id", flat=True)
-        )
-        ids = [i for i in ids if i in with_media]
-
     bundle = ProductBundle.load(ids)
     scores = dict(
         ProductComment.objects.filter(product_id__in=ids, is_deleted=False, status=1)
         .values("product_id").annotate(avg=Avg("score")).values_list("product_id", "avg")
     )
-    sold = sold_by_samian_product()
     featured: dict[int, float] = {}
     for pid, weight in SelectedProduct.objects.filter(is_deleted=False).values_list("product_id", "sorting_weight"):
         featured[pid] = min(float(weight), featured.get(pid, math.inf))
@@ -625,13 +550,13 @@ def _build_listing_rows() -> list[ListingRow]:
         pr = bundle.pricing(pid)
         if pr.after <= 0:
             continue
-        if only_media and not bundle.has_images(pid):  # e.g. every photo hidden in the admin
+        if only_media and not bundle.has_images(pid):  # like the legacy site; also when every photo is hidden in the admin
             continue
         rows.append(ListingRow(
             id=pid, title=norm(p.title), category_id=p.category_id,
             price_after=pr.after, reduction=pr.reduction, in_stock=bundle.in_stock(pid),
             color_ids=frozenset(v.color_id for v in bundle.visible_variants(pid)),
-            created=p.created, sold=sold.get(bundle.samian[pid].pk, 0.0), featured=featured.get(pid, math.inf),
+            created=p.created, sold=bundle.erp[pid].sold, featured=featured.get(pid, math.inf),
             buyer_score=float(scores.get(pid) or 0),
         ))
     return rows
@@ -639,20 +564,6 @@ def _build_listing_rows() -> list[ListingRow]:
 
 def _newest(r):
     return (-(r.created.timestamp() if r.created else 0), r.id)
-
-
-def sold_by_samian_product() -> dict[int, float]:
-    """Net units sold per SamianProduct pk over the last BEST_SELLER_DAYS (all branches, Lebaza's too)."""
-    since = timezone.localdate() - timedelta(days=settings.BEST_SELLER_DAYS)
-    sold: dict[int, float] = defaultdict(float)
-    for spk, is_return, qty in (
-        SamianSalesRow.objects.filter(report_date__gte=since, samian_product__isnull=False)
-        .values("samian_product_id", "is_return").annotate(qty=Sum("quantity"))
-        .values_list("samian_product_id", "is_return", "qty")
-    ):
-        # Samian already stores returned quantities as negative; abs() keeps either sign right.
-        sold[spk] += -abs(float(qty)) if is_return else float(qty)
-    return sold
 
 
 # sortCriteriaId -> ascending sort key; ties fall back to newest like the legacy site.
@@ -747,13 +658,14 @@ def render_list(ids: list[int]) -> list[dict]:
 
 
 def color_families(color_ids) -> list[dict]:
-    """The color filter: one entry per Samian color family (سفید covers استخواني, سفيد, ...), id = its first color."""
-    families: dict[str, SamianColor] = {}
-    for c in SamianColor.objects.filter(samian_id__in=color_ids).order_by("display_priority", "samian_id"):
-        families.setdefault(c.family, c)
+    """The color filter: one entry per color family (سفید covers استخواني, سفيد, ...), id = its first color."""
+    families: dict[str, tuple[int, str]] = {}
+    rows = ErpVariant.objects.filter(color_id__in=color_ids).order_by("color_priority", "color_id")
+    for family, color_id, value in rows.values_list("color_family", "color_id", "color_value").distinct():
+        families.setdefault(family, (color_id, value))
     return [
-        {"id": c.samian_id, "hasColor": True, "name": family, "value": c.hex_code, "parentId": 0}
-        for family, c in families.items()
+        {"id": color_id, "hasColor": True, "name": family, "value": value, "parentId": 0}
+        for family, (color_id, value) in families.items()
     ]
 
 
@@ -761,9 +673,9 @@ def expand_color_families(color_ids: set[int]) -> set[int]:
     """A filter on a family's id matches every color of that family."""
     if not color_ids:
         return color_ids
-    picked = SamianColor.objects.filter(samian_id__in=color_ids)
-    families = {c.family for c in picked}
-    return color_ids | {c.samian_id for c in SamianColor.objects.all() if c.family in families}
+    colors = ErpVariant.objects.exclude(color_id=None)
+    families = set(colors.filter(color_id__in=color_ids).values_list("color_family", flat=True))
+    return color_ids | set(colors.filter(color_family__in=families).values_list("color_id", flat=True))
 
 
 def brands_of(rows: list[ListingRow]) -> list[dict]:
@@ -775,10 +687,6 @@ def clear_caches():
     warm.invalidate(LISTING_CACHE_KEY)
 
 
-def in_samian(products):
-    """Restrict a Product queryset to products linked to an existing Samian product."""
-    return products.filter(
-        id__in=ProductSamianLink.objects.filter(
-            samian_product_id__in=SamianProduct.objects.values("samian_id")
-        ).values("product_id")
-    )
+def in_erp(products):
+    """Restrict a Product queryset to what the sales software lists."""
+    return products.filter(erp__listed=True)
