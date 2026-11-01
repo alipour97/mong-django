@@ -6,21 +6,18 @@ must stay running while the site is on this connector; the site itself never cal
 
 The rules below were worked out against the shop's own API, row by row:
 
-- on sale: active, saleable, online category, priced, with a main image, a color gallery
-  and variants
+- on sale: active, saleable, online category, priced, with variants and LEBAZAI photos
 - stock: all warehouses together (SiteSetting.min_qty is kept back by the storefront)
 - price after discount: rounded to 10,000 rials
 """
 from __future__ import annotations
 
-from collections import defaultdict
 from decimal import Decimal
 
 from django.core.management import call_command
 from django.utils import timezone
 
 from apps.legacy.db import fetch_all
-from apps.website import images as site_images
 from apps.website.models import Invoice
 
 from . import dadehfa_write, store
@@ -28,17 +25,10 @@ from .connector import Connector, Coupon, GiftCard, Log, Refused
 from .models import ErpImage, ErpProduct, ErpStock, ErpVariant, LebazaiImage
 
 PRICE_STEP = 10_000
-MAIN_IMAGES, COLOR_IMAGES = 14, 27
-# Titles, new products and size charts; the rest of the catalog (import_dadehfa --only catalog --upsert) runs nightly.
-FULL_RUN = ["Category", "Product", "MediaAttachment"]
 
-ON_SALE = f"""
+ON_SALE = """
     FROM Products p JOIN Categories1 c ON c.Id = p.CategoryId
     WHERE p.IsDeleted = 0 AND p.IsActive = 1 AND p.IsSaleable = 1 AND c.IsOnlineActive = 1 AND p.Price > 0
-      AND EXISTS (SELECT 1 FROM MediaAttachments m
-                  WHERE m.RecordId = p.Id AND m.TableNameId = {MAIN_IMAGES} AND m.IsDeleted = 0 AND m.IsProductGuid = 0)
-      AND EXISTS (SELECT 1 FROM FeatureValueMedias f JOIN MediaAttachments m ON m.RecordId = f.Id
-                  WHERE f.ProductId = p.Id AND m.TableNameId = {COLOR_IMAGES} AND m.IsDeleted = 0 AND f.IsDeleted = 0)
 """
 
 
@@ -46,52 +36,18 @@ def after_discount(price: float, reduction: float) -> int:
     return int(round(price * (1 - reduction / 100) / PRICE_STEP)) * PRICE_STEP
 
 
-def _image(row: dict, *, product_id: int, color_id: int | None, is_main: bool) -> ErpImage:
-    url = row["MediaUrl"] or ""
-    return ErpImage(
-        product_id=product_id, color_id=color_id, is_main=is_main, source_id=row["Id"],
-        key=site_images.legacy_key(url) or "", source=url, is_video=bool(row["IsVideo"]),
-        alternative=row["Alternative"] or "", tooltip_title=row["TooltipTitle"] or "",
-    )
-
-
-def _lebazai(image: LebazaiImage, *, is_main: bool) -> ErpImage:
-    return ErpImage(product_id=image.product_id, color_id=image.color_id, is_main=is_main, source_id=image.pk,
-                    key=image.key, source=image.source_url)
-
-
-def _read_images(pids: set[int]) -> list[ErpImage]:
-    """Every image in the order shown: LEBAZAI's ahead of the shop's."""
-    main, gallery = defaultdict(list), defaultdict(list)
-    for row in fetch_all(f"""
-            SELECT m.Id, m.RecordId, m.MediaUrl, m.IsVideo, m.Alternative, m.TooltipTitle
-            FROM MediaAttachments m
-            WHERE m.IsDeleted = 0 AND m.TableNameId = {MAIN_IMAGES} AND m.IsProductGuid = 0 ORDER BY m.Id"""):
-        if row["RecordId"] in pids:
-            main[row["RecordId"]].append(_image(row, product_id=row["RecordId"], color_id=None, is_main=True))
-    for row in fetch_all(f"""
-            SELECT m.Id, f.ProductId, f.FeatureValueId, m.MediaUrl, m.IsVideo, m.Alternative, m.TooltipTitle
-            FROM MediaAttachments m JOIN FeatureValueMedias f ON f.Id = m.RecordId
-            WHERE m.IsDeleted = 0 AND f.IsDeleted = 0 AND m.TableNameId = {COLOR_IMAGES} ORDER BY m.Id"""):
-        if row["ProductId"] in pids:
-            gallery[row["ProductId"]].append(_image(row, product_id=row["ProductId"], color_id=row["FeatureValueId"], is_main=False))
-    added = defaultdict(list)
-    for image in LebazaiImage.objects.filter(product_id__in=pids):
-        added[image.product_id].append(image)
-
-    rows = []
-    for pid in pids:
-        lebazai = added.get(pid, [])
-        rows += [_lebazai(i, is_main=False) for i in lebazai] + gallery.get(pid, [])
-        rows += [_lebazai(i, is_main=True) for i in lebazai] + main.get(pid, [])
-    for position, row in enumerate(rows):
-        row.position = position
-    return rows
+def _on_sale(ids: list[int]) -> str:
+    return f"{ON_SALE} AND p.Id IN ({','.join(str(int(i)) for i in ids)})"
 
 
 def read() -> store.Read:
+    photos = list(LebazaiImage.objects.all())
+    ids = sorted({image.product_id for image in photos})
+    if not ids:
+        return store.Read()
+    on_sale = _on_sale(ids)
     products = fetch_all(f"""
-        SELECT p.Id, p.Barcode, p.Price, p.Reduction, p.SalesCount {ON_SALE}""")
+        SELECT p.Id, p.Barcode, p.Price, p.Reduction, p.SalesCount {on_sale}""")
     values = {r["Id"]: r for r in fetch_all("SELECT Id, Name, Value, DisplayPriority FROM FeatureValues")}
     variants: dict[int, dict] = {}
     for row in fetch_all(f"""
@@ -100,12 +56,16 @@ def read() -> store.Read:
             FROM ProductVariants v
             JOIN VariantFeatureValues f ON f.ProductVariantId = v.Id AND f.IsDeleted = 0
             JOIN FeatureValueDependencies d ON d.Id = f.FeatureValueDependencyId AND d.IsDeleted = 0
-            WHERE v.IsDeleted = 0 AND v.ProductId IN (SELECT p.Id {ON_SALE}) ORDER BY f.Id"""):
+            WHERE v.IsDeleted = 0 AND v.ProductId IN (SELECT p.Id {on_sale}) ORDER BY f.Id"""):
         variants[row["vid"]] = row  # a variant's newest link is the one invoices use
 
     out = store.Read()
     with_variants = {v["pid"] for v in variants.values()}
-    out.images = _read_images({p["Id"] for p in products if p["Id"] in with_variants})
+    listed = with_variants & {p["Id"] for p in products}
+    out.images = [
+        ErpImage(product_id=i.product_id, color_id=i.color_id, source_id=i.pk, key=i.key, source=i.source_url, position=position)
+        for position, i in enumerate(i for i in photos if i.product_id in listed)
+    ]
     now = timezone.now()
     for p in products:
         pid, price = p["Id"], float(p["Price"])
@@ -131,7 +91,7 @@ def read() -> store.Read:
             FROM VariantWarehouses w
             JOIN ProductVariants v ON v.Id = w.ProductVariantId
             LEFT JOIN Warehouses h ON h.Id = w.WarehouseId
-            WHERE w.IsDeleted = 0 AND v.IsDeleted = 0 AND v.ProductId IN (SELECT p.Id {ON_SALE})
+            WHERE w.IsDeleted = 0 AND v.IsDeleted = 0 AND v.ProductId IN (SELECT p.Id {on_sale})
             GROUP BY w.ProductVariantId, w.WarehouseId, h.WarehouseTitle"""):
         if r["vid"] in variants:
             out.stock.append(ErpStock(variant_id=r["vid"], warehouse_id=r["warehouse"], warehouse_title=r["title"] or "", qty=r["qty"] or 0))
@@ -145,10 +105,18 @@ class DadehfaConnector(Connector):
 
     def sync(self, *, full: bool, log: Log) -> dict:
         if full:
-            call_command("import_dadehfa", tables=FULL_RUN, upsert=True, verbosity=0)
+            call_command("import_dadehfa", only=["catalog"], upsert=True, verbosity=0)
         result = store.replace(read())
         log(f"erp: {result}")
         return result
+
+    def barcodes(self) -> list[tuple[str, int, int]]:
+        return [(r["barcode"].strip(), r["pid"], r["color"]) for r in fetch_all(f"""
+            SELECT DISTINCT v.Barcode AS barcode, v.ProductId AS pid, d.ParentFeatureValueId AS color
+            FROM ProductVariants v
+            JOIN VariantFeatureValues f ON f.ProductVariantId = v.Id AND f.IsDeleted = 0
+            JOIN FeatureValueDependencies d ON d.Id = f.FeatureValueDependencyId AND d.IsDeleted = 0
+            WHERE v.IsDeleted = 0 AND v.Barcode IS NOT NULL AND v.ProductId IN (SELECT p.Id {ON_SALE})""")]
 
     def push(self, invoice) -> None:
         dadehfa_write.push(invoice)

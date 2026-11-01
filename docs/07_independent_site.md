@@ -20,6 +20,19 @@
 | کوپن و کارت هدیه | غیرفعال | از همان دیتابیس |
 | موجودی | انبارهای آنلاین شعب | همهٔ انبارها |
 
+در رابط داده‌فا هر داده این منبع را دارد:
+
+| داده | منبع | چند وقت یک بار |
+|---|---|---|
+| قیمت، تخفیف، رنگ، سایز، موجودی | داده‌فا | هر ۵ دقیقه |
+| کالا، دسته‌بندی، تگ، برند | داده‌فا | هر ساعت |
+| عکس کالا و پروفایل هوش مصنوعی | LEBAZAI | هر شب |
+| کوپن و کارت هدیه | داده‌فا | لحظه‌ای |
+| بنر، کالکشن، مقاله، صفحه‌ها، نظرها، روش ارسال، راهنمای سایز، عکس دسته‌ها | داده‌فا | یک بار؛ بعد از پنل جنگو |
+| مشتری و سابقهٔ سفارش | داده‌فا | یک بار، و دوباره درست پیش از سوییچ |
+
+کالایی که عکس تأییدشده در LEBAZAI نداشته باشد در سایت نمایش داده نمی‌شود. رنگ بدون عکس هم همین‌طور.
+
 کد در `apps/erp` است. فروشگاه و پنل فقط جدول‌های `erp.*` را می‌خوانند و هر رابط همان‌ها را پر می‌کند.
 
 **تا وقتی سایت روی رابط داده‌فا است، سرویس `.NET` باید روشن بماند**، چون جاب‌های آن فاکتورها را به PTC می‌برند و موجودی را برمی‌گردانند. خود سایت هیچ درخواستی به `.NET` نمی‌فرستد.
@@ -49,10 +62,10 @@
 
 ```bash
 python manage.py migrate
-python manage.py import_dadehfa
-python manage.py import_dadehfa --only banks
-python manage.py import_dadehfa --only blog
-python manage.py import_dadehfa --only cooperation
+python manage.py import_dadehfa --upsert
+python manage.py import_dadehfa --upsert --only banks
+python manage.py import_dadehfa --upsert --only blog
+python manage.py import_dadehfa --upsert --only cooperation
 python manage.py import_dadehfa_admins
 python manage.py import_dadehfa_orders
 python manage.py install_media /app/public/media_pack.zip

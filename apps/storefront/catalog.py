@@ -281,7 +281,6 @@ class ProductBundle:
     erp: dict[int, ErpProduct] = field(default_factory=dict)  # website product id -> what the connector read
     stock: dict[int, float] = field(default_factory=dict)  # variant id -> qty in the online warehouses
     color_gallery: dict[int, dict[int, list[dict]]] = field(default_factory=dict)  # product id -> color id -> images
-    own_gallery: dict[int, list[dict]] = field(default_factory=dict)  # product id -> images of no one color
     only_media: bool = False  # SiteSetting.only_has_media_products: hide colors that have no images
     min_qty: float = 0.0  # SiteSetting.min_qty: safety stock per variant that is never offered online
     ai_profiles: dict[int, ProductAIProfile] = field(default_factory=dict)  # website product id -> ProductAIProfile
@@ -325,11 +324,7 @@ class ProductBundle:
         for img in ErpImage.objects.filter(product_id__in=ids):
             if img.key in hidden and not include_hidden:
                 continue
-            entry = _image_dict(img, hidden, include_hidden)
-            if img.is_main:
-                self.own_gallery.setdefault(img.product_id, []).append(entry)
-            else:
-                self.color_gallery.setdefault(img.product_id, {}).setdefault(img.color_id, []).append(entry)
+            self.color_gallery.setdefault(img.product_id, {}).setdefault(img.color_id, []).append(_image_dict(img, hidden, include_hidden))
 
     # -- per product -------------------------------------------------------
     def pricing(self, pid: int) -> Pricing:
@@ -345,7 +340,7 @@ class ProductBundle:
         return bool(self.color_gallery.get(pid))
 
     def main_images(self, pid: int) -> list[dict]:
-        return self.own_gallery.get(pid) or [img for imgs in self.color_gallery.get(pid, {}).values() for img in imgs]
+        return [img for imgs in self.color_gallery.get(pid, {}).values() for img in imgs]
 
     def color_images(self, pid: int, v: Variant) -> list[dict]:
         return self.color_gallery.get(pid, {}).get(v.color_id) or []

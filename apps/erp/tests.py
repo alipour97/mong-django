@@ -92,10 +92,6 @@ class ReadTests(TestCase):
         if "FROM ProductVariants v" in sql:
             base = {"pid": 5, "vid": 50, "barcode": " b ", "color": 6, "size": 7}
             return [{**base, "ref": 900}, {**base, "ref": 901}]
-        if "FeatureValueMedias f" in sql:
-            return [{"Id": 2, "ProductId": 5, "FeatureValueId": 6, "MediaUrl": "https://cdn.mong.ir/9/g.webp", "IsVideo": 0, "Alternative": None, "TooltipTitle": None}]
-        if "FROM MediaAttachments" in sql:
-            return [{"Id": 1, "RecordId": 5, "MediaUrl": "https://cdn.mong.ir/9/m.webp", "IsVideo": 0, "Alternative": None, "TooltipTitle": None}]
         raise AssertionError(sql)
 
     def test_a_product_as_the_shop_shows_it(self):
@@ -107,8 +103,11 @@ class ReadTests(TestCase):
         variant = read.variants[0]
         self.assertEqual((variant.erp_ref, variant.barcode, variant.color_family, variant.size_name), (901, "b", "مشکی", "38"))
         self.assertEqual(read.stock[0].qty, 4)
-        order_shown = [(i.is_main, i.key) for i in read.images]
-        self.assertEqual(order_shown, [(False, "lz/x"), (False, "c/9/g"), (True, "lz/x"), (True, "c/9/m")])
+        self.assertEqual([(i.color_id, i.key) for i in read.images], [(6, "lz/x")])
+
+    def test_no_lebazai_photo_no_read(self):
+        with mock.patch("apps.erp.dadehfa.fetch_all", side_effect=AssertionError):
+            self.assertEqual(dadehfa.read().products, [])
 
     def test_after_discount_rounds_to_ten_thousand(self):
         self.assertEqual(dadehfa.after_discount(26800000, 62.724), 9990000)
@@ -124,7 +123,6 @@ class CatalogTests(TestCase):
         catalog.clear_caches()
         self.addCleanup(catalog.clear_caches)
         ErpImage.objects.create(product_id=1, color_id=6, source="https://cdn.mong.ir/9/g.webp", position=0)
-        ErpImage.objects.create(product_id=1, is_main=True, source="https://cdn.mong.ir/9/m.webp", position=1)
 
     def test_only_what_the_software_has_is_on_the_site(self):
         bundle = catalog.ProductBundle.load([1, 2])
@@ -134,9 +132,9 @@ class CatalogTests(TestCase):
         bundle = catalog.ProductBundle.load([1])
         self.assertEqual(bundle.variant_stock(1, bundle.variants[1][0]), 2)
 
-    def test_the_product_gallery_comes_first_when_there_is_one(self):
+    def test_the_main_gallery_is_the_colors_together(self):
         bundle = catalog.ProductBundle.load([1])
-        self.assertTrue(bundle.main_images(1)[0]["mediaUrl"].endswith("m.webp"))
+        self.assertTrue(bundle.main_images(1)[0]["mediaUrl"].endswith("g.webp"))
         self.assertTrue(bundle.color_images(1, bundle.variants[1][0])[0]["mediaUrl"].endswith("g.webp"))
 
 

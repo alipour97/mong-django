@@ -10,8 +10,9 @@ imported too (with is_deleted=True) so references between tables resolve.
     python manage.py import_dadehfa --only customers   # site accounts, addresses, favorites (explicit only)
     python manage.py import_dadehfa --only catalog --upsert   # update in place, delete nothing
 
---upsert is how the Dadehfa connector keeps the catalog fresh: rows the site has
-gained stay, and tables can be picked one by one (--tables Category Product).
+--upsert updates rows and keeps everything else, which is how the Dadehfa connector
+refreshes the catalog group (brands, categories, tags, features, products). Prefer it
+for any run after the first: without it, products are deleted and their AI profiles go too.
 """
 from __future__ import annotations
 
@@ -24,7 +25,8 @@ from typing import Callable
 
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
+from django.core.management.color import no_style
+from django.db import connection, transaction
 from django.utils import timezone
 
 from apps.legacy.db import iter_rows
@@ -121,41 +123,16 @@ SPECS: list[Spec] = [
     Spec(m.ProductTag, "SELECT * FROM ProductTags", lambda r: {
         "id": r["Id"], "product_id": r["ProductId"], "tag_id": r["TagId"], **legacy(r),
     }, "catalog", {"product_id": (m.Product, True), "tag_id": (m.Tag, True)}),
-    Spec(m.ProductVariant, """
-        SELECT v.*, fv.ParentFeatureValueId AS ColorId, fv.ChildFeatureValueId AS SizeId
-        FROM ProductVariants v
-        OUTER APPLY (
-            SELECT TOP 1 d.ParentFeatureValueId, d.ChildFeatureValueId
-            FROM VariantFeatureValues vf
-            JOIN FeatureValueDependencies d ON d.Id = vf.FeatureValueDependencyId
-            WHERE vf.ProductVariantId = v.Id
-            ORDER BY vf.IsDeleted, vf.Id DESC
-        ) fv
+    # ------------------------------------------------------------------ content
+    # Site images only: product photos come from the sales connector, not from here.
+    Spec(m.MediaAttachment, """
+        SELECT * FROM MediaAttachments
+        WHERE TableNameId <> 27 AND NOT (TableNameId = 14 AND IsProductGuid = 0)
     """, lambda r: {
-        "id": r["Id"], "product_id": r["ProductId"], "barcode": _s(r["Barcode"]).strip(),
-        "color_id": r["ColorId"], "size_id": r["SizeId"], "price": _d(r["Price"]),
-        "reduction": _d(r["Reduction"]), "discount": _d(r["Discount"]), "legacy_qty": _d(r["Qty"]), **legacy(r),
-    }, "catalog", {"product_id": (m.Product, True), "color_id": (m.FeatureValue, False), "size_id": (m.FeatureValue, False)}),
-    # Only color galleries that actually have media; the rest are empty placeholders.
-    Spec(m.ProductColorMedia, """
-        SELECT fm.* FROM FeatureValueMedias fm
-        WHERE EXISTS (SELECT 1 FROM MediaAttachments a WHERE a.TableNameId = 27 AND a.RecordId = fm.Id)
-    """, lambda r: {
-        "id": r["Id"], "product_id": r["ProductId"], "feature_value_id": r["FeatureValueId"], **legacy(r),
-    }, "catalog", {"product_id": (m.Product, True), "feature_value_id": (m.FeatureValue, True)}),
-    Spec(m.MediaAttachment, "SELECT * FROM MediaAttachments", lambda r: {
         "id": r["Id"], "table": r["TableNameId"], "record_id": r["RecordId"], "media_url": _s(r["MediaUrl"]),
         "is_video": _b(r["IsVideo"]), "alternative": _s(r["Alternative"]), "tooltip_title": _s(r["TooltipTitle"]),
         "hash_code": _s(r["HashCode"]), "is_product_guid": _b(r["IsProductGuid"]), **legacy(r),
-    }, "catalog"),
-    Spec(m.FileMedia, "SELECT * FROM FileMedias", lambda r: {
-        "id": r["Id"], "file_name": _s(r["FileName"]), "url": _s(r["Url"]), "format_id": r["FormatId"],
-        "upload_time": r["UploadTime"], "content_hash": _s(r["ContentHash"]), "domain": _s(r["Domain"]),
-        "size": r["Size"], "width": r["Width"], "height": r["Height"], "used": _b(r["Used"]),
-        "favorite": _b(r["Favorite"]), "alternative": _s(r["Alternative"]), "tooltip_title": _s(r["TooltipTitle"]),
-        **legacy(r),
-    }, "catalog"),
-    # ------------------------------------------------------------------ content
+    }, "content"),
     Spec(m.PrimaryConfig, "SELECT * FROM PrimaryConfigs", lambda r: {
         "id": r["Id"], "key": _s(r["Key"]), "value": _s(r["Value"]), **legacy(r),
     }, "content"),
@@ -286,12 +263,19 @@ SPECS += [
         "id": r["Id"], "type": _s(r["Type"]), "extension": _s(r["Extension"]).lower(), "mime_type": _s(r["MimeType"]),
         **legacy(r),
     }, "gallery"),
+    Spec(m.FileMedia, "SELECT * FROM FileMedias", lambda r: {
+        "id": r["Id"], "file_name": _s(r["FileName"]), "url": _s(r["Url"]), "format_id": r["FormatId"],
+        "upload_time": r["UploadTime"], "content_hash": _s(r["ContentHash"]), "domain": _s(r["Domain"]),
+        "size": r["Size"], "width": r["Width"], "height": r["Height"], "used": _b(r["Used"]),
+        "favorite": _b(r["Favorite"]), "alternative": _s(r["Alternative"]), "tooltip_title": _s(r["TooltipTitle"]),
+        **legacy(r),
+    }, "files"),
     Spec(m.FileTag, "SELECT * FROM FileTags", lambda r: {
         "id": r["Id"], "title": _s(r["Title"]), **legacy(r),
-    }, "gallery"),
+    }, "files"),
     Spec(m.FileMediaTag, "SELECT * FROM FileMediaTags", lambda r: {
         "id": r["Id"], "file_media_id": r["FileMediaId"], "tag_id": r["TagId"], **legacy(r),
-    }, "gallery", {"file_media_id": (m.FileMedia, True), "tag_id": (m.FileTag, True)}),
+    }, "files", {"file_media_id": (m.FileMedia, True), "tag_id": (m.FileTag, True)}),
     Spec(m.Job, "SELECT * FROM Jobs", lambda r: {
         "id": r["Id"], "title": _s(r["Title"]), **legacy(r),
     }, "jobs"),
@@ -371,7 +355,7 @@ SPECS += [
 ]
 
 GROUPS = sorted({s.group for s in SPECS})
-DEFAULT_GROUPS = [g for g in GROUPS if g not in ("customers", "cooperation", "blog", "likes", "banks")]
+DEFAULT_GROUPS = [g for g in GROUPS if g not in ("customers", "cooperation", "blog", "likes", "banks", "files")]
 
 # Rows that point at their own table (parent_id) are inserted with the link
 # empty first and patched afterwards, so insert order does not matter.
@@ -403,10 +387,17 @@ class Command(BaseCommand):
             known: dict[type, set] = {}
             for spec in specs:
                 known[spec.model] = self._import(spec, known)
+            self._reset_sequences([spec.model for spec in specs])
         if any(s.model in (m.Product, m.Category) for s in specs):
             call_command("fix_slugs", verbosity=options.get("verbosity", 1), stdout=self.stdout)
         if not self.quiet:
             self.stdout.write(self.style.SUCCESS(f"تمام شد در {time.time() - t0:.1f} ثانیه"))
+
+    def _reset_sequences(self, models: list) -> None:
+        """Rows came with their own ids, so PostgreSQL's counters must move past them or the next new row collides."""
+        with connection.cursor() as cursor:
+            for statement in connection.ops.sequence_reset_sql(no_style(), models):
+                cursor.execute(statement)
 
     def _write(self, model, rows: list, columns: list[str]) -> None:
         if self.upsert:

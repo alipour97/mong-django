@@ -14,6 +14,8 @@ from typing import Callable
 from django.conf import settings
 from django.utils.module_loading import import_string
 
+from .models import ErpVariant
+
 Log = Callable[[str], None]
 
 
@@ -51,6 +53,11 @@ class Connector:
 
     def sync(self, *, full: bool, log: Log) -> dict:
         raise NotImplementedError
+
+    def barcodes(self) -> list[tuple[str, int, int]]:
+        """(barcode, product id, color id) of everything on sale, for matching LEBAZAI's photos."""
+        rows = ErpVariant.objects.exclude(barcode="").exclude(color_id=None)
+        return list(rows.values_list("barcode", "product_id", "color_id"))
 
     def push(self, invoice) -> None:
         """Hands a paid invoice over. Nothing happens until the software has a way in."""

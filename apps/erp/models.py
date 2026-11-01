@@ -66,7 +66,6 @@ class ErpImage(models.Model):
 
     product = models.ForeignKey(ErpProduct, on_delete=models.CASCADE, related_name="images")
     color_id = models.BigIntegerField(null=True, blank=True)
-    is_main = models.BooleanField(default=False)  # the product's own gallery, not a color's
     source_id = models.BigIntegerField(default=0)  # the image id the site shows
     key = models.CharField(max_length=255, blank=True, default="")
     source = models.CharField(max_length=1024, blank=True, default="")

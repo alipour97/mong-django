@@ -13,9 +13,10 @@ import urllib3
 from django.conf import settings
 
 from apps.website import images
+from apps.website.services.lebazai_sync import sync_single_product_ai_profile
 
-from .connector import Log, SourceError
-from .models import ErpVariant, LebazaiImage
+from .connector import Log, SourceError, get_connector
+from .models import ErpProduct, LebazaiImage
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +51,7 @@ def sync_images(log: Log = logger.info) -> dict:
     if not gallery:
         raise SourceError("LEBAZAI: no images, kept what we have")
     wanted: dict[tuple[int, int, str], tuple[str, int]] = {}
-    variants = ErpVariant.objects.exclude(barcode="").exclude(color_id=None).values_list("barcode", "product_id", "color_id")
-    for barcode, product_id, color_id in variants:
+    for barcode, product_id, color_id in get_connector().barcodes():
         for position, url in enumerate(gallery.get(barcode, [])):
             wanted.setdefault((product_id, color_id, _key(url)), (url, position))
 
@@ -80,3 +80,15 @@ def sync_images(log: Log = logger.info) -> dict:
                 shutil.rmtree(images.img_root() / image.key, ignore_errors=True)
     log(f"images: {built} built, {failed} failed, {removed} removed")
     return {"built": built, "failed": failed, "removed": removed}
+
+
+def sync_profiles(log: Log = logger.info) -> dict:
+    """The AI copy of what is on sale, product by product: LEBAZAI's own checkpoint belongs to the other site."""
+    saved = missing = 0
+    for subcode in ErpProduct.objects.exclude(subcode="").values_list("subcode", flat=True):
+        if sync_single_product_ai_profile(subcode).get("ok"):
+            saved += 1
+        else:
+            missing += 1
+    log(f"profiles: {saved} saved, {missing} without one")
+    return {"saved": saved, "missing": missing}
