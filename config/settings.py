@@ -248,7 +248,7 @@ STOREFRONT_STOCK_WAREHOUSE_IDS = [
 ]
 
 # The sales software this site sells through, and what is needed to reach it (apps/erp)
-ERP_CONNECTOR = os.getenv("ERP_CONNECTOR", "samian")
+ERP_CONNECTOR = os.getenv("ERP_CONNECTOR", "dadehfa")
 ERP_CONNECTORS = {"samian": "apps.erp.samian.SamianConnector", "dadehfa": "apps.erp.dadehfa.DadehfaConnector"}
 # Off until the writing code is reviewed and a real test order is agreed: paid orders wait in the site.
 ERP_WRITES_ENABLED = os.getenv("ERP_WRITES_ENABLED", "false").lower() in ("1", "true", "yes")

@@ -11,7 +11,7 @@ def health_check(request):
     return JsonResponse({
         "status": "healthy",
         "service": "mong_backend",
-        "erp": "Samian ERP (Development Port 8087)",
+        "erp": settings.ERP_CONNECTOR,
     })
 
 from apps.website.media import cdn_file

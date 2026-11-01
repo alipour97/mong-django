@@ -71,6 +71,7 @@ python manage.py sync_erp --full
 | `ERP_CONNECTOR` | `dadehfa` |
 | `ERP_WRITES_ENABLED` | `false` تا مرحلهٔ خرید واقعی |
 | `SITE_URL` | `https://dadeh.mong.ir` |
+| `DJANGO_ALLOWED_HOSTS` | `api.dadeh.mong.ir,payhub.mong.ir` |
 | `PUBLIC_BASE_URL`، `PUBLIC_MEDIA_BASE_URL` | `https://api.dadeh.mong.ir` |
 | `PAYHUB_PUBLIC_URL` | `https://payhub.mong.ir` |
 | `MEDIA_ROOT` | `/app/public/media` |
@@ -129,5 +130,5 @@ Use case هر سه باید `All` باشد. این مقدارها موقع build
 ## سوییچ به سامیان
 
 1. فرستادن فاکتور به سامیان در `SamianConnector.push` ساخته می‌شود.
-2. `ERP_CONNECTOR=samian` می‌شود و کران‌های `crontab.txt` جای کران داده‌فا را می‌گیرند.
+2. `ERP_CONNECTOR=samian` می‌شود (پیش‌فرض `dadehfa` است، پس سرور `samian.mong.ir` هم پیش از گرفتن این کد باید همین مقدار را در `.env` داشته باشد) و کران‌های `crontab.txt` جای کران داده‌فا را می‌گیرند.
 3. سبدهای باز به‌خاطر تفاوت شناسهٔ تنوع‌ها خالی می‌شوند. تاریخچهٔ سفارش‌ها می‌ماند.
