@@ -70,8 +70,9 @@ python manage.py import_dadehfa --upsert --only blog
 python manage.py import_dadehfa --upsert --only cooperation
 python manage.py import_dadehfa_admins
 python manage.py import_dadehfa_orders
-python manage.py install_media /app/public/media_pack.zip
 python manage.py sync_erp
+gdown <شناسهٔ فایل در گوگل درایو> -O /app/public/media_pack.zip
+python manage.py install_media /app/public/media_pack.zip
 python manage.py sync_lebazai_images
 python manage.py createsuperuser
 python manage.py create_admin 09xxxxxxxxx --password
@@ -80,7 +81,24 @@ python manage.py create_admin 09xxxxxxxxx --password
 5. خط‌های `deploy/runflare/crontab.txt` را در کران‌جاب `dadeh` بگذارید.
 6. متغیرهای `dadeh-front` را از `dist/runflare/frontend.env` با Use case برابر `All` وارد کنید و `frontend.zip` را آپلود کنید.
 
-بستهٔ رسانه همان فایل قبلی است و لازم نیست دوباره ساخته شود. فرانت و کران قبلی با این نسخه جایگزین می‌شوند.
+فرانت و کران قبلی با این نسخه جایگزین می‌شوند.
+
+## بستهٔ رسانه
+
+`media_pack.zip` عکس‌های ساخته‌شده، ردیف‌های عکس و پروفایل‌های هوش مصنوعی را یک‌جا دارد تا سرور تازه منتظر دانلود تک‌تک عکس‌ها نماند. روی سیستم محلی با این دستورها ساخته می‌شود و در `dist/runflare/media_pack.zip` قرار می‌گیرد:
+
+```bash
+python manage.py sync_erp
+python manage.py add_original_images --category جوراب
+python manage.py sync_lebazai_images
+python manage.py export_media
+```
+
+- **`sync_erp` قبل از `install_media`:** بسته محصول ندارد و پروفایل‌ها به محصولات موجود وصل می‌شوند.
+- **`install_media`:** فقط عکس‌هایی را که روی دیسک نیستند باز می‌کند و دوباره اجرا کردنش امن است. عکس‌های دستی (`up/`) می‌مانند.
+- **`sync_lebazai_images`:** فقط عکس‌هایی را دانلود می‌کند که روی سرور نیستند. ترتیب عکس‌ها همان ترتیب LEBAZAI است و عکس اول هر رنگ پیش‌نمایش و عکس کارت محصول می‌شود.
+- **داخل بسته:** فقط `img/` و `cdn/`. رزومه‌ها و فایل‌های مشتری در بسته نمی‌آیند.
+- **بکاپ دیتابیس:** فایل جداست و داخل این بسته نیست، چون `install_media` همه‌چیز را در پوشهٔ عمومی رسانه باز می‌کند و دیتابیس اطلاعات مشتری دارد.
 
 ## بعد از هر آپلود
 
@@ -88,7 +106,7 @@ python manage.py create_admin 09xxxxxxxxx --password
 
 - **`frontend.zip`:** هیچ دستوری لازم نیست. صفحهٔ اصلی موقع build از `API_ORIGIN` خوانده می‌شود، پس بک‌اند باید بالا باشد؛ اگر نباشد، صفحه تا ۵ دقیقه بعد از اولین بازدید خودش درست می‌شود.
 - **`backend.zip`:** فقط اگر مایگریشن تازه‌ای آمده باشد، `python manage.py migrate` را بزنید.
-- **`install_media`:** دوباره اجرا نشود. این دستور ردیف‌های عکس را با محتوای زیپ جایگزین می‌کند و عکس‌های جدیدتر تا سینک شبانه از سایت می‌روند.
+- **`install_media`:** ردیف‌های عکس را با محتوای زیپ جایگزین می‌کند، پس بعد از اجرایش `sync_lebazai_images` را هم بزنید تا عکس‌های جدیدتر از زیپ برگردند.
 - **پنل جنگو:** آدرس `https://api.dadeh.mong.ir/django-admin/` است و با حساب `createsuperuser` وارد می‌شوید. `DJANGO_DEBUG` روی سرور باید خاموش بماند.
 
 ## متغیرهای `dadeh`

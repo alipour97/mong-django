@@ -1,5 +1,6 @@
 import io
 import tempfile
+import zipfile
 from datetime import timedelta
 from decimal import Decimal
 from types import SimpleNamespace
@@ -9,6 +10,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from PIL import Image
@@ -20,8 +22,8 @@ from apps.samian.models import SamianBarcode, SamianColor, SamianProduct
 from apps.storefront import catalog, payments, warm
 from apps.website.models import (
     BankGateway, BankInfo, CacheStamp, Category, Customer, CustomerAddress, Feature, FeatureValue, Invoice,
-    InvoiceLine, InvoicePayment, Product, ProductAIProfile, ProductSamianLink, ProductVariant, SiteSetting,
-    VariantStock,
+    InvoiceLine, InvoicePayment, Product, ProductAIProfile, ProductSamianLink, ProductTag, ProductVariant,
+    SiteSetting, VariantStock,
 )
 
 from apps.website import images
@@ -1127,3 +1129,71 @@ class AdminDescriptionTests(TestCase):
         row = next(r for r in admin_products._build() if r.id == 9)
         self.assertTrue(row.has_short_description)
         self.assertFalse(row.has_long_description)
+
+
+class MediaPackTests(TestCase):
+    url_a, url_b = "http://x/front.png", "http://x/back.png"
+
+    def picture(self):
+        out = io.BytesIO()
+        Image.new("RGB", (64, 64)).save(out, "PNG")
+        return out.getvalue()
+
+    def sync(self, urls):
+        reply = mock.Mock(content=self.picture())
+        with mock.patch("apps.erp.lebazai.lebazai_images", return_value={"B": urls}), \
+                mock.patch("apps.erp.lebazai.store.barcodes", return_value=[("B", 5, 7)]), \
+                mock.patch("apps.erp.lebazai.requests.get", return_value=reply) as download:
+            result = lebazai.sync_images(lambda line: None)
+        return result, download.call_count
+
+    def order(self):
+        return list(LebazaiImage.objects.filter(key__startswith="lz/").order_by("position").values_list("source_url", flat=True))
+
+    def test_the_first_of_lebazai_is_the_preview_and_only_new_photos_are_downloaded(self):
+        with tempfile.TemporaryDirectory() as folder, override_settings(MEDIA_ROOT=folder):
+            self.assertEqual(self.sync([self.url_a, self.url_b])[1], 2)
+            self.assertEqual(self.order(), [self.url_a, self.url_b])
+            result, downloads = self.sync([self.url_b, self.url_a])
+            self.assertEqual((downloads, result["moved"]), (0, 2))
+            self.assertEqual(self.order(), [self.url_b, self.url_a])
+            self.assertEqual(self.sync([self.url_b, self.url_a, "http://x/new.png"])[1], 1)
+
+    def test_a_pack_gives_a_new_server_everything_without_a_download(self):
+        Product.objects.create(id=5, title="t", barcode="P5", slug="t")
+        Product.objects.create(id=6, title="u", barcode="P6", slug="u")
+        ProductAIProfile.objects.create(product_id=5, subcode="P5", title="عنوان", description="توضیح", search_keywords=["برچسب"])
+        with tempfile.TemporaryDirectory() as folder, override_settings(MEDIA_ROOT=f"{folder}/here"):
+            self.sync([self.url_a, self.url_b])
+            source = images.img_root()
+            images.build("lo/sock", self.picture())
+            (source.parent / "resumes").mkdir()
+            (source.parent / "resumes" / "cv.pdf").write_bytes(b"private")
+            LebazaiImage.objects.create(product_id=6, color_id=1, key="lo/sock", source_url="http://x/s.png", position=100)
+            pack = f"{folder}/pack.zip"
+            call_command("export_media", output=pack, stdout=io.StringIO())
+            with zipfile.ZipFile(pack) as archive:
+                self.assertFalse([n for n in archive.namelist() if "resumes" in n])
+
+            manual = LebazaiImage.objects.create(product_id=6, color_id=1, key="up/mine", source_url="http://x/m.png")
+            LebazaiImage.objects.exclude(pk=manual.pk).delete()
+            ProductAIProfile.objects.all().delete()
+            with override_settings(MEDIA_ROOT=f"{folder}/there"):
+                call_command("install_media", pack, stdout=io.StringIO())
+                self.assertEqual(LebazaiImage.objects.filter(key__startswith="lz/").order_by("position").first().source_url, self.url_a)
+                self.assertEqual(sorted(LebazaiImage.objects.exclude(key__startswith="lz/").values_list("key", flat=True)), ["lo/sock", "up/mine"])
+                profile = ProductAIProfile.objects.get(product_id=5)
+                self.assertEqual((profile.subcode, profile.title), ("P5", "عنوان"))
+                self.assertTrue(ProductTag.objects.filter(product_id=5, tag__title="برچسب").exists())
+                self.assertEqual(self.sync([self.url_a, self.url_b])[1], 0)
+                out = io.StringIO()
+                call_command("install_media", pack, stdout=out)  # again: nothing to extract, no rows doubled
+                self.assertIn("were already there", out.getvalue())
+                self.assertEqual(LebazaiImage.objects.count(), 4)
+
+    def test_a_pack_with_a_missing_photo_is_refused(self):
+        LebazaiImage.objects.create(product_id=1, color_id=1, key="lz/none", source_url="http://x/n.png")
+        with tempfile.TemporaryDirectory() as folder, override_settings(MEDIA_ROOT=folder):
+            with self.assertRaises(CommandError):
+                call_command("export_media", output=f"{folder}/pack.zip", stdout=io.StringIO())
+

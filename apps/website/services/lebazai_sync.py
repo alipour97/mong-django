@@ -59,6 +59,21 @@ def _update_product_tags(product: Product, keywords: list[str]) -> None:
         existing_tags.add(kw_clean)
 
 
+def fill_product(product: Product, ai_data: dict) -> None:
+    """What a profile gives the product itself: empty descriptions, and its search keywords as tags."""
+    # If product description is completely empty, populate it from AI description
+    if not product.description and ai_data.get("description"):
+        product.description = ai_data["description"]
+        product.save(update_fields=["description"])
+
+    # If product short_desc is empty, populate from meta_description
+    if not product.short_desc and ai_data.get("meta_description"):
+        product.short_desc = ai_data["meta_description"]
+        product.save(update_fields=["short_desc"])
+
+    _update_product_tags(product, ai_data.get("search_keywords") or [])
+
+
 def _save_ai_profile_item(item: dict) -> tuple[Optional[ProductAIProfile], bool, str]:
     """
     Save or update one item returned from the LEBAZAI API into ProductAIProfile.
@@ -107,21 +122,7 @@ def _save_ai_profile_item(item: dict) -> tuple[Optional[ProductAIProfile], bool,
         },
     )
 
-    # If product description is completely empty, populate it from AI description
-    if not product.description and ai_data.get("description"):
-        product.description = ai_data["description"]
-        product.save(update_fields=["description"])
-
-    # If product short_desc is empty, populate from meta_description
-    if not product.short_desc and ai_data.get("meta_description"):
-        product.short_desc = ai_data["meta_description"]
-        product.save(update_fields=["short_desc"])
-
-    # Sync search keywords to ProductTags
-    keywords = ai_data.get("search_keywords") or []
-    if keywords:
-        _update_product_tags(product, keywords)
-
+    fill_product(product, ai_data)
     return profile, created, "موفق"
 
 

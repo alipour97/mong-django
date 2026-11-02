@@ -147,6 +147,10 @@ def add_originals(*, departments: list[str], count: int, subcodes: list[str] = (
 
 
 def sync_images(log: Log = logger.info) -> dict:
+    """
+    Makes the approved photos match LEBAZAI: its order is the site's (the first of a color is its preview).
+    Only a photo not in the local store is downloaded and only a row that differs is written.
+    """
     gallery = lebazai_images()
     if not gallery:
         raise SourceError("LEBAZAI: no images, kept what we have")
@@ -155,9 +159,11 @@ def sync_images(log: Log = logger.info) -> dict:
         for position, url in enumerate(gallery.get(barcode, [])):
             wanted.setdefault((product_id, color_id, _key(url)), (url, position))
 
+    held = {(i.product_id, i.color_id, i.key): i for i in LebazaiImage.objects.filter(key__startswith="lz/")}
     built = failed = 0
-    keep = set()
+    added, moved = [], []
     for (product_id, color_id, key), (url, position) in wanted.items():
+        row = held.pop((product_id, color_id, key), None)
         if not images.is_built(key):
             try:
                 reply = requests.get(url, timeout=IMAGE_TIMEOUT)
@@ -168,18 +174,19 @@ def sync_images(log: Log = logger.info) -> dict:
                 log(f"image {url}: {exc}")
                 failed += 1
                 continue
-        keep.add((product_id, color_id, key))
-        LebazaiImage.objects.update_or_create(product_id=product_id, color_id=color_id, key=key,
-                                              defaults={"source_url": url, "position": position})
-    removed = 0
-    for image in LebazaiImage.objects.filter(key__startswith="lz/"):
-        if (image.product_id, image.color_id, image.key) not in keep:
-            image.delete()
-            removed += 1
-            if not LebazaiImage.objects.filter(key=image.key).exists():
-                shutil.rmtree(images.img_root() / image.key, ignore_errors=True)
-    log(f"images: {built} built, {failed} failed, {removed} removed")
-    return {"built": built, "failed": failed, "removed": removed}
+        if row is None:
+            added.append(LebazaiImage(product_id=product_id, color_id=color_id, key=key, source_url=url, position=position))
+        elif (row.source_url, row.position) != (url, position):
+            row.source_url, row.position = url, position
+            moved.append(row)
+    LebazaiImage.objects.bulk_create(added, batch_size=2000)
+    LebazaiImage.objects.bulk_update(moved, ["source_url", "position"], batch_size=500)
+    for image in held.values():
+        image.delete()
+        if not LebazaiImage.objects.filter(key=image.key).exists():
+            shutil.rmtree(images.img_root() / image.key, ignore_errors=True)
+    log(f"images: {built} built, {failed} failed, {len(added)} added, {len(moved)} reordered, {len(held)} removed")
+    return {"built": built, "failed": failed, "added": len(added), "moved": len(moved), "removed": len(held)}
 
 
 def sync_profiles(log: Log = logger.info) -> dict:
