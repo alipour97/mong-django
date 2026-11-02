@@ -3,22 +3,27 @@ SnappPay API v2.1 (snappay/Ordinary Documents/Rest API Documents). Amounts in ri
 
 Every call answers a Reply, never raises: a timeout or a non-JSON body is an
 answer too, and what to do about it is decided in service.py. Each call gets a
-fresh JWT because the document asks not to cache it.
+fresh JWT because the document asks not to cache it. Every call, whatever came
+of it, is kept in SnappLog; a failure to keep it never touches the payment.
 """
 from __future__ import annotations
 
 import base64
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 
 import requests
 from django.conf import settings
 
+from .models import SnappLog
+
 logger = logging.getLogger(__name__)
 
 TIMEOUT = 30  # document, "Verify request handling"
 NO_ANSWER = "پاسخی از اسنپ‌پی دریافت نشد."
+SECRETS = {"password", "access_token", "refresh_token"}
 
 
 @dataclass
@@ -98,17 +103,43 @@ def format_mobile(mobile: str | None) -> str | None:
     return f"+98{digits}" if len(digits) == 10 and digits.startswith("9") else None
 
 
+def _hidden(fields: dict) -> dict:
+    return {key: "***" if key in SECRETS else value for key, value in fields.items()}
+
+
+def _keep(method: str, path: str, sent: dict, started: float, reply: Reply, text: str = "", error: str = "") -> None:
+    """Headers stay out: they hold the client secret and the JWT."""
+    answer = reply.body.get("response")
+    answer = answer if isinstance(answer, dict) else {}
+    try:
+        SnappLog.objects.create(
+            method=method, path=path, request=_hidden(sent), http_status=reply.http or None, successful=reply.ok,
+            response=json.dumps(_hidden(reply.body), ensure_ascii=False) if SECRETS & reply.body.keys() else text,
+            error=error, duration_ms=int((time.monotonic() - started) * 1000),
+            payment_token=str(sent.get("paymentToken") or answer.get("paymentToken") or "")[:255],
+            transaction_id=str(sent.get("transactionId") or answer.get("transactionId") or "")[:64],
+        )
+    except Exception:
+        logger.exception("snapppay %s: could not keep the log", path)
+
+
 def _send(method: str, path: str, headers: dict, timeout: int = TIMEOUT, **kwargs) -> Reply:
+    sent = {**(kwargs.get("params") or {}), **(kwargs.get("data") or {}), **(kwargs.get("json") or {})}
+    started = time.monotonic()
     try:
         resp = requests.request(method, f"{settings.SNAPPAY_BASE_URL}{path}", headers=headers, timeout=timeout, **kwargs)
     except requests.RequestException as exc:
         logger.warning("snapppay %s: no answer (%s)", path, type(exc).__name__)
-        return Reply(no_answer=True)
+        reply = Reply(no_answer=True)
+        _keep(method, path, sent, started, reply, error=type(exc).__name__)
+        return reply
     try:
         body = resp.json()
     except ValueError:  # e.g. the "Access Denied" page of a source IP that is not whitelisted
         body = {}
-    return Reply(http=resp.status_code, body=body if isinstance(body, dict) else {}, raw=resp.text[:4000])
+    reply = Reply(http=resp.status_code, body=body if isinstance(body, dict) else {}, raw=resp.text[:4000])
+    _keep(method, path, sent, started, reply, resp.text)
+    return reply
 
 
 def _access_token() -> tuple[str, Reply]:

@@ -20,7 +20,7 @@ from apps.storefront import payments
 from apps.website.models import BankGateway, BankInfo, Customer, Invoice, InvoiceLine, InvoicePayment
 
 from . import service, snapppay
-from .models import PayRecord
+from .models import PayRecord, SnappLog
 
 S = PayRecord.State
 HUB = "https://payhub.mong.ir"
@@ -695,6 +695,40 @@ class SiteEligibleTests(SiteCase):
         self.client.force_authenticate(None)
         self.assertFalse(self.client.get("/api/v1/Bank/SnappPayOffer?Amount=x").json()["result"]["data"]["eligible"])
         self.assertEqual(self.snapp.count("eligible"), 0)
+
+
+class SnappLogTests(SiteCase):
+    def test_every_call_is_kept_without_secrets(self):
+        with self.settings(SNAPPAY_PASSWORD="the-password", SNAPPAY_CLIENT_SECRET="the-client-secret"):
+            self.pay(self.snapp_gateway)
+            self.finish_at_site(self.callback(self.record())["Location"])
+        logs = SnappLog.objects.all()
+        paths = set(logs.values_list("path", flat=True))
+        for path in ("/api/online/v1/oauth/token", "/api/online/payment/v1/token", "/api/online/payment/v1/verify", "/api/online/payment/v1/settle"):
+            self.assertIn(path, paths)
+        self.assertTrue(logs.filter(path="/api/online/payment/v1/verify", payment_token=TOKEN, http_status=200).exists())
+        oauth = logs.filter(path="/api/online/v1/oauth/token").first()
+        self.assertEqual(oauth.request["password"], "***")
+        kept = " ".join(f"{log.request} {log.response}" for log in logs)
+        self.assertNotIn("the-password", kept)
+        self.assertNotIn("the-client-secret", kept)
+
+    def test_a_refused_call_is_kept(self):
+        self.snapp.set("eligible", bad(500, 1000))
+        snapppay.eligible(5000)
+        log = SnappLog.objects.filter(path="/api/online/offer/v1/eligible").first()
+        self.assertEqual((log.http_status, log.successful, log.request), (500, False, {"amount": 5000}))
+        self.assertIn("1000", log.response)
+
+    def test_no_answer_is_kept(self):
+        with mock.patch("apps.payhub.snapppay.requests.request", side_effect=requests.Timeout):
+            snapppay.eligible(5000)
+        log = SnappLog.objects.first()
+        self.assertEqual((log.http_status, log.error, log.successful), (None, "Timeout", False))
+
+    def test_a_broken_log_leaves_the_call_alone(self):
+        with mock.patch("apps.payhub.snapppay.SnappLog.objects.create", side_effect=RuntimeError):
+            self.assertTrue(snapppay.eligible(5000).ok)
 
 
 class StockTests(SiteCase):

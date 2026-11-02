@@ -52,3 +52,27 @@ class PayRecord(models.Model):
 
     def __str__(self) -> str:
         return f"{self.gateway} #{self.id} ({self.get_state_display()})"
+
+
+class SnappLog(models.Model):
+    """One call to SnappPay, whatever came of it. Passwords and access tokens are never stored."""
+
+    created = models.DateTimeField(_("زمان"), auto_now_add=True, db_index=True)
+    method = models.CharField(_("روش"), max_length=8)
+    path = models.CharField(_("مسیر"), max_length=128, db_index=True)
+    request = models.JSONField(_("درخواست"), default=dict, blank=True)
+    http_status = models.IntegerField(_("کد HTTP"), null=True, blank=True)  # empty: no answer
+    response = models.TextField(_("پاسخ"), blank=True, default="")
+    successful = models.BooleanField(_("موفق"), default=False, db_index=True)
+    error = models.CharField(_("خطای ارتباط"), max_length=128, blank=True, default="")
+    duration_ms = models.IntegerField(_("مدت (میلی‌ثانیه)"), default=0)
+    payment_token = models.CharField(_("توکن پرداخت"), max_length=255, blank=True, default="", db_index=True)
+    transaction_id = models.CharField(_("شناسه تراکنش"), max_length=64, blank=True, default="", db_index=True)
+
+    class Meta:
+        verbose_name = _("لاگ اسنپ‌پی")
+        verbose_name_plural = _("لاگ‌های اسنپ‌پی")
+        ordering = ("-id",)
+
+    def __str__(self) -> str:
+        return f"{self.method} {self.path} ({self.http_status or self.error})"
