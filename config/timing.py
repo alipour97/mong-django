@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 NUMBERS = re.compile(r"\b\d+\b|'[^']*'")
 SLOWEST = 3
+USES_DATABASE = ("/api/", "/django-admin/")  # photos never touch it
 
 
 def _summary(queries: list[dict]) -> tuple[float, list[dict], int]:
@@ -39,9 +40,10 @@ class RequestTiming:
 
     def __call__(self, request):
         started = time.perf_counter()
-        fresh = connection.connection is None
-        connection.ensure_connection()
-        connect_ms = (time.perf_counter() - started) * 1000 if fresh else 0
+        connect_ms = 0.0
+        if connection.connection is None and request.path.startswith(USES_DATABASE):
+            connection.ensure_connection()
+            connect_ms = (time.perf_counter() - started) * 1000
         with CaptureQueriesContext(connection) as captured:
             response = self.get_response(request)
         total_ms = (time.perf_counter() - started) * 1000

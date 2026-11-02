@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "django-dev",
-      "runtimeExecutable": "/mnt/sda2/mong_samian/.venv/bin/python",
+      "runtimeExecutable": "/mnt/sda2/mong/back/.venv/bin/python",
       "runtimeArgs": ["manage.py", "runserver", "0.0.0.0:8801"],
       "port": 8801,
       "env": {

@@ -96,7 +96,9 @@ if DATABASE_URL:
             "PASSWORD": unquote(_db.password or ""),
             "HOST": _db.hostname or "",
             "PORT": _db.port or 5432,
-            "CONN_MAX_AGE": 60,
+            # Under ASGI each request has its own connection, so CONN_MAX_AGE keeps nothing: a pool does.
+            "CONN_HEALTH_CHECKS": True,
+            "OPTIONS": {"pool": {"min_size": 2, "max_size": int(os.getenv("DB_POOL_SIZE", "8")), "timeout": 20}},
         }
     }
 else:
