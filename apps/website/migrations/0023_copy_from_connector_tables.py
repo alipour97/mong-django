@@ -25,6 +25,9 @@ def copy_from_connector_tables(apps, schema_editor):
                                                                          "attributes", "size_guide_key", "sold"], batch_size=500)
     columns = ("id", "product_id", "erp_ref", "barcode", "color_id", "color_name", "color_value", "color_priority", "color_family",
                "size_id", "size_name", "size_value", "size_priority")
+    # A database imported before 2026-11-01 still holds the old rows, under these same ids. 0022 took their
+    # color and size and the sync would remove them anyway; what the site sells is in the erp tables.
+    Variant.objects.all().delete()
     Variant.objects.bulk_create([Variant(**row) for row in ErpVariant.objects.filter(product_id__in=known).values(*columns)], batch_size=2000)
     Stock.objects.bulk_create([
         Stock(**row) for row in ErpStock.objects.filter(variant__product_id__in=known).values("variant_id", "warehouse_id", "warehouse_title", "qty")
