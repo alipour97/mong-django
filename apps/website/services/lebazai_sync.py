@@ -22,7 +22,6 @@ from apps.website.models import Product, ProductAIProfile, ProductTag, Tag
 logger = logging.getLogger(__name__)
 
 DEFAULT_API_URL = "https://office.lebazacenter.com/api"
-DEFAULT_API_KEY = "lebaza-ai-staging-test-key-2026"
 DEFAULT_BRAND = "Mong"
 DEFAULT_APL_KEY = "mong_website_app"
 
@@ -30,15 +29,15 @@ DEFAULT_APL_KEY = "mong_website_app"
 def get_lebazai_config() -> dict:
     return {
         "api_url": getattr(settings, "LEBAZAI_API_URL", DEFAULT_API_URL).rstrip("/"),
-        "api_key": getattr(settings, "LEBAZAI_API_KEY", "") or DEFAULT_API_KEY,
+        "api_key": getattr(settings, "LEBAZAI_API_KEY", ""),
         "brand": getattr(settings, "LEBAZAI_BRAND", DEFAULT_BRAND),
         "apl_key": getattr(settings, "LEBAZAI_APL_KEY", DEFAULT_APL_KEY),
     }
 
 
 def _update_product_tags(product: Product, keywords: list[str]) -> None:
-    """Link search keywords as ProductTags if not already present. On Dadehfa the tags are the software's own."""
-    if not keywords or settings.ERP_CONNECTOR == "dadehfa":
+    """Link search keywords as ProductTags if not already present."""
+    if not keywords:
         return
     existing_tags = set(
         ProductTag.objects.filter(product=product, is_deleted=False)

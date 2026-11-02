@@ -10,9 +10,10 @@ imported too (with is_deleted=True) so references between tables resolve.
     python manage.py import_dadehfa --only customers   # site accounts, addresses, favorites (explicit only)
     python manage.py import_dadehfa --only catalog --upsert   # update in place, delete nothing
 
---upsert updates rows and keeps everything else, which is how the Dadehfa connector
-refreshes the catalog group (brands, categories, tags, features, products). Prefer it
-for any run after the first: without it, products are deleted and their AI profiles go too.
+For setting a site up, not for a running one: the sync (apps/erp/dadehfa.py) keeps products
+up to date and leaves what the site owns alone, while this writes over titles, slugs and prices.
+--upsert updates rows and keeps everything else: without it, products are deleted and their
+AI profiles go too.
 """
 from __future__ import annotations
 
@@ -108,15 +109,12 @@ SPECS: list[Spec] = [
     Spec(m.Product, "SELECT * FROM Products", lambda r: {
         "id": r["Id"], "title": _s(r["Title"]), "slug": _s(r["Slug"]), "has_manual_slug": _b(r["HasManualSlug"]),
         "category_id": r["CategoryId"], "brand_id": r["BrandId"], "barcode": _s(r["Barcode"]).strip(),
-        "price": _d(r["Price"]), "reduction": _d(r["Reduction"]), "discount": _d(r["Discount"]),
-        "tax": _d(r["Tax"]), "vat": _d(r["VAT"]),
+        "price": _d(r["Price"]), "reduction": _d(r["Reduction"]), "vat": _d(r["VAT"]),
         "description": _s(r["Description"]), "short_desc": _s(r["ShortDesc"]),
         "short_description_html": _s(r["ShortDescriptionHtml"]), "long_description_html": _s(r["LongDescriptionHtml"]),
-        "size_guide": _s(r["SizeGuide"]), "is_active": _b(r["IsActive"]), "is_saleable": _b(r["IsSaleable"]),
-        "show_torob": _b(r["ShowTorob"]), "show_snapp": _b(r["ShowSnapp"]), "shipping_time": r["ShippingTime"],
-        "sales_count": r["SalesCount"] or 0, "view_count": r["ViewCount"] or 0,
-        "buyer_score_average": _d(r["BuyerScoreAverage"]), "overall_score_average": _d(r["OverallScoreAverage"]),
-        "product_category_title": _s(r["ProductCategoryTitle"]), "product_gender_title": _s(r["ProductGenderTitle"]),
+        "is_active": _b(r["IsActive"]), "is_saleable": _b(r["IsSaleable"]),
+        "show_torob": _b(r["ShowTorob"]), "shipping_time": r["ShippingTime"], "view_count": r["ViewCount"] or 0,
+        "overall_score_average": _d(r["OverallScoreAverage"]),
         "product_season_title": _s(r["ProductSeasonTitle"]), "product_style_title": _s(r["ProductStyleTitle"]),
         **legacy(r),
     }, "catalog", {"category_id": (m.Category, False), "brand_id": (m.Brand, False)}),

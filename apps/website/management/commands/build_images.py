@@ -1,10 +1,10 @@
 """
 Management command: build compressed WebP images (nightly).
 
-Collects every image the site shows (Samian color galleries of synced
-products, and legacy site media: product/color/category/collection media,
-banners, company logo, images inside PrimaryConfig values), and builds the
-ones not built yet into MEDIA_ROOT/img (see apps/website/images.py).
+Collects every image the site shows apart from product photos, which LEBAZAI's sync
+builds itself (Samian size guides, and legacy site media: product/color/category/
+collection media, banners, company logo, images inside PrimaryConfig values), and builds
+the ones not built yet into MEDIA_ROOT/img (see apps/website/images.py).
 
     python manage.py build_images              # new images only
     python manage.py build_images --workers 8
@@ -21,7 +21,8 @@ import requests
 from django.core.management.base import BaseCommand
 
 from apps.samian.config import get_samian_settings
-from apps.samian.models import SamianProduct, SamianProductColor
+from apps.erp.models import LebazaiImage
+from apps.samian.models import SamianProduct
 from apps.website import images
 from apps.website.models import Banner, MediaAttachment, PrimaryConfig
 
@@ -35,12 +36,6 @@ def collect_jobs() -> dict[str, tuple[str, str]]:
     """key -> (kind, source) where kind is "samian" (URL) or "legacy" (cdn.mong.ir URL)."""
     jobs: dict[str, tuple[str, str]] = {}
     base = _samian_base()
-    for color in SamianProductColor.objects.filter(has_gallery=True).only("productmain_id", "colorsgalery"):
-        for item in color.colorsgalery or []:
-            fp = item.get("filePath", "") if isinstance(item, dict) else ""
-            if fp and Path(fp).suffix.lower() in images.IMAGE_EXT:
-                jobs[images.samian_key(color.productmain_id, fp)] = ("samian", f"{base}/{fp.lstrip('/')}")
-
     for pmid, fp in SamianProduct.objects.exclude(size_help_path="").values_list("samian_id", "size_help_path"):
         if Path(fp).suffix.lower() in images.IMAGE_EXT:
             jobs[images.samian_key(pmid, fp)] = ("samian", f"{base}/{fp.lstrip('/')}")
@@ -110,10 +105,11 @@ class Command(BaseCommand):
         pruned = 0
         if opts["prune"]:
             root = images.img_root()
+            photos = set(LebazaiImage.objects.values_list("key", flat=True))
             for full in root.glob("**/full.webp"):
                 key = str(full.parent.relative_to(root))
                 # u/: files uploaded in the admin gallery; their gallery entry owns them.
-                if key not in jobs and not key.startswith("u/"):
+                if key not in jobs and key not in photos and not key.startswith("u/"):
                     shutil.rmtree(full.parent)
                     pruned += 1
 

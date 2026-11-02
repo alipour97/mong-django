@@ -172,28 +172,20 @@ class Product(SlugKeyMixin, LegacyMixin):
 
     price = models.DecimalField(_("قیمت (ریال)"), max_digits=18, decimal_places=3, default=0)
     reduction = models.DecimalField(_("درصد تخفیف"), max_digits=18, decimal_places=3, default=0)
-    discount = models.DecimalField(max_digits=18, decimal_places=3, default=0)
-    tax = models.DecimalField(max_digits=18, decimal_places=3, default=0)
     vat = models.DecimalField(max_digits=18, decimal_places=3, default=0)
 
     description = models.TextField(blank=True, default="")
     short_desc = models.TextField(blank=True, default="")
     short_description_html = models.TextField(blank=True, default="")
     long_description_html = models.TextField(blank=True, default="")
-    size_guide = models.TextField(blank=True, default="")
 
     is_active = models.BooleanField(default=True, db_index=True)
     is_saleable = models.BooleanField(default=True)
     show_torob = models.BooleanField(default=False)
-    show_snapp = models.BooleanField(default=False)
     shipping_time = models.IntegerField(null=True, blank=True)
-    sales_count = models.IntegerField(default=0)
     view_count = models.IntegerField(default=0)
-    buyer_score_average = models.DecimalField(max_digits=10, decimal_places=3, default=0)
     overall_score_average = models.DecimalField(max_digits=10, decimal_places=3, default=0)
 
-    product_category_title = models.CharField(max_length=255, blank=True, default="")
-    product_gender_title = models.CharField(max_length=255, blank=True, default="")
     product_season_title = models.CharField(max_length=255, blank=True, default="")
     product_style_title = models.CharField(max_length=255, blank=True, default="")
 
@@ -299,21 +291,6 @@ class ProductAIProfile(models.Model):
 
     def __str__(self) -> str:
         return f"{self.subcode}: {self.title or self.product.title}"
-
-
-class ProductColorMedia(LegacyMixin):
-    """A product's gallery for one color (legacy FeatureValueMedias)."""
-
-    id = models.BigAutoField(primary_key=True)
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="color_medias")
-    feature_value = models.ForeignKey(FeatureValue, on_delete=models.CASCADE, related_name="+")
-
-    class Meta:
-        verbose_name = _("گالری رنگ")
-        verbose_name_plural = _("گالری‌های رنگ")
-
-    def __str__(self) -> str:
-        return f"{self.product_id} / {self.feature_value_id}"
 
 
 class MediaAttachment(LegacyMixin):
