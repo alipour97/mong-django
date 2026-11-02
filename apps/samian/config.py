@@ -93,14 +93,14 @@ def get_samian_settings(
         username
         or getattr(django_settings, "SAMIAN_USERNAME", None)
         or os.getenv("SAMIAN_USERNAME")
-        or "REMOVED"
+        or ""
     )
 
     resolved_password = (
         password
         or getattr(django_settings, "SAMIAN_PASSWORD", None)
         or os.getenv("SAMIAN_PASSWORD")
-        or "REMOVED"
+        or ""
     )
 
     resolved_timeout = (

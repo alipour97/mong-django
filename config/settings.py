@@ -195,8 +195,8 @@ CACHES = {
 # Development server MUST be 8087 (Port 8086 is strictly reserved for production)
 SAMIAN_BASE_URL = os.getenv("SAMIAN_BASE_URL", "http://78.109.198.8:8087").rstrip("/")
 SAMIAN_API_URL = os.getenv("SAMIAN_API_URL", SAMIAN_BASE_URL).rstrip("/")
-SAMIAN_USERNAME = os.getenv("SAMIAN_USERNAME", "REMOVED")
-SAMIAN_PASSWORD = os.getenv("SAMIAN_PASSWORD", "REMOVED")
+SAMIAN_USERNAME = os.getenv("SAMIAN_USERNAME", "")
+SAMIAN_PASSWORD = os.getenv("SAMIAN_PASSWORD", "")
 SAMIAN_TIMEOUT = int(os.getenv("SAMIAN_TIMEOUT", "60"))
 SAMIAN_STORE_RAW_DATA = os.getenv("SAMIAN_STORE_RAW_DATA", "False").lower() in ("true", "1")
 
