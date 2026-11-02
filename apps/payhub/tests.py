@@ -731,6 +731,38 @@ class PanelTests(SiteCase):
         self.assertEqual(header["snappPayToken"], TOKEN)
         self.assertEqual(header["snappPayTransactionId"], self.record().gateway_transaction_id)
 
+    def test_list_shows_the_payment_type(self):
+        items = self.client.get("/api/admin/v1/Invoice/GetFilteredInvoices").json()["data"]["result"]["items"]
+        self.assertEqual([i["paymentType"] for i in items if i["id"] == self.invoice.id], ["اسنپ‌پی"])
+
+    def test_search_finds_the_order_by_its_transaction_id(self):
+        tx = self.record().gateway_transaction_id
+        for text in (tx, f"#{tx}", TOKEN):
+            items = self.client.get("/api/admin/v1/Invoice/GetFilteredInvoices", {"SearchText": text}).json()["data"]["result"]["items"]
+            self.assertEqual([i["id"] for i in items], [self.invoice.id], text)
+        found = self.client.get("/api/admin/v1/Dashboard/Search", {"query": tx}).json()["data"]["result"]["invoices"]
+        self.assertEqual([i["id"] for i in found], [self.invoice.id])
+
+    def test_add_user_with_the_mobile_of_another_and_a_deleted_username(self):
+        AdminUser.objects.create(username="old", cellphone="09000000001", is_deleted=True)
+        AdminUser.objects.create(username="live", cellphone="09000000002")
+        reply = self.post("/api/admin/v1/User/Add", {"username": "old", "cellPhone": "09000000002", "password": "secret1"})
+        self.assertEqual(reply.status_code, 400)
+
+    def test_a_customer_mobile_is_free_for_an_admin(self):
+        mobile = self.invoice.customer.cellphone
+        free = self.client.get("/api/admin/v1/User/ValidationUserName", {"userName": mobile}).json()
+        self.assertTrue(free["data"]["result"])
+        reply = self.post("/api/admin/v1/User/Add", {"username": mobile, "cellPhone": mobile, "password": "secret1"})
+        self.assertEqual(reply.status_code, 200)
+        taken = self.client.get("/api/admin/v1/User/ValidationUserName", {"userName": mobile}).json()
+        self.assertFalse(taken["data"]["result"])
+
+    def test_add_user(self):
+        reply = self.post("/api/admin/v1/User/Add", {"username": "new", "cellPhone": "09000000003", "password": "secret1"})
+        self.assertEqual(reply.status_code, 200)
+        self.assertTrue(AdminUser.objects.filter(username="new").exists())
+
     def test_cancel(self):
         reply = self.post(f"/api/admin/v1/Invoice/CancelInvoice/{self.invoice.id}").json()
         self.assertTrue(reply["data"]["result"]["successful"])
@@ -752,6 +784,42 @@ class PanelTests(SiteCase):
         self.invoice.refresh_from_db()
         self.assertEqual((self.invoice.payable_amount, self.invoice.amount), (700000, 650000))
         self.assertEqual(self.invoice.lines.get().qty, 1)
+
+    def test_update_works_the_coupon_out_again(self):
+        Invoice.objects.filter(id=self.invoice.id).update(coupon_serial="C", coupon_reduction=10, deduction_amount=130000)
+        self.post(f"/api/admin/v1/Invoice/UpdateInvoice/{self.invoice.id}", {"invoiceDetails": [{"id": self.line.id, "qty": 1}]})
+        sent = self.snapp.body("update")
+        self.assertEqual((sent["amount"], sent["discountAmount"], sent["cartList"][0]["totalAmount"]), (640000, 60000, 700000))
+        self.invoice.refresh_from_db()
+        self.assertEqual((self.invoice.payable_amount, self.invoice.deduction_amount), (640000, 60000))
+
+    def test_update_never_sends_a_negative_amount(self):
+        Invoice.objects.filter(id=self.invoice.id).update(gift_card_number="G", deduction_amount=900000)
+        reply = self.post(f"/api/admin/v1/Invoice/UpdateInvoice/{self.invoice.id}", {"invoiceDetails": [{"id": self.line.id, "qty": 1}]})
+        self.assertEqual(reply.status_code, 400)
+        self.assertEqual(self.snapp.count("update"), 0)
+
+    def test_panel_shows_the_transaction_id(self):
+        tx = self.record().gateway_transaction_id
+        items = self.client.get("/api/admin/v1/Invoice/GetFilteredInvoices").json()["data"]["result"]["items"]
+        self.assertEqual([i["paymentTransactionId"] for i in items if i["id"] == self.invoice.id], [tx])
+        result = self.client.get(f"/api/admin/v1/Invoice/InvoiceDetails/{self.invoice.id}").json()["data"]["result"]
+        self.assertEqual(result["invoicePayments"][0]["traceNumber"], tx)
+
+    def test_snapppay_demo_order_is_updated_twice_then_cancelled(self):
+        second = InvoiceLine.objects.get(pk=self.line.pk)
+        second.pk, second.variant_id, second.qty = None, second.variant_id + 1, 1
+        second.save()
+        url = f"/api/admin/v1/Invoice/UpdateInvoice/{self.invoice.id}"
+        one = self.post(url, {"invoiceDetails": [{"id": self.line.id, "qty": 1}, {"id": second.id, "qty": 1}]}).json()
+        two = self.post(url, {"invoiceDetails": [{"id": self.line.id, "qty": 1}]}).json()
+        self.assertTrue(one["data"]["result"]["successful"] and two["data"]["result"]["successful"])
+        self.assertEqual(self.snapp.count("update"), 2)
+        self.assertEqual(len(self.snapp.body("update")["cartList"][0]["cartItems"]), 1)
+        cancelled = self.post(f"/api/admin/v1/Invoice/CancelInvoice/{self.invoice.id}").json()
+        self.assertTrue(cancelled["data"]["result"]["successful"])
+        self.invoice.refresh_from_db()
+        self.assertEqual(self.invoice.state, Invoice.State.CANCELLED)
 
     def test_update_cannot_raise_a_quantity(self):
         reply = self.post(f"/api/admin/v1/Invoice/UpdateInvoice/{self.invoice.id}", {"invoiceDetails": [{"id": self.line.id, "qty": 3}]})

@@ -67,8 +67,9 @@ class AddView(AdminView):
             return fail("نام کاربری و موبایل معتبر الزامی است", 400)
         if len(password) < 6:
             return fail("رمز عبور باید حداقل ۶ کاراکتر باشد", 400)
-        taken = AdminUser.objects.filter(Q(username__iexact=username) | Q(cellphone=mobile)).first()
-        if taken and not taken.is_deleted:
+        matches = list(AdminUser.objects.filter(Q(username__iexact=username) | Q(cellphone=mobile)))
+        taken = matches[0] if matches else None
+        if len(matches) > 1 or (taken and not taken.is_deleted):  # two rows: one's username, the other's mobile
             return fail("کاربری با این اطلاعات قبلا ثبت نام کرده است.", 400)
         with transaction.atomic():
             if taken:  # a deleted account with the same mobile or username: reuse it
@@ -139,7 +140,7 @@ class SmsStateView(AdminView):
 class ValidateUsernameView(AdminView):
     def get(self, request):
         username = (request.query_params.get("userName") or "").strip()
-        return ok({"result": bool(username) and not _users().filter(username__iexact=username).exists()})
+        return ok({"result": bool(username) and not _users().filter(Q(username__iexact=username) | Q(cellphone=username)).exists()})
 
 
 class DeleteView(AdminView):

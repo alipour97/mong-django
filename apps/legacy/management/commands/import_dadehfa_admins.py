@@ -11,7 +11,8 @@ account whose password was already changed here keeps the new one.
 from __future__ import annotations
 
 from django.core.management.base import BaseCommand
-from django.db import transaction
+from django.core.management.color import no_style
+from django.db import connection, transaction
 
 from apps.adminapi.models import AdminRole, AdminUser
 from apps.legacy.db import fetch_all
@@ -54,6 +55,10 @@ class Command(BaseCommand):
                         legacy_secret_key=_s(r["SecretKey"]),
                     )
                 AdminUser.objects.update_or_create(id=r["Id"], defaults=fields)
+            # Rows came with their own ids, so PostgreSQL's counter must move past them or User/Add collides.
+            with connection.cursor() as cursor:
+                for statement in connection.ops.sequence_reset_sql(no_style(), [AdminUser]):
+                    cursor.execute(statement)
         active = AdminUser.objects.filter(is_active=True, is_deleted=False)
         self.stdout.write(self.style.SUCCESS(
             f"{AdminRole.objects.count()} نقش، {AdminUser.objects.count()} کاربر ({active.count()} فعال: "

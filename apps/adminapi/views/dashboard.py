@@ -304,13 +304,14 @@ class SearchView(AdminView):
 
         from .customers import _purchases
         from .gallery import _dto as _file_dto, _tags_of
-        from .invoices import _filter as _invoice_filter, _headers as _invoice_headers, _invoices
+        from .invoices import _filter as _invoice_filter, _headers as _invoice_headers, _invoices, _site, _site_filter, _site_header
 
         customers = list(customers)
         purchases = _purchases(customers)
         search = QueryDict(mutable=True)
         search["SearchText"] = text
         invoices = list(_invoice_filter(_invoices(), search).order_by("-transaction_date")[:LIMIT])
+        site_invoices = list(_site_filter(_site(), search).order_by("-created")[:LIMIT])
 
         formats = {x.id: x for x in FileFormat.objects.filter(id__in={f.format_id for f in files})}
         file_tags = _tags_of([f.id for f in files])
@@ -322,7 +323,7 @@ class SearchView(AdminView):
                  "isActive": c.is_active, "invoiceCount": purchases.get(c.id, 0), "jobTitle": None}
                 for c in customers
             ],
-            "invoices": _invoice_headers(invoices),
+            "invoices": ([_site_header(inv) for inv in site_invoices] + _invoice_headers(invoices))[:LIMIT],
             "articles": [
                 {"id": a.id, "title": a.title, "createDate": a.created.isoformat() if a.created else None,
                  "publishDate": jalali(a.publish_date, with_time=False),

@@ -41,8 +41,9 @@ from django.utils import timezone
 from apps.payhub import service as payhub
 from apps.samian.models import SamianColor, SamianProduct, SamianSalesRow, SamianSalesTransaction
 from apps.storefront.envelope import jalali
+from apps.storefront.orders import coupon_deduction
 from apps.storefront.payments import SNAPPPAY, snapp_order
-from apps.website.models import City, CompanyInfo, Customer, Invoice, Product, ProductComment, ProductSamianLink, Province
+from apps.website.models import City, CompanyInfo, Customer, Invoice, InvoicePayment, Product, ProductComment, ProductSamianLink, Province
 
 from ..envelope import fail, ok
 from ..paging import sort_spec, to_bool, to_int
@@ -54,6 +55,7 @@ from .dashboard import _aware, month_range, today_j
 AWAITING_PAYMENT, WEB_CANCELLED = 1, 5
 VOIDED = (4, 5)  # retail/transactionstatus «ابطال شده», «حذف شده»
 PRE_INVOICE, SUCCESSFUL, CANCELLED = 1, 3, 4
+GATEWAY_NAMES = {"zarinpal": "زرین‌پال", "snapppay": "اسنپ‌پی"}
 
 
 def _state(t) -> int:
@@ -138,6 +140,17 @@ def _site():
             .select_related("customer", "shipping_method__type", "address").prefetch_related("payments"))
 
 
+def _paid_by(inv: Invoice):
+    return next((p for p in inv.payments.all() if p.is_success), None)
+
+
+def _payment_type(inv: Invoice) -> str | None:
+    """What paid this order: the gateway, or the gift card when nothing was left to pay."""
+    if paid := _paid_by(inv):
+        return GATEWAY_NAMES.get(paid.gateway, paid.gateway)
+    return "کارت هدیه" if inv.state == SUCCESSFUL and inv.gift_card_number else None
+
+
 def _snapp_payment(inv: Invoice):
     return next((p for p in inv.payments.all() if p.gateway == SNAPPPAY and p.is_success), None)
 
@@ -161,8 +174,11 @@ def _site_filter(qs, q):
     if ids := [to_int(i) for i in q.getlist("ShippingMethodIds") if to_int(i) is not None]:
         qs = qs.filter(shipping_method_id__in=ids)
     if search := (q.get("SearchText") or "").strip():
+        code = search.lstrip("#")  # the result page shows and copies the transaction id as #id
+        paid = InvoicePayment.objects.filter(Q(transaction_id=code) | Q(reference=code) | Q(authority=code)).values("invoice_id")
         qs = qs.filter(Q(id=to_int(search, -1)) | Q(number=search) | Q(customer__cellphone__contains=search)
-                       | Q(customer__first_name__icontains=search) | Q(customer__last_name__icontains=search))
+                       | Q(customer__first_name__icontains=search) | Q(customer__last_name__icontains=search)
+                       | Q(id__in=paid))
     return qs
 
 
@@ -174,7 +190,7 @@ def _site_header(inv: Invoice) -> dict:
     m, c = inv.shipping_method, inv.customer
     lines = list(inv.lines.all())
     after = inv.amount - inv.reduction_amount
-    snapp = _snapp_payment(inv)
+    snapp, paid = _snapp_payment(inv), _paid_by(inv)
     return {
         "id": inv.id, "invoiceNumber": inv.number, "customerId": c.id, "customerName": c.first_name, "customerLastName": c.last_name,
         "qty": float(sum(ln.qty for ln in lines)), "createDate": inv.created.isoformat(),
@@ -194,6 +210,7 @@ def _site_header(inv: Invoice) -> dict:
         "description": "\n".join(x for x in (TEST_NOTE if inv.is_test else SITE_NOTE, inv.description) if x),
         "commentCounts": 0, "hasComment": False,
         "snappPayTransactionId": snapp.transaction_id if snapp else None, "snappPayToken": snapp.authority if snapp else None,
+        "paymentType": _payment_type(inv), "paymentTransactionId": (paid.transaction_id or paid.reference) if paid else None,
     }
 
 
@@ -219,12 +236,12 @@ def _site_detail(inv: Invoice) -> dict:
             ],
             "description": None,
         })
-    names = {"zarinpal": "زرین‌پال", "snapppay": "اسنپ‌پی"}
     payments = [
-        {"id": p.id, "transactionId": p.reference or None, "bankId": 0, "traceNumber": p.authority or None,
+        {"id": p.id, "transactionId": p.transaction_id or p.reference or None, "bankId": 0,
+         "traceNumber": p.transaction_id or p.reference or p.authority or None,
          "fullName": f"{c.first_name} {c.last_name}".strip(), "authority": p.authority, "paymentAmount": p.amount,
          "isSuccess": p.is_success, "cellPhone": c.cellphone, "errorCode": None, "errorMessage": p.error_message or None,
-         "bankName": names.get(p.gateway, p.gateway), "key": p.gateway}
+         "bankName": GATEWAY_NAMES.get(p.gateway, p.gateway), "key": p.gateway}
         for p in inv.payments.all()
     ]
     return {
@@ -277,7 +294,7 @@ def _header(t: SamianSalesTransaction, site: dict, commented_rows: dict) -> dict
         "payableAmount": payable, "totalAmountPayable": payable, "finalAmount": payable,
         "giftCardId": None, "couponId": None, "description": t.order_web_status,
         "commentCounts": commented_rows.get(t.pk, 0), "hasComment": bool(commented_rows.get(t.pk)),
-        "snappPayTransactionId": None, "snappPayToken": None,
+        "snappPayTransactionId": None, "snappPayToken": None, "paymentType": None, "paymentTransactionId": None,
     }
 
 
@@ -488,7 +505,13 @@ class UpdateView(AdminView):
         if not kept:
             return _refused("برای حذف همه‌ی ردیف‌ها، فاکتور را لغو کنید.")
 
+        amount = sum(int(ln.price * ln.qty) for ln in kept)
+        after = sum(int(ln.price_after_reduction * ln.qty) for ln in kept)
+        if inv.coupon_serial:  # a percent of what is left; a gift card's amount stays as it was
+            inv.deduction_amount = coupon_deduction(amount, after, inv.coupon_reduction)
         order = snapp_order(inv, kept)
+        if order["amount"] <= 0:
+            return _refused("مبلغ سفارش بعد از این تغییر صفر یا منفی می‌شود؛ فاکتور را لغو کنید.")
         done, message = payhub.update(payment.authority, order)
         if not done:
             return _refused(message)
@@ -496,8 +519,6 @@ class UpdateView(AdminView):
             inv.lines.exclude(id__in=[ln.id for ln in kept]).delete()
             for ln in kept:
                 ln.save(update_fields=["qty"])
-            inv.amount = sum(int(ln.price * ln.qty) for ln in kept)
-            inv.reduction_amount = inv.amount - sum(int(ln.price_after_reduction * ln.qty) for ln in kept)
-            inv.payable_amount = order["amount"]
-            inv.save(update_fields=["amount", "reduction_amount", "payable_amount", "last_modified"])
+            inv.amount, inv.reduction_amount, inv.payable_amount = amount, amount - after, order["amount"]
+            inv.save(update_fields=["amount", "reduction_amount", "deduction_amount", "payable_amount", "last_modified"])
         return ok({"result": {"successful": True}})

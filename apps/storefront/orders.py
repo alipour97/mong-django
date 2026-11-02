@@ -267,10 +267,16 @@ def _voucher(gift_number: str, serial: str, customer, amount: int, after: int, d
         coupon = vouchers.find_coupon(serial, customer, invoice_id)
         if coupon.min_price > amount:
             raise Refused("مبلغ فاکتور کمتر از حد مجاز کوپن میباشد.")
-        before = setting is not None and setting.coupon_calculation_type == BEFORE_REDUCTION
-        return Voucher(deduction=int((amount if before else after) * coupon.reduction / 100), coupon_id=coupon.id,
+        return Voucher(deduction=coupon_deduction(amount, after, coupon.reduction), coupon_id=coupon.id,
                        coupon_reduction=coupon.reduction)
     return Voucher()
+
+
+def coupon_deduction(amount: int, after: int, reduction: Decimal) -> int:
+    """A coupon is a percent of the goods, before or after their own discounts as SiteSetting says."""
+    setting = SiteSetting.objects.filter(is_deleted=False).first()
+    before = setting is not None and setting.coupon_calculation_type == BEFORE_REDUCTION
+    return int((amount if before else after) * reduction / 100)
 
 
 def snapshot_address(inv: Invoice, address: CustomerAddress | None = None) -> None:
