@@ -115,7 +115,7 @@ def _bundle_for(variant_ids) -> tuple[catalog.ProductBundle, dict[int, tuple[int
 # Shipping
 # -----------------------------------------------------------------------------
 def delivery_cost(method: ShippingMethod | None) -> int:
-    return int(method.fixed_cost) if method and method.type and method.type.include_costs else 0
+    return method.fixed_cost if method and method.type and method.type.include_costs else 0
 
 
 def _single_warehouse(cart) -> bool:
@@ -133,8 +133,8 @@ def _single_warehouse(cart) -> bool:
 
 def shipping_dict(m: ShippingMethod) -> dict:
     return {
-        "id": m.id, "name": m.name, "fixedCost": float(m.fixed_cost), "insuranceCost": float(m.insurance_cost),
-        "taxAmount": float(m.tax_amount), "variableFee": float(m.variable_fee), "description": m.description,
+        "id": m.id, "name": m.name, "fixedCost": m.fixed_cost, "insuranceCost": m.insurance_cost,
+        "taxAmount": m.tax_amount, "variableFee": m.variable_fee, "description": m.description,
         "icon": catalog.absolute_url(catalog.site_images.site_media_url(m.icon)) if m.icon else "",
         "requiresInsurance": m.requires_insurance, "shippingMethodType": m.type.key if m.type else "",
         "shippingMethodTypeId": m.type_id or 0, "isDefault": m.is_default,
@@ -201,7 +201,7 @@ class AddView(CustomerView):
             lines.append(InvoiceLine(
                 product_id=pid, variant_id=vid, erp_ref=v.erp_ref, barcode=v.barcode, name=name or bundle.products[pid].title,
                 color_id=v.color_id, color_name=v.color.name if v.color else "", color_value=v.color.value if v.color else "",
-                size_name=v.size.name if v.size else "", qty=qty, price=int(pricing.base), reduction=Decimal(str(pricing.reduction)),
+                size_name=v.size.name if v.size else "", qty=qty, price=pricing.base, reduction=Decimal(str(pricing.reduction)),
                 price_after_reduction=pricing.after,
             ))
         if not lines:
@@ -257,7 +257,7 @@ def _voucher(gift_number: str, serial: str, customer, amount: int, after: int, d
         if card.min_price > amount:
             raise Refused("مبلغ فاکتور کمتر از حد مجاز کارت هدیه میباشد.")
         with_delivery = setting is None or setting.gift_card_use_type == WITH_DELIVERY
-        return Voucher(deduction=int(min(after + delivery if with_delivery else after, card.balance)), gift_card_id=card.id)
+        return Voucher(deduction=min(after + delivery if with_delivery else after, card.balance), gift_card_id=card.id)
     if serial:
         coupon = vouchers.find_coupon(serial, customer, invoice_id)
         if coupon.min_price > amount:
@@ -413,13 +413,13 @@ class CouponValidationView(CustomerView):
         try:
             coupon = vouchers.find_coupon(serial, request.user)
         except Held as exc:
-            return answer({"reduction": float(exc.coupon.reduction), "valid": False, "minPrice": float(exc.coupon.min_price),
-                           "maxPrice": float(exc.coupon.max_price) if exc.coupon.max_price is not None else None,
+            return answer({"reduction": float(exc.coupon.reduction), "valid": False, "minPrice": exc.coupon.min_price,
+                           "maxPrice": exc.coupon.max_price,
                            "bankPortalEndTime": vouchers.left(exc.until)}, message=str(exc))
         except Refused as exc:
             return answer({"reduction": None, "valid": False, "minPrice": None, "maxPrice": None, "bankPortalEndTime": None}, message=str(exc))
-        return answer({"reduction": float(coupon.reduction), "valid": True, "minPrice": float(coupon.min_price),
-                       "maxPrice": float(coupon.max_price) if coupon.max_price is not None else None, "bankPortalEndTime": None},
+        return answer({"reduction": float(coupon.reduction), "valid": True, "minPrice": coupon.min_price,
+                       "maxPrice": coupon.max_price, "bankPortalEndTime": None},
                       message="میتوانید از این کوپن استفاده کنید.")
 
 
@@ -427,9 +427,9 @@ class GiftCardsView(CustomerView):
     def get(self, request):
         cards = vouchers.gift_cards(request.user)
         return answer([{
-            "gcNum": c["GCNum"], "startDate": c["StartDate"], "expDate": c["ExpDate"], "gcBalance": float(c["GCBalance"]),
+            "gcNum": c["GCNum"], "startDate": c["StartDate"], "expDate": c["ExpDate"], "gcBalance": c["GCBalance"],
             "isActive": c["IsActive"], "customerId": request.user.id, "useDepCode": c["UseDepCode"], "minPrice": None, "maxPrice": None,
-            "minFactorPrice": float(c["MinFactorPrice"] or 0), "useCompelete": c["UseCompelete"], "bankPortalEndTime": c.get("Left"),
+            "minFactorPrice": c["MinFactorPrice"] or 0, "useCompelete": c["UseCompelete"], "bankPortalEndTime": c.get("Left"),
             "customer": _customer(request.user),
         } for c in cards])
 

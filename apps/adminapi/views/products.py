@@ -33,6 +33,7 @@ from apps.website.models import (
     HiddenImage,
     MediaAttachment,
     Product,
+    ProductAIProfile,
     ProductCollection,
     ProductTag,
     SelectedProduct,
@@ -288,12 +289,15 @@ class ImageVisibilityView(AdminView):
 
 
 class DescriptionsView(AdminView):
+    """«عنوان هیبرید» and «توضیح تکمیلی»: LEBAZAI's AI copy, until the site's own text replaces it here."""
+
     def get(self, request, product_id: int):
         p = Product.objects.filter(id=product_id).first()
         if not p:
             return fail(NOT_FOUND, 404)
-        return ok({"result": {"longDescriptionHtml": p.long_description_html or None,
-                              "shortDescriptionHtml": p.short_description_html or None}})
+        ai = ProductAIProfile.objects.filter(product=p).first()
+        return ok({"result": {"longDescriptionHtml": p.long_description_html or (ai.description if ai else "") or None,
+                              "shortDescriptionHtml": p.short_description_html or (ai.title if ai else "") or None}})
 
     def post(self, request, product_id: int):
         p = Product.objects.filter(id=product_id).first()

@@ -1,9 +1,10 @@
-"""Management command: fetch new approved LEBAZAI images and AI copy (nightly); sync_erp shows the images on its next run."""
+"""Management command: fetch new approved LEBAZAI images and AI copy (nightly)."""
 import requests
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.erp import lebazai
 from apps.erp.connector import SourceError
+from apps.storefront import catalog
 
 
 class Command(BaseCommand):
@@ -15,3 +16,4 @@ class Command(BaseCommand):
             lebazai.sync_profiles(self.stdout.write)
         except (requests.RequestException, SourceError) as exc:
             raise CommandError(str(exc)) from exc
+        catalog.clear_caches()

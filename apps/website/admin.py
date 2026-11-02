@@ -95,7 +95,7 @@ class ProductAdmin(LegacyAdmin):
         from apps.erp.dadehfa import after_discount
         from apps.storefront.catalog import clear_caches
 
-        obj.sale_price = after_discount(float(obj.price), float(obj.reduction))
+        obj.sale_price = after_discount(obj.price, float(obj.reduction))
         super().save_model(request, obj, form, change)
         clear_caches()
 

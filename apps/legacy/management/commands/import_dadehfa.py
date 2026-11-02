@@ -44,6 +44,10 @@ def _d(v) -> Decimal:
     return Decimal(0) if v is None else Decimal(v)
 
 
+def _rial(v) -> int:
+    return round(v or 0)
+
+
 def _b(v) -> bool:
     return bool(v)
 
@@ -109,7 +113,7 @@ SPECS: list[Spec] = [
     Spec(m.Product, "SELECT * FROM Products", lambda r: {
         "id": r["Id"], "title": _s(r["Title"]), "slug": _s(r["Slug"]), "has_manual_slug": _b(r["HasManualSlug"]),
         "category_id": r["CategoryId"], "brand_id": r["BrandId"], "barcode": _s(r["Barcode"]).strip(),
-        "price": _d(r["Price"]), "reduction": _d(r["Reduction"]), "vat": _d(r["VAT"]),
+        "price": _rial(r["Price"]), "reduction": _d(r["Reduction"]), "vat": _d(r["VAT"]),
         "description": _s(r["Description"]), "short_desc": _s(r["ShortDesc"]),
         "short_description_html": _s(r["ShortDescriptionHtml"]), "long_description_html": _s(r["LongDescriptionHtml"]),
         "is_active": _b(r["IsActive"]), "is_saleable": _b(r["IsSaleable"]),
@@ -246,10 +250,10 @@ SPECS += [
     }, "shipping"),
     Spec(m.ShippingMethod, "SELECT * FROM ShippingMethods", lambda r: {
         "id": r["Id"], "name": _s(r["Name"]), "type_id": r["ShippingMethodTypeId"], "description": _s(r["Description"]),
-        "icon": _s(r["Icon"]), "fixed_cost": _d(r["FixedCost"]), "variable_fee": _d(r["VariableFee"]),
+        "icon": _s(r["Icon"]), "fixed_cost": _rial(r["FixedCost"]), "variable_fee": _rial(r["VariableFee"]),
         "is_dynamic_pricing": _b(r["IsDynamicPricing"]), "requires_insurance": _b(r["RequiresInsurance"]),
-        "insurance_cost": _d(r["InsuranceCost"]), "insurance_percentage": _d(r["InsurancePercentage"]),
-        "tax_percentage": _d(r["TaxPercentage"]), "tax_amount": _d(r["TaxAmount"]),
+        "insurance_cost": _rial(r["InsuranceCost"]), "insurance_percentage": _d(r["InsurancePercentage"]),
+        "tax_percentage": _d(r["TaxPercentage"]), "tax_amount": _rial(r["TaxAmount"]),
         "source_dependent": _b(r["SourceDependent"]), **legacy(r),
     }, "shipping", {"type_id": (m.ShippingMethodType, False)}),
     Spec(m.ShippingMethodLocation, "SELECT * FROM ShippingMethodLocations", lambda r: {

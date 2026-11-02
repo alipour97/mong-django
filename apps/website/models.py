@@ -170,7 +170,7 @@ class Product(SlugKeyMixin, LegacyMixin):
     brand = models.ForeignKey(Brand, null=True, blank=True, on_delete=models.SET_NULL, related_name="products")
     barcode = models.CharField(_("کد کالا"), max_length=64, blank=True, default="", db_index=True)
 
-    price = models.DecimalField(_("قیمت (ریال)"), max_digits=18, decimal_places=3, default=0)
+    price = models.BigIntegerField(_("قیمت (ریال)"), default=0)
     reduction = models.DecimalField(_("درصد تخفیف"), max_digits=18, decimal_places=3, default=0)
     vat = models.DecimalField(max_digits=18, decimal_places=3, default=0)
 
@@ -259,6 +259,13 @@ class VariantStock(models.Model):
 
     def __str__(self) -> str:
         return f"{self.variant_id} @ {self.warehouse_id}: {self.qty}"
+
+
+class CacheStamp(models.Model):
+    """Counts the invalidations of a cached value, so every process learns of them (apps.storefront.warm)."""
+
+    key = models.CharField(max_length=128, primary_key=True)
+    stamp = models.BigIntegerField(default=0)
 
 
 class ProductAIProfile(models.Model):
@@ -843,14 +850,14 @@ class ShippingMethod(LegacyMixin):
     type = models.ForeignKey(ShippingMethodType, null=True, blank=True, on_delete=models.SET_NULL, related_name="methods")
     description = models.TextField(blank=True, default="")
     icon = models.CharField(max_length=1024, blank=True, default="")
-    fixed_cost = models.DecimalField(max_digits=18, decimal_places=3, default=0)
-    variable_fee = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    fixed_cost = models.BigIntegerField(default=0)
+    variable_fee = models.BigIntegerField(default=0)
     is_dynamic_pricing = models.BooleanField(default=False)
     requires_insurance = models.BooleanField(default=False)
-    insurance_cost = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    insurance_cost = models.BigIntegerField(default=0)
     insurance_percentage = models.DecimalField(max_digits=18, decimal_places=3, default=0)
     tax_percentage = models.DecimalField(max_digits=18, decimal_places=3, default=0)
-    tax_amount = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    tax_amount = models.BigIntegerField(default=0)
     source_dependent = models.BooleanField(default=False)
     is_default = models.BooleanField(_("پیش‌فرض"), default=False)  # picked for the customer in the basket
 

@@ -42,10 +42,10 @@ NOT_FOUND = "روش ارسال یافت نشد"
 # -----------------------------------------------------------------------------
 def _dto(m: ShippingMethod, provinces: dict, cities: dict) -> dict:
     return {
-        "id": m.id, "name": m.name, "fixedCost": float(m.fixed_cost), "shippingMethodTypeId": m.type_id,
+        "id": m.id, "name": m.name, "fixedCost": m.fixed_cost, "shippingMethodTypeId": m.type_id,
         "isDynamicPricing": m.is_dynamic_pricing, "description": m.description, "requiresInsurance": m.requires_insurance,
-        "insuranceCost": float(m.insurance_cost), "taxPercentage": float(m.tax_percentage), "taxAmount": float(m.tax_amount),
-        "variableFee": float(m.variable_fee), "insurancePercentage": float(m.insurance_percentage),
+        "insuranceCost": m.insurance_cost, "taxPercentage": float(m.tax_percentage), "taxAmount": m.tax_amount,
+        "variableFee": m.variable_fee, "insurancePercentage": float(m.insurance_percentage),
         "shippingMethodType": m.type.name if m.type else None, "state": not m.is_deleted, "isDefault": m.is_default,
         "icon": _url(m.icon) if m.icon else m.icon, "sourceDependent": m.source_dependent,
         "locations": [
@@ -93,11 +93,11 @@ def _save(m: ShippingMethod, d: dict, is_new: bool):
     if (is_new or media_id) and media is None:
         return fail("خطا در ثبت تصویر شاخص.", 400)
     try:
-        numbers = {f: _number(d, k) for f, k in (
-            ("fixed_cost", "fixedCost"), ("insurance_cost", "insuranceCost"), ("tax_percentage", "taxPercentage"),
-            ("tax_amount", "taxAmount"), ("variable_fee", "variableFee"), ("insurance_percentage", "insurancePercentage"),
+        numbers = {f: round(_number(d, k)) for f, k in (
+            ("fixed_cost", "fixedCost"), ("insurance_cost", "insuranceCost"), ("tax_amount", "taxAmount"), ("variable_fee", "variableFee"),
         )}
-    except ValueError as exc:
+        numbers |= {f: _number(d, k) for f, k in (("tax_percentage", "taxPercentage"), ("insurance_percentage", "insurancePercentage"))}
+    except (ValueError, OverflowError) as exc:
         return fail(str(exc), 400)
     with transaction.atomic():
         m.name, m.type_id, m.description = name, type_id, d.get("description") or ""

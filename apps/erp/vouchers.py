@@ -9,7 +9,6 @@ A paid order keeps counting until the connector has written it, so nothing is sp
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from decimal import Decimal
 
 from django.conf import settings
 from django.db.models import Max, Q, Sum
@@ -48,8 +47,8 @@ def _unsent(**voucher):
     return Invoice.objects.filter(since_sync, paid_at__isnull=False, is_deleted=False, is_test=False, **voucher)
 
 
-def spent_on_card(card_id: int) -> Decimal:
-    return Decimal(_unsent(gift_card_id=card_id).aggregate(total=Sum("deduction_amount"))["total"] or 0)
+def spent_on_card(card_id: int) -> int:
+    return _unsent(gift_card_id=card_id).aggregate(total=Sum("deduction_amount"))["total"] or 0
 
 
 def coupon_taken(serial: str, customer) -> bool:
@@ -107,9 +106,9 @@ def _software_cards(customer):
     return ErpGiftCard.objects.filter(Q(customer_erp_id=_customer_id(customer)) | Q(mobile=customer.cellphone)).order_by("-id")
 
 
-def _software_balance(card: ErpGiftCard) -> Decimal:
+def _software_balance(card: ErpGiftCard) -> int:
     spent = spent_on_card(card.id)
-    return Decimal(0) if spent and card.use_whole else max(card.balance - spent, Decimal(0))
+    return 0 if spent and card.use_whole else max(card.balance - spent, 0)
 
 
 def _software_gift_cards(customer) -> list[dict]:
@@ -157,7 +156,7 @@ def find_coupon(serial: str, customer, invoice_id: int | None = None) -> Coupon:
         raise Refused("کوپن غیر فعال است.")
     if site.expires and site.expires < timezone.now():
         raise Refused("مهلت استفاده از این کوپن تمام شده است.")
-    coupon = Coupon(id=None, serial=serial, reduction=site.reduction, min_price=Decimal(site.min_price), max_price=site.max_price, expires=site.expires)
+    coupon = Coupon(id=None, serial=serial, reduction=site.reduction, min_price=site.min_price, max_price=site.max_price, expires=site.expires)
     until = held_until(invoice_id, coupon_serial=serial, customer=customer)
     if until:
         raise Held("این کوپن در حالت تعلیق قرار دارد.", until, coupon)
@@ -181,7 +180,7 @@ def find_gift_card(number: str, customer, invoice_id: int | None = None) -> Gift
         raise Refused("زمان استفاده از این کارت هدیه هنوز نرسیده است.")
     if site.expires and site.expires < now:
         raise Refused("مهلت استفاده از این کارت هدیه تمام شده است.")
-    return GiftCard(id=None, number=number, balance=Decimal(left_on_card), min_price=Decimal(site.min_price), use_whole=site.use_whole)
+    return GiftCard(id=None, number=number, balance=left_on_card, min_price=site.min_price, use_whole=site.use_whole)
 
 
 def gift_cards(customer) -> list[dict]:
@@ -191,7 +190,7 @@ def gift_cards(customer) -> list[dict]:
         left_on_card = site_card_left(site)
         if left_on_card > 0 and (not site.starts or site.starts <= now) and (not site.expires or site.expires >= now):
             until = held_until(gift_card_number=site.number)
-            cards.append({"GCNum": site.number, "StartDate": site.starts or site.created, "ExpDate": site.expires, "GCBalance": Decimal(left_on_card),
+            cards.append({"GCNum": site.number, "StartDate": site.starts or site.created, "ExpDate": site.expires, "GCBalance": left_on_card,
                           "IsActive": True, "UseDepCode": False, "MinFactorPrice": site.min_price, "UseCompelete": site.use_whole,
                           "Left": left(until) if until else None})
     return cards + _software_gift_cards(customer)

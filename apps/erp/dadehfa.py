@@ -34,8 +34,12 @@ ON_SALE = """
 """
 
 
-def after_discount(price: float, reduction: float) -> int:
+def after_discount(price: int, reduction: float) -> int:
     return int(round(price * (1 - reduction / 100) / PRICE_STEP)) * PRICE_STEP
+
+
+def _rial(value) -> int:
+    return round(value or 0)
 
 
 def _moment(value):
@@ -70,12 +74,12 @@ def _products(brand_ids: set[int], category_ids: set[int]) -> list[dict]:
         {ON_SALE}""")
     products = []
     for p in rows:
-        price, reduction = float(p["Price"]), float(p["Reduction"] or 0)
+        price, reduction = _rial(p["Price"]), float(p["Reduction"] or 0)
         slug = _text(p["Slug"])
         products.append({
             "id": p["Id"], "erp_id": p["Id"], "on_sale": True, "is_active": True, "is_saleable": True, "title": _text(p["Title"]),
             "barcode": _text(p["Barcode"])[:64], "category_id": p["CategoryId"] if p["CategoryId"] in category_ids else None,
-            "brand_id": p["BrandId"] if p["BrandId"] in brand_ids else None, "price": Decimal(int(price)),
+            "brand_id": p["BrandId"] if p["BrandId"] in brand_ids else None, "price": price,
             "reduction": Decimal(str(reduction)).quantize(Decimal("0.001")), "sale_price": after_discount(price, reduction),
             "vat": Decimal(str(p["VAT"] or 0)).quantize(Decimal("0.001")), "sold": float(p["SalesCount"] or 0),
             "new": {"slug": slug, "slug_key": slugs.slug_key(slug), "has_manual_slug": bool(p["HasManualSlug"]), "created": _moment(p["Created"])},
@@ -128,8 +132,8 @@ def _coupons() -> list[ErpCoupon]:
     general = {r["Serial"] for r in rows if r["CustomerId"] is None}
     taken = {r["Serial"] for r in rows if r["CustomerId"] is not None and r["IsUsed"]}
     return [ErpCoupon(
-        id=r["Id"], customer_erp_id=r["CustomerId"], serial=r["Serial"], reduction=r["Reduction"] or 0, min_price=r["MinPrice"] or 0,
-        max_price=r["MaxPrice"], expires=_moment(r["ExpiredDate"]), used_at=_moment(r["UsedDate"]), is_active=bool(r["IsActive"]),
+        id=r["Id"], customer_erp_id=r["CustomerId"], serial=r["Serial"], reduction=r["Reduction"] or 0, min_price=_rial(r["MinPrice"]),
+        max_price=None if r["MaxPrice"] is None else _rial(r["MaxPrice"]), expires=_moment(r["ExpiredDate"]), used_at=_moment(r["UsedDate"]), is_active=bool(r["IsActive"]),
         is_used=bool(r["IsUsed"] or (r["CustomerId"] is None and r["Serial"] in taken)), held_until=_moment(r["BankPortalEndTime"]),
         created=_moment(r["Created"]), first_name=_text(r["FirstName"]), last_name=_text(r["LastName"]),
         # A general coupon stands for its customers' copies in the panel, and counts as used once one of them is.
@@ -146,8 +150,8 @@ def _gift_cards() -> list[ErpGiftCard]:
         FROM GiftCards c LEFT JOIN Customers u ON u.Id = c.CustomerId
         WHERE c.IsDeleted = 0""")
     return [ErpGiftCard(
-        id=r["Id"], number=r["GCNum"], customer_erp_id=r["CustomerId"], mobile=_text(r["Mobile"]), balance=r["GCBalance"] or 0,
-        min_price=r["MinFactorPrice"] or 0, starts=_moment(r["StartDate"]), expires=_moment(r["ExpDate"]), is_active=bool(r["IsActive"]),
+        id=r["Id"], number=r["GCNum"], customer_erp_id=r["CustomerId"], mobile=_text(r["Mobile"]), balance=_rial(r["GCBalance"]),
+        min_price=_rial(r["MinFactorPrice"]), starts=_moment(r["StartDate"]), expires=_moment(r["ExpDate"]), is_active=bool(r["IsActive"]),
         use_whole=bool(r["UseCompelete"]), use_dep_code=bool(r["UseDepCode"]), held_until=_moment(r["BankPortalEndTime"]),
         created=_moment(r["Created"]), gift_group_map_id=_text(r["GiftGroupMapId"]), customer_map_id=_text(r["CustomerMapId"]),
         first_name=_text(r["FirstName"]), last_name=_text(r["LastName"]), invoice_count=r["InvoiceCount"] or 0,

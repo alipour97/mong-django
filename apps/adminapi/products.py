@@ -17,9 +17,8 @@ from django.db.models import Sum
 from apps.storefront import catalog, warm
 from apps.erp.models import LebazaiImage
 from apps.erp.store import online_stock
-from apps.website.models import HiddenImage, Product, ProductComment, SiteSetting
+from apps.website.models import HiddenImage, Product, ProductAIProfile, ProductComment, SiteSetting
 
-CACHE_KEY = "adminapi:product-rows:v2"
 CACHE_TTL = 600  # edits in the admin mark it stale (clear())
 
 
@@ -31,7 +30,7 @@ class AdminRow:
     barcode: str
     category_id: int | None
     on_site: bool       # whether the site shows it now, by its own settings
-    price: float
+    price: int
     reduction: float
     after: int
     qty: float
@@ -42,7 +41,7 @@ class AdminRow:
 
 
 def admin_rows() -> list[AdminRow]:
-    return warm.get(CACHE_KEY, CACHE_TTL, _build)
+    return warm.get(catalog.ADMIN_ROWS_CACHE_KEY, CACHE_TTL, _build)
 
 
 def _build() -> list[AdminRow]:
@@ -62,20 +61,23 @@ def _build() -> list[AdminRow]:
     scored = set(
         ProductComment.objects.filter(is_deleted=False, score__isnull=False).values_list("product_id", flat=True)
     )
+    # The two descriptions of a row are the site's own text, else LEBAZAI's (views/products.py DescriptionsView).
+    ai_titled = set(ProductAIProfile.objects.exclude(title="").values_list("product_id", flat=True))
+    ai_described = set(ProductAIProfile.objects.exclude(description="").values_list("product_id", flat=True))
     rows = []
     for p in products.only("id", "title", "barcode", "category_id", "price", "reduction", "sale_price",
                            "long_description_html", "short_description_html"):
-        pr = catalog.Pricing(float(p.price), float(p.reduction), p.sale_price)
+        pr = catalog.Pricing(p.price, float(p.reduction), p.sale_price)
         rows.append(AdminRow(
             id=p.id, title=catalog.norm(p.title), name=p.title, barcode=p.barcode, category_id=p.category_id,
             on_site=p.category_id in tree.nodes and pr.after > 0 and (media[p.id] > 0 or not only_media),
             price=pr.base, reduction=pr.reduction, after=pr.after, qty=qty[p.id], media_count=media[p.id], has_score=p.id in scored,
-            has_long_description=bool(p.long_description_html), has_short_description=bool(p.short_description_html),
+            has_long_description=bool(p.long_description_html) or p.id in ai_described,
+            has_short_description=bool(p.short_description_html) or p.id in ai_titled,
         ))
     rows.sort(key=lambda r: r.id)
     return rows
 
 
 def clear() -> None:
-    warm.invalidate(CACHE_KEY)
     catalog.clear_caches()

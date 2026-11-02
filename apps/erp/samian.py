@@ -72,11 +72,11 @@ def _product(pid: int, sp: SamianProduct, final, sold: float) -> dict:
         "id": pid, "erp_id": sp.samian_id, "on_sale": True, "name_en": sp.name_en or "", "sold": sold,
         "attributes": {"جنس": sp.material or "", "سبک": sp.style or "", "فصل": str(sp.season or "")},
         "size_guide_key": site_images.samian_key(sp.samian_id, sp.size_help_path) if sp.size_help_path else "",
-        "price": Decimal(0), "reduction": Decimal(0), "sale_price": 0,
+        "price": 0, "reduction": Decimal(0), "sale_price": 0,
     }
     base = sp.sale_price
     if base:
-        row["price"], row["sale_price"] = Decimal(int(base)), int(base)
+        row["price"], row["sale_price"] = int(base), int(base)
         if final and final < base:
             row["reduction"] = Decimal(str(round((base - final) * 100 / base, 3)))
             row["sale_price"] = round_price(final)

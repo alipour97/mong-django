@@ -7,18 +7,21 @@ from unittest import mock
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from PIL import Image
 from rest_framework.test import APIClient
 
+from apps.adminapi import products as admin_products
 from apps.adminapi.models import AdminUser
 from apps.samian.models import SamianBarcode, SamianColor, SamianProduct
-from apps.storefront import catalog, payments
+from apps.storefront import catalog, payments, warm
 from apps.website.models import (
-    BankGateway, BankInfo, Category, Customer, CustomerAddress, Feature, FeatureValue, Invoice, InvoiceLine, InvoicePayment, Product,
-    ProductAIProfile, ProductSamianLink, ProductVariant, SiteSetting, VariantStock,
+    BankGateway, BankInfo, CacheStamp, Category, Customer, CustomerAddress, Feature, FeatureValue, Invoice,
+    InvoiceLine, InvoicePayment, Product, ProductAIProfile, ProductSamianLink, ProductVariant, SiteSetting,
+    VariantStock,
 )
 
 from apps.website import images
@@ -1052,3 +1055,75 @@ class SamianSyncTests(TestCase):
         ErpCoupon.objects.create(id=1, serial="S")
         self.run_sync()
         self.assertFalse(ErpCoupon.objects.exists())
+
+
+class WarmAcrossProcessesTests(TestCase):
+    """The web workers, the sync and the Django admin share no memory: an invalidation goes through the database."""
+
+    key = "test:warm"
+
+    def setUp(self):
+        self.builds = []
+        self.addCleanup(lambda: [store.pop(self.key, None) for store in (warm._values, warm._built_from, warm._seen)])
+        self.addCleanup(cache.delete, self.key)
+
+    def build(self):
+        self.builds.append(1)
+        return len(self.builds)
+
+    def test_a_change_in_another_process_makes_the_value_stale(self):
+        self.assertEqual(warm.get(self.key, 600, self.build), 1)
+        CacheStamp.objects.create(key=self.key, stamp=5)
+        warm._seen.pop(self.key)  # the check is due
+        with mock.patch.object(warm.threading, "Thread") as rebuild:
+            self.assertEqual(warm.get(self.key, 600, self.build), 1)  # answers at once
+        rebuild.assert_called_once()
+
+    def test_no_query_between_checks(self):
+        warm.get(self.key, 600, self.build)
+        with self.assertNumQueries(0):
+            warm.get(self.key, 600, self.build)
+
+    def test_invalidate_is_seen_here_at_once(self):
+        warm.get(self.key, 600, self.build)
+        warm.invalidate(self.key)
+        warm.invalidate(self.key)
+        self.assertEqual(CacheStamp.objects.get(key=self.key).stamp, 2)
+        with mock.patch.object(warm.threading, "Thread") as rebuild:
+            warm.get(self.key, 600, self.build)
+        rebuild.assert_called_once()
+
+    def test_clear_caches_marks_the_admin_rows_stale(self):
+        catalog.clear_caches()
+        self.assertTrue(CacheStamp.objects.filter(key=catalog.ADMIN_ROWS_CACHE_KEY).exists())
+
+
+class AdminDescriptionTests(TestCase):
+    """«عنوان هیبرید» and «توضیح تکمیلی» show LEBAZAI's copy until the site has its own."""
+
+    def setUp(self):
+        self.product = Product.objects.create(id=9, title="t", barcode="b", slug="t")
+        self.client = APIClient()
+        self.client.force_authenticate(AdminUser.objects.create(username="a", cellphone="09120000000"))
+        patcher = mock.patch("apps.adminapi.views.auth.AdminView.authentication_classes", [])
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def read(self):
+        return self.client.get(f"/api/admin/v1/Products/{self.product.id}/descriptions").json()["data"]["result"]
+
+    def test_nothing_to_show(self):
+        self.assertEqual(self.read(), {"longDescriptionHtml": None, "shortDescriptionHtml": None})
+
+    def test_ai_copy_until_the_site_has_its_own(self):
+        ProductAIProfile.objects.create(product=self.product, title="عنوان", description="توضیح")
+        self.assertEqual(self.read(), {"longDescriptionHtml": "توضیح", "shortDescriptionHtml": "عنوان"})
+        Product.objects.filter(id=9).update(short_description_html="خود سایت")
+        self.assertEqual(self.read(), {"longDescriptionHtml": "توضیح", "shortDescriptionHtml": "خود سایت"})
+
+    def test_list_flags_count_the_ai_copy(self):
+        Product.objects.filter(id=9).update(on_sale=True, is_active=True)
+        ProductAIProfile.objects.create(product=self.product, title="عنوان")
+        row = next(r for r in admin_products._build() if r.id == 9)
+        self.assertTrue(row.has_short_description)
+        self.assertFalse(row.has_long_description)

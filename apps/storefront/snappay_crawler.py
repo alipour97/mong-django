@@ -339,7 +339,7 @@ def build_snappay_product(
     ]
 
     # 6. Pricing in Rials (integers)
-    regular_price = int(pr.base)
+    regular_price = pr.base
     sale_price = int(pr.after)
     if regular_price <= 0 and sale_price > 0:
         regular_price = sale_price

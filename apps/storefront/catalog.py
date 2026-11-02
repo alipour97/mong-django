@@ -55,6 +55,7 @@ LISTING_CACHE_KEY = "storefront:listing:v13"
 LISTING_CACHE_TTL = 300  # a stale listing is rebuilt in the background
 TREE_CACHE_KEY = "storefront:category-tree:v2"
 TREE_CACHE_TTL = 300
+ADMIN_ROWS_CACHE_KEY = "adminapi:product-rows:v2"
 
 COLOR_DETAIL_ID = 1
 SIZE_DETAIL_ID = 2
@@ -63,10 +64,6 @@ SIZE_DETAIL_ID = 2
 def norm(text: str | None) -> str:
     """Normalize Persian text for matching (Arabic yeh/kaf, ZWNJ, spaces)."""
     return (text or "").replace("ي", "ی").replace("ك", "ک").replace("‌", " ").strip().lower()
-
-
-def money(value) -> float:
-    return float(value or 0)
 
 
 def absolute_url(url: str) -> str:
@@ -214,12 +211,12 @@ def breadcrumb_items(cat_id: int | None) -> list[dict]:
 # -----------------------------------------------------------------------------
 @dataclass
 class Pricing:
-    base: float
+    base: int
     reduction: float
     after: int
 
     @property
-    def reduction_price(self) -> float:
+    def reduction_price(self) -> int:
         return self.base - self.after
 
 
@@ -329,7 +326,7 @@ class ProductBundle:
         p = self.products.get(pid)
         if not p:
             return Pricing(0.0, 0.0, 0)
-        return Pricing(float(p.price), float(p.reduction), p.sale_price)
+        return Pricing(p.price, float(p.reduction), p.sale_price)
 
     def variant_stock(self, pid: int, v: Variant) -> float:
         return max(0.0, self.stock.get(v.id, 0.0) - self.min_qty)
@@ -376,7 +373,7 @@ class ProductBundle:
                 })
                 size_items.append({
                     "id": v.size_id, "parentId": v.color_id, "name": v.size.name, "value": v.size.value,
-                    "images": None, "price": 0.0, "reduction": 0.0, "discount": 0, "mojodi": qty,
+                    "images": None, "price": 0, "reduction": 0.0, "discount": 0, "mojodi": qty,
                     "barcode": v.barcode if with_barcode else "", "displayPriority": v.size.display_priority,
                     "productVariantId": v.id,
                 })
@@ -419,7 +416,7 @@ class ProductBundle:
             "mainImages": self.main_images(pid),
             "product_Base_Price": pr.base,
             "product_base_reduction": pr.reduction,
-            "productBaseVat": money(p.vat),
+            "productBaseVat": float(p.vat or 0),
             "reductionPercent": pr.reduction,
             "price": pr.base,
             "priceAfterReduction": pr.after,
@@ -476,7 +473,7 @@ class ProductBundle:
             "productSizeGuid": self.size_guide(pid),
             "product_Base_Price": pr.base,
             "product_base_reduction": pr.reduction,
-            "productBaseVat": money(p.vat),
+            "productBaseVat": float(p.vat or 0),
             "reductionPercent": pr.reduction,
             "price": pr.base,
             "priceAfterReduction": pr.after,
@@ -678,6 +675,7 @@ def brands_of(rows: list[ListingRow]) -> list[dict]:
 def clear_caches():
     warm.drop(TREE_CACHE_KEY)
     warm.invalidate(LISTING_CACHE_KEY)
+    warm.invalidate(ADMIN_ROWS_CACHE_KEY)
 
 
 def on_sale(products):

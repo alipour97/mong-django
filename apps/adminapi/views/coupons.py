@@ -60,7 +60,7 @@ class CouponListView(AdminView):
         items = [{
             "id": r.id, "customerId": r.customer_erp_id, "serial": r.serial, "reduction": float(r.reduction),
             "expiredDate": r.expires, "isUsed": r.is_used, "usedDate": jalali(r.used_at),
-            "minPrice": float(r.min_price), "maxPrice": float(r.max_price) if r.max_price is not None else None,
+            "minPrice": r.min_price, "maxPrice": r.max_price,
             "isActive": r.is_active, "bankPortalEndTime": r.held_until,
             "customerFirstName": r.first_name or None, "customerLastName": r.last_name or None,
         } for r in rows[(page - 1) * size:page * size]]
@@ -108,8 +108,8 @@ class GiftCardListView(AdminView):
         total = rows.count()
         items = [{
             "id": r.id, "gcNum": r.number, "startDate": jalali(r.starts, with_time=False), "expDate": jalali(r.expires, with_time=False),
-            "gcBalance": float(r.balance), "isActive": r.is_active, "customerId": r.customer_erp_id, "useDepCode": r.use_dep_code,
-            "minFactorPrice": float(r.min_price), "giftGroupMapId": r.gift_group_map_id or None, "customerMapId": r.customer_map_id or None,
+            "gcBalance": r.balance, "isActive": r.is_active, "customerId": r.customer_erp_id, "useDepCode": r.use_dep_code,
+            "minFactorPrice": r.min_price, "giftGroupMapId": r.gift_group_map_id or None, "customerMapId": r.customer_map_id or None,
             "useCompelete": r.use_whole, "customerMobile": r.mobile or None, "customerFirstName": r.first_name or None,
             "customerLastName": r.last_name or None, "invoiceCount": r.invoice_count,
         } for r in rows[(page - 1) * size:page * size]]

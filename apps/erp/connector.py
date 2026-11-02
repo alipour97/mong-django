@@ -26,8 +26,8 @@ class Coupon:
     id: int | None  # None: a general coupon, the customer's own copy is made when it is used
     serial: str
     reduction: Decimal
-    min_price: Decimal
-    max_price: Decimal | None
+    min_price: int
+    max_price: int | None
     expires: datetime | None
 
 
@@ -35,8 +35,8 @@ class Coupon:
 class GiftCard:
     id: int | None  # None: a card made on this site
     number: str
-    balance: Decimal
-    min_price: Decimal
+    balance: int
+    min_price: int
     use_whole: bool
 
 
