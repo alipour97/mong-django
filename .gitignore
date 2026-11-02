@@ -96,6 +96,8 @@ db.samian.sqlite3
 # SQLite WAL files
 db.sqlite3-shm
 db.sqlite3-wal
+db.samian.sqlite3
+db_backup_before_review.json
 deploy/nginx/build/
 # *.json
 mong_front/.next-test/
