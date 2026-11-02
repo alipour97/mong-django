@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('website', '0022_site_owns_catalog'),
+        ('website', '0023_copy_from_connector_tables'),
     ]
 
     operations = [

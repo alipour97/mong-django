@@ -8,36 +8,13 @@ class Migration(migrations.Migration):
     dependencies = [
         ('erp', '0004_site_owns_catalog'),
         # website copies these tables into its own first.
-        ('website', '0022_site_owns_catalog'),
+        ('website', '0023_copy_from_connector_tables'),
     ]
 
+    # Children first: PostgreSQL will not drop a key another table still points at.
     operations = [
-        migrations.RemoveField(
-            model_name='erpimage',
-            name='product',
-        ),
-        migrations.RemoveField(
-            model_name='erpproduct',
-            name='product',
-        ),
-        migrations.RemoveField(
-            model_name='erpvariant',
-            name='product',
-        ),
-        migrations.RemoveConstraint(
-            model_name='erpstock',
-            name='erp_stock_per_warehouse',
-        ),
-        migrations.DeleteModel(
-            name='ErpImage',
-        ),
-        migrations.DeleteModel(
-            name='ErpProduct',
-        ),
-        migrations.DeleteModel(
-            name='ErpStock',
-        ),
-        migrations.DeleteModel(
-            name='ErpVariant',
-        ),
+        migrations.DeleteModel(name='ErpImage'),
+        migrations.DeleteModel(name='ErpStock'),
+        migrations.DeleteModel(name='ErpVariant'),
+        migrations.DeleteModel(name='ErpProduct'),
     ]
