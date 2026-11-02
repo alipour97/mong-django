@@ -1,7 +1,7 @@
 """
 The one seam between the site and the sales software. ERP_CONNECTOR picks one; the site
-never asks which. A connector does two things only: fills apps.erp.models on its schedule,
-and takes paid invoices. Gift cards and coupons live in the software too, so it answers those.
+never asks which. A connector does two things only: copies what the software owns into the
+site's tables on its schedule, and takes paid invoices. Nothing here runs while a customer waits.
 """
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ class Connector:
     all_warehouses = False  # every warehouse's stock is offered online
     holds_stock = False  # a paid order is missing from the software's stock until it has taken the invoice
 
-    def sync(self, *, full: bool, log: Log) -> dict:
+    def sync(self, *, force: bool = False, log: Log) -> dict:
         raise NotImplementedError
 
     def barcodes(self) -> list[tuple[str, int, int]]:

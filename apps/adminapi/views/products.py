@@ -1,9 +1,10 @@
 """
 Products/* — the admin's product pages, as the old ProductsController.
 
-Products, prices, stock, colors, sizes and photos come from Samian; the admin
-edits what only the site has: slug, descriptions, «نمایش در ترب». Photo upload
-is gone (photos come from Samian); size guides come with the gallery step.
+Products, prices, stock, colors and sizes come from the sales software's sync and
+photos from LEBAZAI; the admin edits what only the site has: slug, descriptions,
+«نمایش در ترب». Every synced product is listed, ShowOnPage narrows the list to what
+the site shows or does not show.
 
     GET  Products/GetAllProduct?Search=&ParentCategoryIds=&ChildeCategoryIds=&CollectionIds=&FromPrice=&ToPrice=
          &QtyFrom=&QtyTo=&HasQty=&HasReduction=&ShowOnPage=&HasScore=&HasMedia=&hasLongDescription=
@@ -114,7 +115,8 @@ class ListView(AdminView):
             if value is not None:
                 rows = [r for r in rows if test(r, value)]
         show_on_page = to_bool(q.get("ShowOnPage"))
-        rows = [r for r in rows if r.is_saleable == (True if show_on_page is None else show_on_page)]
+        if show_on_page is not None:
+            rows = [r for r in rows if r.on_site == show_on_page]
         for key, attr in (
             ("HasQty", lambda r: r.qty > 0), ("HasReduction", lambda r: r.reduction > 0),
             ("HasScore", lambda r: r.has_score), ("HasMedia", lambda r: r.media_count > 0),
@@ -127,7 +129,7 @@ class ListView(AdminView):
 
         rows = sort_rows(rows, q, {
             "price": lambda r: r.price, "reduction": lambda r: r.reduction, "mediaCount": lambda r: r.media_count,
-            "qty": lambda r: r.qty, "isSaleable": lambda r: r.is_saleable,
+            "qty": lambda r: r.qty, "isSaleable": lambda r: r.on_site,
         })
         page = paginated(rows, to_int(q.get("pageNumber"), 1), to_int(q.get("pageSize"), 10))
         pids = [r.id for r in page["items"]]
@@ -147,7 +149,7 @@ class ListView(AdminView):
                 "id": r.id, "name": r.name, "barcode": r.barcode, "price": r.price, "reduction": r.reduction,
                 "mediaCount": r.media_count, "categoryName": category.title if category else "",
                 "parentCategoryName": parent.title if parent else "", "collectionName": "/".join(collections[r.id]),
-                "qty": r.qty, "isSaleable": r.is_saleable,
+                "qty": r.qty, "isSaleable": r.on_site,
                 "variantIds": [v.id for v in bundle.variants.get(r.id, [])] if p else [],
                 "warehouses": [{"id": k, "title": v} for k, v in sorted(warehouses.items(), key=lambda kv: kv[1])],
                 "hasLongDescription": r.has_long_description, "hasShortDescription": r.has_short_description,
@@ -161,7 +163,7 @@ class LabelsView(AdminView):
     """GET Products/GetProductLables -> the four counters above the product list."""
 
     def get(self, request):
-        rows = [r for r in index.admin_rows() if r.is_saleable]
+        rows = index.admin_rows()
         available = sum(1 for r in rows if r.qty > 0)
         return ok({"result": {
             "totalProduct": len(rows), "availableProducts": available,

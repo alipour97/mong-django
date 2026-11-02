@@ -1,16 +1,17 @@
 """
-The Samian connector. Samian's own sync (apps/samian) keeps its tables fresh; this copies
-what the site sells out of them, by the same rules the storefront used to read them with.
-Sending invoices to Samian is the write phase and is not built yet.
+The Samian connector. Samian's own sync (apps/samian) keeps its tables fresh; this copies what
+the site sells out of them into the site's tables. Variants keep their site id by barcode, and
+colors and sizes by name, so moving between sales programs changes the sync and nothing else:
+photos and AI copy stay LEBAZAI's. Sending invoices to Samian is the write phase and is not built yet.
 """
 from __future__ import annotations
 
 from collections import defaultdict
 from datetime import timedelta
-from pathlib import Path
+from decimal import Decimal
 
 from django.conf import settings
-from django.db.models import Q, Sum
+from django.db.models import Max, Q, Sum
 from django.utils import timezone
 
 from apps.samian.models import (
@@ -19,17 +20,16 @@ from apps.samian.models import (
     SamianInventory,
     SamianPriceListItem,
     SamianProduct,
-    SamianProductColor,
     SamianSalesRow,
     SamianSize,
     SamianWarehouse,
 )
 from apps.website import images as site_images
-from apps.website.models import ProductSamianLink
+from apps.storefront.catalog import COLOR_DETAIL_ID, SIZE_DETAIL_ID, norm
+from apps.website.models import FeatureValue, ProductSamianLink, ProductVariant
 
 from . import store
 from .connector import Connector, Log
-from .models import ErpImage, ErpProduct, ErpStock, ErpVariant
 
 
 def round_price(rial) -> int:
@@ -67,81 +67,86 @@ def _list_prices(sp_pks) -> dict[int, int]:
     return prices
 
 
-def _product(pid: int, sp: SamianProduct, final, sold: float, now) -> ErpProduct:
-    row = ErpProduct(
-        product_id=pid, erp_id=sp.samian_id, name_en=sp.name_en or "", subcode=sp.subcode or "", sold=sold, synced_at=now,
-        attributes={"جنس": sp.material or "", "سبک": sp.style or "", "فصل": str(sp.season or "")},
-    )
-    if sp.size_help_path:
-        row.size_guide_key = site_images.samian_key(sp.samian_id, sp.size_help_path)
+def _product(pid: int, sp: SamianProduct, final, sold: float) -> dict:
+    row = {
+        "id": pid, "erp_id": sp.samian_id, "on_sale": True, "name_en": sp.name_en or "", "sold": sold,
+        "attributes": {"جنس": sp.material or "", "سبک": sp.style or "", "فصل": str(sp.season or "")},
+        "size_guide_key": site_images.samian_key(sp.samian_id, sp.size_help_path) if sp.size_help_path else "",
+        "price": Decimal(0), "reduction": Decimal(0), "sale_price": 0,
+    }
     base = sp.sale_price
     if base:
-        row.base_price, row.sale_price = int(base), int(base)
+        row["price"], row["sale_price"] = Decimal(int(base)), int(base)
         if final and final < base:
-            row.reduction, row.sale_price = round((base - final) * 100 / base, 3), round_price(final)
+            row["reduction"] = Decimal(str(round((base - final) * 100 / base, 3)))
+            row["sale_price"] = round_price(final)
     return row
 
 
-def _variant(bc: SamianBarcode, pid: int, colors: dict, sizes: dict) -> ErpVariant:
-    row = ErpVariant(id=bc.samian_id, product_id=pid, barcode=bc.barcode)
+class _SiteValues:
+    """Samian's colors and sizes as the site's, found by name so favorites, photos and filters keep their ids."""
+
+    def __init__(self):
+        self.ids = {(v.feature_id, norm(v.name)): v.id for v in FeatureValue.objects.filter(is_deleted=False).order_by("-id")}
+
+    def id_of(self, feature_id: int, name: str, value: str, priority: int) -> int:
+        key = (feature_id, norm(name))
+        if key not in self.ids:
+            self.ids[key] = FeatureValue.objects.create(feature_id=feature_id, name=name, value=value, display_priority=priority).id
+        return self.ids[key]
+
+
+def _variant(variant_id: int, bc: SamianBarcode, pid: int, colors: dict, sizes: dict, values: _SiteValues) -> store.VariantRow:
+    color_id, color_name, color_value, color_priority, color_family = None, "", "", 0, ""
     if bc.colorinfo_id:
-        row.color_id, row.color_name = bc.colorinfo_id, bc.color
-        if c := colors.get(bc.colorinfo_id):
-            row.color_name, row.color_value, row.color_priority = c.name, c.hex_code, c.display_priority
-            row.color_family = c.family
+        color_name, c = bc.color or "", colors.get(bc.colorinfo_id)
+        if c:
+            color_name, color_value, color_priority, color_family = c.name, c.hex_code, c.display_priority, c.family
+        color_id = values.id_of(COLOR_DETAIL_ID, color_name, color_value, color_priority)
+    size_id, size_name, size_priority = None, "", 0
     if sz := sizes.get(bc.size):
-        row.size_id, row.size_name, row.size_value, row.size_priority = sz.pk, sz.name, sz.name, sz.display_priority
-    return row
-
-
-def _images(pid_by_erp: dict[int, int]) -> list[ErpImage]:
-    rows = []
-    gallery = (
-        SamianProductColor.objects.filter(productmain_id__in=pid_by_erp, has_gallery=True)
-        .only("samian_id", "productmain_id", "colorinfo_id", "colorsgalery").order_by("samian_id")
+        size_name, size_priority = sz.name, sz.display_priority
+        size_id = values.id_of(SIZE_DETAIL_ID, size_name, size_name, size_priority)
+    return store.VariantRow(
+        id=variant_id, product_id=pid, erp_ref=bc.samian_id, barcode=bc.barcode, color_id=color_id, color_name=color_name,
+        color_value=color_value, color_priority=color_priority, color_family=color_family, size_id=size_id, size_name=size_name,
+        size_value=size_name, size_priority=size_priority,
     )
-    for color in gallery:
-        for idx, item in enumerate(color.colorsgalery or []):
-            fp = item.get("filePath", "") if isinstance(item, dict) else ""
-            if not fp or Path(fp).suffix.lower() not in site_images.IMAGE_EXT:
-                continue
-            rows.append(ErpImage(
-                product_id=pid_by_erp[color.productmain_id], color_id=color.colorinfo_id,
-                source_id=color.samian_id * 100 + idx, key=site_images.samian_key(color.productmain_id, fp),
-                # Built nightly by build_images; until then the original through the proxy.
-                source=f"/api/samian/media/{color.samian_id}/{idx}/", position=len(rows),
-            ))
-    return rows
 
 
 class SamianConnector(Connector):
     name = "samian"
 
-    def sync(self, *, full: bool, log: Log) -> dict:
+    def sync(self, *, force: bool = False, log: Log) -> dict:
         read = store.Read()
-        now = timezone.now()
         links = dict(ProductSamianLink.objects.values_list("product_id", "samian_product_id"))
         sps = {sp.samian_id: sp for sp in SamianProduct.objects.filter(samian_id__in=links.values())}
         linked = {pid: sps[sid] for pid, sid in links.items() if sid in sps}
         prices = _list_prices([sp.pk for sp in linked.values()])
         sold = sold_by_product()
-        read.products = [_product(pid, sp, prices.get(sp.pk), sold.get(sp.pk, 0.0), now) for pid, sp in linked.items()]
+        read.products = [_product(pid, sp, prices.get(sp.pk), sold.get(sp.pk, 0.0)) for pid, sp in linked.items()]
 
         pid_by_pk = {sp.pk: pid for pid, sp in linked.items()}
         colors = {c.samian_id: c for c in SamianColor.objects.all()}
         sizes = {sz.name: sz for sz in SamianSize.objects.all()}
+        values = _SiteValues()
+        site_ids = dict(ProductVariant.objects.exclude(barcode="").values_list("barcode", "id"))
+        next_id = (ProductVariant.objects.aggregate(top=Max("id"))["top"] or 0) + 1
         variant_of = {}
         for bc in (SamianBarcode.objects.filter(samian_product_id__in=pid_by_pk, is_active=True)
                    .only("samian_id", "barcode", "size", "color", "colorinfo_id", "samian_product_id")):
-            read.variants.append(_variant(bc, pid_by_pk[bc.samian_product_id], colors, sizes))
-            variant_of[bc.pk] = bc.samian_id
+            variant_id = site_ids.get(bc.barcode)
+            if variant_id is None:
+                variant_id, next_id = next_id, next_id + 1
+            read.variants.append(_variant(variant_id, bc, pid_by_pk[bc.samian_product_id], colors, sizes, values))
+            variant_of[bc.pk] = variant_id
 
         titles = dict(SamianWarehouse.objects.values_list("samian_id", "title"))
         for r in (SamianInventory.objects.filter(samian_barcode_id__in=variant_of)
                   .values("samian_barcode_id", "warehouse_id").annotate(total=Sum("qty"))):
-            read.stock.append(ErpStock(variant_id=variant_of[r["samian_barcode_id"]], warehouse_id=r["warehouse_id"],
-                                       warehouse_title=titles.get(r["warehouse_id"], ""), qty=r["total"] or 0))
-        read.images = _images({sp.samian_id: pid for pid, sp in linked.items()})
-        result = store.replace(read)
+            if r["total"] and r["total"] > 0:
+                read.stock.append(store.StockRow(variant_of[r["samian_barcode_id"]], r["warehouse_id"],
+                                                 titles.get(r["warehouse_id"], ""), r["total"]))
+        result = store.apply(read, force=force)
         log(f"erp: {result}")
         return result

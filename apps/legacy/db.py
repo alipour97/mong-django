@@ -24,6 +24,9 @@ _COMMENTS = re.compile(r"(--[^\n]*)|(/\*.*?\*/)", re.S)
 _STRINGS = re.compile(r"N?'(?:[^']|'')*'")
 
 
+LOGIN_TIMEOUT = 15  # seconds: a sync that cannot reach the server gives up and the site keeps its last read
+
+
 class ReadOnlyViolation(RuntimeError):
     pass
 
@@ -47,7 +50,8 @@ def _connection_url() -> str:
 
 @lru_cache(maxsize=1)
 def get_engine() -> Engine:
-    engine = create_engine(_connection_url(), pool_pre_ping=True, pool_size=2, max_overflow=2)
+    engine = create_engine(_connection_url(), pool_pre_ping=True, pool_size=2, max_overflow=2,
+                           connect_args={"login_timeout": LOGIN_TIMEOUT})
 
     @event.listens_for(engine, "before_cursor_execute")
     def _guard(conn, cursor, statement, parameters, context, executemany):

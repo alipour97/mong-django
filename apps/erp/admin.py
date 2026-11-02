@@ -6,9 +6,8 @@ from django.utils import timezone
 
 from apps.website import images
 
-from . import vouchers
-from .connector import get_connector
-from .models import ManualPhoto, SiteCoupon, SiteGiftCard
+from . import store, vouchers
+from .models import ErpWriteLog, ManualPhoto, SiteCoupon, SiteGiftCard
 
 MANUAL_PREFIX = "up/"
 
@@ -35,6 +34,24 @@ class SiteGiftCardAdmin(admin.ModelAdmin):
         return vouchers.site_card_left(card)
 
 
+@admin.register(ErpWriteLog)
+class ErpWriteLogAdmin(admin.ModelAdmin):
+    """Everything this site wrote in the sales software. Read only: it is the record of what happened."""
+
+    list_display = ("id", "invoice_id", "software", "action", "result", "ok", "created")
+    list_filter = ("ok", "software", "action")
+    search_fields = ("invoice_id", "error")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 class ManualPhotoForm(forms.ModelForm):
     barcode = forms.CharField(label="بارکد کالا", help_text="بارکد یکی از سایزهای همان رنگ در نرم‌افزار فروش")
     photo = forms.FileField(label="عکس")
@@ -45,7 +62,7 @@ class ManualPhotoForm(forms.ModelForm):
 
     def clean_barcode(self):
         barcode = self.cleaned_data["barcode"].strip()
-        match = next(((pid, color) for code, pid, color in get_connector().barcodes() if code == barcode), None)
+        match = next(((pid, color) for code, pid, color in store.barcodes() if code == barcode), None)
         if match is None:
             raise forms.ValidationError("این بارکد در کالاهای قابل فروش (دستهٔ آنلاین فعال) پیدا نشد.")
         self.product_id, self.color_id = match

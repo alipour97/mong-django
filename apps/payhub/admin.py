@@ -1,3 +1,5 @@
+import json
+
 from django.contrib import admin
 
 from .models import PayRecord, SnappLog
@@ -13,10 +15,23 @@ class PayRecordAdmin(admin.ModelAdmin):
 
 @admin.register(SnappLog)
 class SnappLogAdmin(admin.ModelAdmin):
-    list_display = ("id", "created", "method", "path", "http_status", "successful", "error", "duration_ms", "transaction_id")
+    list_display = ("id", "created", "method", "path", "http_status", "successful", "reason", "duration_ms", "transaction_id")
     list_filter = ("successful", "path", "http_status")
     search_fields = ("payment_token", "transaction_id")
     date_hierarchy = "created"
+
+    @admin.display(description="علت خطا")
+    def reason(self, obj):
+        """SnappPay's own code and message, as in its error list."""
+        if obj.successful:
+            return "-"
+        try:
+            data = json.loads(obj.response).get("errorData") or {}
+        except (ValueError, AttributeError):
+            data = {}
+        if data:
+            return f"{data.get('errorCode')}: {data.get('message')}"
+        return obj.error or obj.response[:200] or "-"
 
     def has_add_permission(self, request):
         return False

@@ -12,21 +12,23 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from PIL import Image
 from rest_framework.test import APIClient
-from sqlalchemy.exc import OperationalError
 
 from apps.adminapi.models import AdminUser
+from apps.samian.models import SamianBarcode, SamianColor, SamianProduct
 from apps.storefront import catalog, payments
 from apps.website.models import (
-    BankGateway, BankInfo, Category, Customer, CustomerAddress, Invoice, InvoiceLine, InvoicePayment, Product, SiteSetting,
+    BankGateway, BankInfo, Category, Customer, CustomerAddress, Feature, FeatureValue, Invoice, InvoiceLine, InvoicePayment, Product,
+    ProductAIProfile, ProductSamianLink, ProductVariant, SiteSetting, VariantStock,
 )
 
 from apps.website import images
 
 from . import dadehfa, dadehfa_write as write, lebazai, outbox, store, vouchers
-from .connector import Connector, Coupon, GiftCard, Held, Refused, SourceError
+from .connector import Connector, Held, Refused, SourceError
 from .dadehfa import DadehfaConnector
+from .samian import SamianConnector
 from .management.commands.import_dadehfa_orders import Command as ImportOrders
-from .models import ErpImage, ErpProduct, ErpStock, ErpVariant, LebazaiImage, ManualPhoto, SiteCoupon, SiteGiftCard
+from .models import ErpCoupon, ErpGiftCard, ErpWriteLog, LebazaiImage, ManualPhoto, SiteCoupon, SiteGiftCard, SyncState
 
 
 def use_dadehfa(case: TestCase) -> None:
@@ -35,11 +37,16 @@ def use_dadehfa(case: TestCase) -> None:
     case.addCleanup(patcher.stop)
 
 
-def goods(pid=1, vid=11, qty=5, ref=901) -> ErpVariant:
-    ErpProduct.objects.create(product_id=pid, erp_id=pid, base_price=1000000, sale_price=1000000, synced_at=timezone.now())
-    variant = ErpVariant.objects.create(id=vid, product_id=pid, erp_ref=ref, barcode="b1", color_id=6, color_name="مشکی", size_id=7, size_name="38")
-    ErpStock.objects.create(variant=variant, warehouse_id=1, qty=qty)
+def goods(pid=1, vid=11, qty=5, ref=901) -> ProductVariant:
+    Product.objects.update_or_create(id=pid, defaults={"on_sale": True, "erp_id": pid, "price": 1000000, "sale_price": 1000000})
+    variant = ProductVariant.objects.create(id=vid, product_id=pid, erp_ref=ref, barcode="b1", color_id=6, color_name="مشکی", size_id=7, size_name="38")
+    VariantStock.objects.create(variant=variant, warehouse_id=1, qty=qty)
     return variant
+
+
+def variant_row(vid=11, pid=1, **fields) -> store.VariantRow:
+    return store.VariantRow(**{**dict(id=vid, product_id=pid, erp_ref=None, barcode="", color_id=None, color_name="", color_value="", color_priority=0,
+                                      color_family="", size_id=None, size_name="", size_value="", size_priority=0), **fields})
 
 
 def order(customer, *, state=Invoice.State.SUCCESSFUL, qty=2, **fields) -> Invoice:
@@ -57,46 +64,92 @@ class StoreTests(TestCase):
     def test_an_empty_read_keeps_what_the_site_has(self):
         goods()
         with self.assertRaises(SourceError):
-            store.replace(store.Read())
-        self.assertEqual(ErpProduct.objects.count(), 1)
+            store.apply(store.Read())
+        self.assertEqual(Product.objects.filter(on_sale=True).count(), 1)
+
+    def test_a_read_much_smaller_than_what_is_on_sale_changes_nothing(self):
+        for pid in range(1, 5):
+            goods(pid=pid, vid=pid * 10)
+        with self.assertRaises(SourceError):
+            store.apply(self.fresh_read())
+        self.assertEqual(Product.objects.filter(on_sale=True).count(), 4)
+        store.apply(self.fresh_read(), force=True)
+        self.assertEqual(Product.objects.filter(on_sale=True).count(), 1)
+
+    def test_a_sync_touches_only_what_the_software_owns(self):
+        Product.objects.create(id=1, title="قدیم", slug="my-slug", has_manual_slug=True, description="متن سایت", show_torob=True)
+        store.apply(store.Read(products=[{"id": 1, "on_sale": True, "title": "جدید", "price": Decimal(5), "new": {"slug": "x"}}]))
+        p = Product.objects.get(pk=1)
+        self.assertEqual((p.title, p.price, p.slug, p.description, p.show_torob), ("جدید", 5, "my-slug", "متن سایت", True))
+
+    def test_a_new_product_comes_with_what_the_site_needs(self):
+        store.apply(store.Read(products=[{"id": 2, "on_sale": True, "title": "ن", "new": {"slug": "n", "slug_key": "n"}}]))
+        self.assertEqual(Product.objects.get(pk=2).slug, "n")
+
+    def test_what_left_the_software_leaves_the_sale_and_keeps_its_page(self):
+        goods(pid=1, vid=11)
+        goods(pid=2, vid=22)
+        store.apply(store.Read(products=[{"id": 1, "on_sale": True}], variants=[variant_row()]), force=True)
+        self.assertFalse(Product.objects.get(pk=2).on_sale)
+        self.assertEqual(list(ProductVariant.objects.values_list("id", flat=True)), [11])
+
+    def test_a_sync_keeps_the_vouchers_of_the_read_only(self):
+        ErpCoupon.objects.create(id=1, serial="OLD")
+        ErpGiftCard.objects.create(id=1, number="OLD")
+        read = self.fresh_read()
+        read.coupons, read.gift_cards = [ErpCoupon(id=2, serial="NEW")], []
+        store.apply(read)
+        self.assertEqual(list(ErpCoupon.objects.values_list("serial", flat=True)), ["NEW"])
+        self.assertFalse(ErpGiftCard.objects.exists())
 
     def fresh_read(self, qty=5) -> store.Read:
-        now = timezone.now()
-        return store.Read(
-            products=[ErpProduct(product_id=1, erp_id=1, synced_at=now)], variants=[ErpVariant(id=11, product_id=1)],
-            stock=[ErpStock(variant_id=11, warehouse_id=1, qty=qty)])
+        return store.Read(products=[{"id": 1, "on_sale": True}], variants=[variant_row()], stock=[store.StockRow(11, 1, "", qty)])
 
     def test_a_paid_order_stays_held_until_the_software_has_it(self):
         customer = Customer.objects.create(cellphone="09121111111")
         order(customer)
-        store.replace(self.fresh_read())
-        self.assertEqual(ErpStock.objects.get().qty, 3)
+        store.apply(self.fresh_read())
+        self.assertEqual(VariantStock.objects.get().qty, 3)
 
     def test_a_settled_order_is_no_longer_held(self):
         customer = Customer.objects.create(cellphone="09121111111")
         order(customer, erp_taken_at=timezone.now() - timedelta(hours=1))
-        store.replace(self.fresh_read())
-        self.assertEqual(ErpStock.objects.get().qty, 5)
+        store.apply(self.fresh_read())
+        self.assertEqual(VariantStock.objects.get().qty, 5)
 
     def test_a_just_taken_order_is_held_a_little_longer(self):
         customer = Customer.objects.create(cellphone="09121111111")
         order(customer, erp_taken_at=timezone.now())
-        store.replace(self.fresh_read())
-        self.assertEqual(ErpStock.objects.get().qty, 3)
+        store.apply(self.fresh_read())
+        self.assertEqual(VariantStock.objects.get().qty, 3)
 
     def test_a_cart_holds_nothing(self):
         customer = Customer.objects.create(cellphone="09121111111")
         order(customer, state=Invoice.State.PRE_INVOICE)
-        store.replace(self.fresh_read())
-        self.assertEqual(ErpStock.objects.get().qty, 5)
+        store.apply(self.fresh_read())
+        self.assertEqual(VariantStock.objects.get().qty, 5)
 
 
 class ReadTests(TestCase):
     def rows(self, sql, params=None):
         if "VariantWarehouses" in sql:
             return [{"vid": 50, "warehouse": 2, "title": "انبار", "qty": Decimal("4")}]
+        if "FROM Brands" in sql:
+            return [{"Id": 15, "Title": "مانگ"}]
+        if "Categories1" in sql:
+            return [{"Id": 3, "ParentId": None, "Title": "جوراب", "Slug": "c", "HasManualSlug": False, "GroupLevel": 1, "Created": None}]
         if "Products p" in sql and "p.Barcode" in sql:
-            return [{"Id": 5, "Barcode": "00500", "Price": Decimal("26800000"), "Reduction": Decimal("62.724"), "SalesCount": 3}]
+            return [{"Id": 5, "Barcode": "00500", "Price": Decimal("26800000"), "Reduction": Decimal("62.724"), "SalesCount": 3, "VAT": 0,
+                     "Title": " جوراب ", "Slug": "s", "HasManualSlug": False, "CategoryId": 3, "BrandId": 15, "Created": None}]
+        if "FROM Coupons" in sql:
+            return [{"Id": 1, "CustomerId": None, "Serial": "S", "Reduction": 10, "ExpiredDate": None, "IsUsed": False, "UsedDate": None, "MinPrice": 0,
+                     "MaxPrice": None, "IsActive": True, "BankPortalEndTime": None, "Created": None, "FirstName": None, "LastName": None},
+                    {"Id": 2, "CustomerId": 8, "Serial": "S", "Reduction": 10, "ExpiredDate": None, "IsUsed": True, "UsedDate": None, "MinPrice": 0,
+                     "MaxPrice": None, "IsActive": True, "BankPortalEndTime": None, "Created": None, "FirstName": "ع", "LastName": None}]
+        if "FROM GiftCards" in sql:
+            return [{"Id": 4, "GCNum": "G", "StartDate": None, "ExpDate": None, "GCBalance": 5, "IsActive": True, "CustomerId": 8, "UseDepCode": False,
+                     "MinFactorPrice": 0, "GiftGroupMapId": None, "CustomerMapId": None, "UseCompelete": False, "BankPortalEndTime": None,
+                     "Created": None, "Mobile": "0912", "FirstName": "ع", "LastName": None, "InvoiceCount": 2}]
         if "FROM FeatureValues" in sql:
             return [{"Id": 6, "Name": "مشکی", "Value": "000000", "DisplayPriority": 1}, {"Id": 7, "Name": "38", "Value": "38", "DisplayPriority": 2}]
         if "FROM ProductVariants v" in sql:
@@ -104,20 +157,39 @@ class ReadTests(TestCase):
             return [{**base, "ref": 900}, {**base, "ref": 901}]
         raise AssertionError(sql)
 
-    def test_a_product_as_the_shop_shows_it(self):
-        LebazaiImage.objects.create(product_id=5, color_id=6, key="lz/x", source_url="https://l/x.jpg")
+    def read(self) -> store.Read:
         with mock.patch("apps.erp.dadehfa.fetch_all", side_effect=self.rows):
-            read = dadehfa.read()
+            return dadehfa.read()
+
+    def test_a_product_as_the_shop_shows_it(self):
+        read = self.read()
         product = read.products[0]
-        self.assertEqual((product.base_price, product.sale_price, product.reduction), (26800000, 9990000, Decimal("62.724")))
+        self.assertEqual((product["price"], product["sale_price"], product["reduction"]), (26800000, 9990000, Decimal("62.724")))
+        self.assertEqual((product["title"], product["category_id"], product["brand_id"]), ("جوراب", 3, 15))
         variant = read.variants[0]
         self.assertEqual((variant.erp_ref, variant.barcode, variant.color_family, variant.size_name), (901, "b", "مشکی", "38"))
         self.assertEqual(read.stock[0].qty, 4)
-        self.assertEqual([(i.color_id, i.key) for i in read.images], [(6, "lz/x")])
 
-    def test_no_lebazai_photo_no_read(self):
-        with mock.patch("apps.erp.dadehfa.fetch_all", side_effect=AssertionError):
-            self.assertEqual(dadehfa.read().products, [])
+    def test_a_product_without_a_photo_comes_too(self):
+        self.assertFalse(LebazaiImage.objects.exists())
+        self.assertEqual([p["id"] for p in self.read().products], [5])
+
+    def test_a_category_arrives_off_and_is_the_sites_to_turn_on(self):
+        with mock.patch("apps.erp.store.get_connector", return_value=DadehfaConnector()):
+            read = self.read()
+            store.apply(read)
+            self.assertFalse(Category.objects.get(pk=3).is_online_active)
+            Category.objects.filter(pk=3).update(is_online_active=True)
+            store.apply(read)
+        self.assertTrue(Category.objects.get(pk=3).is_online_active)
+
+    def test_a_general_coupon_stands_for_its_copies(self):
+        general, copy = sorted(self.read().coupons, key=lambda c: c.id)
+        self.assertEqual((general.listed, general.is_used, copy.listed), (True, True, False))
+
+    def test_the_cards_come_with_who_holds_them(self):
+        card = self.read().gift_cards[0]
+        self.assertEqual((card.number, card.mobile, card.invoice_count), ("G", "0912", 2))
 
     def test_after_discount_rounds_to_ten_thousand(self):
         self.assertEqual(dadehfa.after_discount(26800000, 62.724), 9990000)
@@ -132,7 +204,7 @@ class CatalogTests(TestCase):
         goods(qty=3)
         catalog.clear_caches()
         self.addCleanup(catalog.clear_caches)
-        ErpImage.objects.create(product_id=1, color_id=6, source="https://cdn.mong.ir/9/g.webp", position=0)
+        LebazaiImage.objects.create(product_id=1, color_id=6, key="g", source_url="https://cdn.mong.ir/9/g.webp", position=0)
 
     def test_only_what_the_software_has_is_on_the_site(self):
         bundle = catalog.ProductBundle.load([1, 2])
@@ -160,6 +232,58 @@ class FakeResult:
 
     def first(self):
         return self.row
+
+
+class WriteLogTests(TestCase):
+    def setUp(self):
+        self.customer = Customer.objects.create(first_name="ع", cellphone="09121234567")
+        self.address = CustomerAddress.objects.create(customer=self.customer, address="تهران", province_id=8, city_id=301)
+        ErpCoupon.objects.create(id=5, serial="S", customer_erp_id=self.customer.id)
+        self.invoice = order(self.customer, address=self.address, gift_card_id=4, coupon_id=5, coupon_serial="S", deduction_amount=1000)
+        InvoicePayment.objects.create(invoice=self.invoice, gateway="zarinpal", amount=1900000, authority="A", reference="R", is_success=True)
+        self.engine = mock.Mock()
+
+    def push(self, db):
+        self.engine.begin.return_value = db
+        with override_settings(ERP_WRITES_ENABLED=True), mock.patch("apps.erp.dadehfa_write.get_engine", return_value=self.engine):
+            write.push(self.invoice)
+
+    def test_every_write_is_logged_and_the_vouchers_are_settled(self):
+        self.push(FakeDb())
+        log = ErpWriteLog.objects.order_by("id")
+        self.assertTrue(all(row.ok and row.software == "dadehfa" and row.invoice_id == self.invoice.pk for row in log))
+        actions = [row.action for row in log]
+        for action in ("INSERT Customers", "INSERT Invoices", "INSERT InvoiceDetails", "UPDATE Coupons", "UPDATE GiftCards"):
+            self.assertIn(action, actions)
+        self.assertFalse(any(action.startswith("SELECT") for action in actions))
+        self.assertTrue(log.filter(action="INSERT Invoices").first().result)
+
+    def test_a_failed_transaction_is_logged_as_failed(self):
+        db = FakeDb()
+        real = db.execute
+
+        def fails(statement, params=None):
+            if "InvoiceDetails" in str(statement):
+                raise RuntimeError("down")
+            return real(statement, params)
+
+        db.execute = fails
+        with self.assertRaises(RuntimeError):
+            self.push(db)
+        self.assertTrue(ErpWriteLog.objects.exists())
+        self.assertFalse(ErpWriteLog.objects.filter(ok=True).exists())
+        self.assertEqual(ErpWriteLog.objects.first().error, "down")
+
+    def test_a_server_out_of_reach_is_logged_too(self):
+        self.engine.begin.side_effect = RuntimeError("no server")
+        with self.assertRaises(RuntimeError), override_settings(ERP_WRITES_ENABLED=True), \
+                mock.patch("apps.erp.dadehfa_write.get_engine", return_value=self.engine):
+            write.push(self.invoice)
+        self.assertEqual((ErpWriteLog.objects.get().ok, ErpWriteLog.objects.get().error), (False, "no server"))
+
+    def test_nothing_written_nothing_logged(self):
+        self.push(FakeDb({"FROM Invoices": 555}))
+        self.assertFalse(ErpWriteLog.objects.exists())
 
 
 class FakeDb:
@@ -328,19 +452,10 @@ class OutboxTests(TestCase):
         self.assertIsNotNone(invoice.erp_taken_at)
 
 
-class VoucherConnector(Connector):
-    def coupon(self, serial, customer, invoice_id=None):
-        if serial != "OK":
-            raise Refused("کوپن وجود ندارد.")
-        return Coupon(id=9, serial=serial, reduction=Decimal(10), min_price=Decimal(1000), max_price=None, expires=None)
-
-    def gift_card(self, number, customer, invoice_id=None):
-        return GiftCard(id=4, number=number, balance=Decimal(5000000), min_price=Decimal(0), use_whole=False)
-
-    def gift_cards(self, customer):
-        now = timezone.now()
-        return [{"GCNum": "G1", "StartDate": now, "ExpDate": None, "GCBalance": Decimal(5), "IsActive": True, "UseDepCode": False,
-                 "MinFactorPrice": None, "UseCompelete": False}]
+def software_vouchers(customer) -> None:
+    """The software's coupon and gift card of the customer, as a sync left them."""
+    ErpCoupon.objects.create(id=9, customer_erp_id=customer.id, serial="OK", reduction=Decimal(10), min_price=Decimal(1000))
+    ErpGiftCard.objects.create(id=4, number="G1", customer_erp_id=customer.id, balance=Decimal(5000000), starts=timezone.now())
 
 
 class VoucherTests(TestCase):
@@ -349,16 +464,16 @@ class VoucherTests(TestCase):
         Category.objects.create(id=1, title="ک", slug="k", is_online_active=True)
         Product.objects.create(id=1, title="پ", slug="p", category_id=1, is_active=True)
         goods()
-        ErpProduct.objects.filter(pk=1).update(reduction=10, sale_price=900000)
+        Product.objects.filter(pk=1).update(reduction=10, sale_price=900000)
         catalog.clear_caches()
         self.addCleanup(catalog.clear_caches)
         self.customer = Customer.objects.create(first_name="ع", cellphone="09121234567")
         self.client = APIClient()
         self.client.force_authenticate(self.customer)
-        for patcher in (mock.patch("apps.erp.vouchers.get_connector", return_value=VoucherConnector()),
-                        mock.patch("apps.storefront.catalog.listing_rows", return_value=[SimpleNamespace(id=1)])):
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        software_vouchers(self.customer)
+        patcher = mock.patch("apps.storefront.catalog.listing_rows", return_value=[SimpleNamespace(id=1)])
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def add(self, **extra):
         cart = [{"productVariantId": 11, "qty": 2, "name": "پ"}]
@@ -387,29 +502,31 @@ class VoucherTests(TestCase):
         self.assertEqual(self.client.get("/api/v1/GiftCard/GetAll").json()["result"]["data"][0]["gcNum"], "G1")
 
 
-class DadehfaVoucherTests(TestCase):
-    """The old API's rules, on rows shaped like DadehfaOnlineShop's."""
+class SoftwareVoucherTests(TestCase):
+    """The old API's rules, on what the last sync read."""
 
     def setUp(self):
         self.customer = Customer.objects.create(first_name="ع", cellphone="09121234567")
-        self.connector = DadehfaConnector()
 
     def coupon(self, **row):
-        return {"Id": 5, "Serial": "S", "Reduction": Decimal(10), "MinPrice": 0, "MaxPrice": None, "ExpiredDate": None, "IsUsed": False,
-                "IsActive": True, "BankPortalEndTime": None, **row}
+        return {"id": 5, "serial": "S", "reduction": Decimal(10), **row}
 
     def card(self, **row):
-        return {"Id": 7, "GCNum": "G", "StartDate": timezone.localtime().replace(tzinfo=None) - timedelta(days=1), "ExpDate": None,
-                "GCBalance": Decimal(1000000), "IsActive": True, "CustomerId": 1, "UseDepCode": False, "MinFactorPrice": 0, "UseCompelete": False,
-                "BankPortalEndTime": None, **row}
+        return {"id": 7, "number": "G", "starts": timezone.now() - timedelta(days=1), "balance": Decimal(1000000),
+                "customer_erp_id": self.customer.id, **row}
 
     def read_coupon(self, own=None, general=None, invoice_id=None):
-        with mock.patch("apps.erp.dadehfa.fetch_all", side_effect=[[own] if own else [], *([[general] if general else []] if not own else [])]):
-            return self.connector.coupon("S", self.customer, invoice_id)
+        ErpCoupon.objects.all().delete()
+        if own:
+            ErpCoupon.objects.create(customer_erp_id=self.customer.id, **own)
+        if general:
+            ErpCoupon.objects.create(**general)
+        return vouchers.find_coupon("S", self.customer, invoice_id)
 
     def read_card(self, invoice_id=None, **row):
-        with mock.patch("apps.erp.dadehfa.fetch_all", return_value=[self.card(**row)]):
-            return self.connector.gift_card("G", self.customer, invoice_id)
+        ErpGiftCard.objects.all().delete()
+        ErpGiftCard.objects.create(**self.card(**row))
+        return vouchers.find_gift_card("G", self.customer, invoice_id)
 
     def invoice(self, **fields):
         return Invoice.objects.create(customer=self.customer, **fields)
@@ -420,20 +537,20 @@ class DadehfaVoucherTests(TestCase):
     def test_an_own_coupon_is_used_once(self):
         self.assertEqual(self.read_coupon(own=self.coupon()).id, 5)
         with self.assertRaises(Refused):
-            self.read_coupon(own=self.coupon(IsUsed=True))
+            self.read_coupon(own=self.coupon(is_used=True))
 
     def test_a_coupon_in_a_payment_page_counts_down(self):
         until = timezone.now() + timedelta(minutes=5)
         with self.assertRaises(Held) as caught:
-            self.read_coupon(own=self.coupon(IsActive=False, BankPortalEndTime=until))
+            self.read_coupon(own=self.coupon(is_active=False, held_until=until))
         self.assertEqual(caught.exception.until, until)
 
     def test_a_hold_that_ran_out_lets_go(self):
-        self.assertEqual(self.read_coupon(own=self.coupon(IsActive=False, BankPortalEndTime=timezone.now() - timedelta(minutes=1))).id, 5)
+        self.assertEqual(self.read_coupon(own=self.coupon(is_active=False, held_until=timezone.now() - timedelta(minutes=1))).id, 5)
 
     def test_a_switched_off_coupon_is_refused(self):
         with self.assertRaises(Refused):
-            self.read_coupon(own=self.coupon(IsActive=False))
+            self.read_coupon(own=self.coupon(is_active=False))
 
     def test_a_paid_order_uses_the_coupon_before_the_software_knows(self):
         self.invoice(coupon_serial="S", paid_at=timezone.now(), state=Invoice.State.SUCCESSFUL)
@@ -450,12 +567,18 @@ class DadehfaVoucherTests(TestCase):
 
     def test_a_sent_order_is_in_the_softwares_balance_already(self):
         self.invoice(gift_card_id=7, deduction_amount=300000, paid_at=timezone.now(), state=Invoice.State.SUCCESSFUL, erp_sent_at=timezone.now())
+        SyncState.objects.create(name=store.SYNC_NAME, at=timezone.now())
         self.assertEqual(self.read_card().balance, 1000000)
+
+    def test_a_sent_order_counts_until_a_sync_has_seen_it(self):
+        SyncState.objects.create(name=store.SYNC_NAME, at=timezone.now() - timedelta(minutes=1))
+        self.invoice(gift_card_id=7, deduction_amount=300000, paid_at=timezone.now(), state=Invoice.State.SUCCESSFUL, erp_sent_at=timezone.now())
+        self.assertEqual(self.read_card().balance, 700000)
 
     def test_a_whole_use_card_ends_with_its_first_order(self):
         self.invoice(gift_card_id=7, deduction_amount=300000, paid_at=timezone.now(), state=Invoice.State.SUCCESSFUL)
         with self.assertRaises(Refused):
-            self.read_card(UseCompelete=True)
+            self.read_card(use_whole=True)
 
     def test_another_invoice_in_a_payment_page_holds_the_card(self):
         other = self.invoice(gift_card_id=7, voucher_held_until=timezone.now() + vouchers.hold())
@@ -464,16 +587,17 @@ class DadehfaVoucherTests(TestCase):
         self.assertEqual(self.read_card(other.id).balance, 1000000)
 
     def test_a_card_not_started_or_expired_is_refused(self):
-        now = timezone.localtime().replace(tzinfo=None)
-        for row in ({"StartDate": now + timedelta(days=2)}, {"ExpDate": now - timedelta(days=2)}, {"GCBalance": Decimal(0)}):
+        now = timezone.now()
+        for row in ({"starts": now + timedelta(days=2)}, {"expires": now - timedelta(days=2)}, {"balance": Decimal(0)}):
             with self.assertRaises(Refused):
                 self.read_card(**row)
 
     def test_the_card_list_shows_a_hold_and_drops_a_spent_card(self):
         self.invoice(gift_card_id=7, voucher_held_until=timezone.now() + vouchers.hold())
         self.invoice(gift_card_id=8, deduction_amount=1000000, paid_at=timezone.now(), state=Invoice.State.SUCCESSFUL)
-        with mock.patch("apps.erp.dadehfa.fetch_all", return_value=[self.card(), self.card(Id=8)]):
-            cards = self.connector.gift_cards(self.customer)
+        ErpGiftCard.objects.create(**self.card())
+        ErpGiftCard.objects.create(**self.card(id=8))
+        cards = vouchers.gift_cards(self.customer)
         self.assertEqual([c["Id"] for c in cards], [7])
         self.assertEqual(cards[0]["Left"][:2], "10")
 
@@ -485,10 +609,10 @@ class VoucherPaymentTests(TestCase):
         self.client.force_authenticate(self.customer)
         self.gateways = {key: BankGateway.objects.create(bank=BankInfo.objects.create(id=number, name=key, key=key))
                          for number, key in ((1, "zarinpal"), (14, "snapppay"))}
-        for patcher in (mock.patch("apps.erp.vouchers.get_connector", return_value=VoucherConnector()),
-                        mock.patch("apps.storefront.payments._enabled", return_value=True)):
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        software_vouchers(self.customer)
+        patcher = mock.patch("apps.storefront.payments._enabled", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def invoice(self, **fields):
         return Invoice.objects.create(customer=self.customer, state=Invoice.State.PRE_INVOICE, amount=1000000, payable_amount=500000,
@@ -533,36 +657,108 @@ class CouponPanelTests(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.client.force_authenticate(AdminUser.objects.create(username="a", cellphone="09120000000"))
-        self.connector = mock.Mock()
-        patcher = mock.patch("apps.adminapi.views.coupons.get_connector", return_value=self.connector)
-        patcher.start()
-        self.addCleanup(patcher.stop)
 
     def get(self, url):
         with mock.patch("apps.adminapi.views.auth.AdminView.authentication_classes", []):
             return self.client.get(f"/api/admin/v1/{url}")
 
-    def test_the_page_comes_cut_by_the_software(self):
-        self.connector.coupon_page.return_value = (25, [{
-            "Id": 1, "CustomerId": None, "Serial": "S", "Reduction": Decimal(10), "ExpiredDate": None, "IsUsed": 1, "UsedDate": None, "MinPrice": 0,
-            "MaxPrice": None, "IsActive": True, "BankPortalEndTime": None, "FirstName": None, "LastName": None}])
-        result = self.get("Coupon/GetAll?pageNumber=2&pageSize=10&search=S").json()["data"]["result"]
+    def test_the_page_comes_from_the_last_sync(self):
+        for i in range(1, 26):
+            ErpCoupon.objects.create(id=i, serial=f"S{i}", search_text=f"s{i} علی", is_used=True)
+        ErpCoupon.objects.create(id=99, serial="OTHER", search_text="other")
+        ErpCoupon.objects.create(id=100, serial="S1", customer_erp_id=4, listed=False, search_text="s1 علی")
+        result = self.get("Coupon/GetAll?pageNumber=2&pageSize=10&search=%D8%B9%D9%84%DB%8C").json()["data"]["result"]
         self.assertEqual((result["totalCount"], result["totalPages"], result["pageNumber"]), (25, 3, 2))
-        self.assertEqual((result["items"][0]["serial"], result["items"][0]["isUsed"]), ("S", True))
-        self.assertEqual(self.connector.coupon_page.call_args.kwargs["search"], "S")
+        self.assertEqual((result["items"][0]["serial"], result["items"][0]["isUsed"]), ("S15", True))
 
     def test_labels(self):
-        self.connector.coupon_labels.return_value = {"total": 10, "active": 7, "used": 2}
+        ErpCoupon.objects.create(id=1, serial="A", is_used=True)
+        ErpCoupon.objects.create(id=2, serial="B", is_active=False)
         self.assertEqual(self.get("Coupon/GetLable").json()["data"]["result"],
-                         {"totalCount": 10, "totalActive": 7, "totalUnActice": 3, "totalUsed": 2})
+                         {"totalCount": 2, "totalActive": 1, "totalUnActice": 1, "totalUsed": 1})
 
     def test_a_missing_coupon(self):
-        self.connector.coupon_info.return_value = None
         self.assertEqual(self.get("Coupon/GetGeneralCouponInfo?id=1").status_code, 404)
 
-    def test_a_silent_software_is_said_so(self):
-        self.connector.gift_card_labels.side_effect = OperationalError("x", {}, Exception())
-        self.assertEqual(self.get("Customer/GetGiftCardLable").status_code, 502)
+    def test_who_took_a_general_coupon(self):
+        ErpCoupon.objects.create(id=1, serial="A")
+        ErpCoupon.objects.create(id=2, serial="A", customer_erp_id=8, is_used=True, first_name="ع")
+        info = self.get("Coupon/GetGeneralCouponInfo?id=1").json()["data"]["result"]
+        self.assertEqual((info["totalCustomerCount"], info["totalUsed"], info["customers"][0]["firstName"]), (1, 1, "ع"))
+
+    def test_gift_card_list(self):
+        ErpGiftCard.objects.create(id=1, number="G", search_text="g علی", balance=5, invoice_count=2)
+        ErpGiftCard.objects.create(id=2, number="H", search_text="h", balance=0)
+        with mock.patch("apps.adminapi.views.auth.AdminView.authentication_classes", []):
+            reply = self.client.post("/api/admin/v1/Customer/GetAllGiftCard?pageNumber=1&pageSize=10", {"search": "علي"}, format="json")
+        items = reply.json()["data"]["result"]["items"]
+        self.assertEqual([(c["gcNum"], c["invoiceCount"]) for c in items], [("G", 2)])
+        self.assertEqual(self.get("Customer/GetGiftCardLable").json()["data"]["result"]["totalUsed"], 1)
+
+
+class SoftwareAwayTests(TestCase):
+    """The red line: with both sales programs out of reach, the site does everything a customer and the panel do."""
+
+    def setUp(self):
+        SiteSetting.objects.create(min_qty=0, only_has_media_products=False)
+        Category.objects.create(id=1, title="ک", slug="k", is_online_active=True)
+        Product.objects.create(id=1, title="پیراهن", slug="p", category_id=1, is_active=True)
+        goods()
+        catalog.clear_caches()
+        self.addCleanup(catalog.clear_caches)
+        self.customer = Customer.objects.create(first_name="ع", cellphone="09121234567")
+        self.address = CustomerAddress.objects.create(customer=self.customer, address="تهران", province_id=8, city_id=301)
+        software_vouchers(self.customer)
+        self.client = APIClient()
+        self.client.force_authenticate(self.customer)
+        away = AssertionError("the site reached a sales program")
+        for target in ("apps.legacy.db.get_engine", "apps.erp.dadehfa.fetch_all", "apps.erp.dadehfa_write.get_engine", "apps.samian.client.get_samian_client"):
+            patcher = mock.patch(target, side_effect=away)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def get(self, url):
+        reply = self.client.get(f"/api/v1/{url}")
+        self.assertEqual(reply.status_code, 200, url)
+        return reply
+
+    def post(self, url, body):
+        reply = self.client.post(f"/api/v1/{url}", body, format="json")
+        self.assertEqual(reply.status_code, 200, url)
+        return reply
+
+    def test_browsing(self):
+        for url in ("Category/GetAll", "Category/GetBreadCrumbs/1", "Product/GetById/1", "SearchEngine/product/p/breadcrumbs",
+                    "Product/GetFilterByCategoryId?id=1"):
+            self.get(url)
+        self.post("Product/SuggestProduct", {"categoryId": 1, "productId": 2})
+        self.post("Product/Search", {"query": "پیراهن", "size": 10})
+
+    def test_vouchers(self):
+        self.assertTrue(self.get("Coupon/Validation?serial=OK").json()["result"]["data"]["valid"])
+        self.assertEqual(self.get("GiftCard/GetAll").json()["result"]["data"][0]["gcNum"], "G1")
+
+    def test_panel_vouchers(self):
+        self.client.force_authenticate(AdminUser.objects.create(username="a", cellphone="09120000000"))
+        with mock.patch("apps.adminapi.views.auth.AdminView.authentication_classes", []):
+            for url in ("Coupon/GetAll", "Coupon/GetLable", "Customer/GetGiftCardLable", "Products/GetProductLables", "Products/GetAllProduct"):
+                self.assertEqual(self.client.get(f"/api/admin/v1/{url}").status_code, 200, url)
+
+    def test_an_order_is_placed_and_paid_and_waits_for_the_software(self):
+        cart = [{"productVariantId": 11, "qty": 1, "name": "پیراهن"}]
+        reply = self.client.post("/api/v1/Invoice/Add", {"productVariants": cart, "gcNum": "G1"}, format="json").json()
+        self.assertEqual(reply["statusCode"], 200, reply)
+        invoice = Invoice.objects.get()
+        self.assertEqual(invoice.gift_card_id, 4)
+        with mock.patch("apps.storefront.payments._notify_admins"), mock.patch("apps.erp.outbox.send_soon"):
+            payments._mark_paid(invoice)
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.state, Invoice.State.SUCCESSFUL)
+        self.assertIsNone(invoice.erp_sent_at)
+
+    def test_a_failed_hand_over_loses_nothing(self):
+        invoice = order(self.customer)
+        self.assertFalse(outbox.send(invoice) and Invoice.objects.get(pk=invoice.pk).erp_sent_at)
 
 
 class SiteVoucherTests(TestCase):
@@ -574,14 +770,14 @@ class SiteVoucherTests(TestCase):
     def paid(self, **fields):
         return Invoice.objects.create(customer=self.customer, paid_at=timezone.now(), state=Invoice.State.SUCCESSFUL, **fields)
 
-    def test_a_site_coupon_answers_without_the_software(self):
-        with mock.patch("apps.erp.vouchers.get_connector", side_effect=AssertionError):
-            coupon = vouchers.find_coupon("SITE", self.customer)
+    def test_a_site_coupon_comes_first(self):
+        ErpCoupon.objects.create(id=9, serial="SITE", customer_erp_id=self.customer.id, reduction=Decimal(5))
+        coupon = vouchers.find_coupon("SITE", self.customer)
         self.assertEqual((coupon.id, coupon.reduction), (None, Decimal(20)))
 
-    def test_any_other_code_goes_to_the_software(self):
-        with mock.patch("apps.erp.vouchers.get_connector", return_value=VoucherConnector()):
-            self.assertEqual(vouchers.find_coupon("OK", self.customer).id, 9)
+    def test_any_other_code_is_the_softwares(self):
+        software_vouchers(self.customer)
+        self.assertEqual(vouchers.find_coupon("OK", self.customer).id, 9)
 
     def test_once_per_customer_and_never_for_a_test_payment(self):
         self.paid(coupon_serial="SITE", is_test=True)
@@ -600,8 +796,8 @@ class SiteVoucherTests(TestCase):
         self.assertEqual(vouchers.find_gift_card("C1", self.customer).balance, 700000)
 
     def test_the_list_shows_the_sites_cards_first(self):
-        with mock.patch("apps.erp.vouchers.get_connector", return_value=VoucherConnector()):
-            self.assertEqual([c["GCNum"] for c in vouchers.gift_cards(self.customer)], ["C1", "G1"])
+        software_vouchers(self.customer)
+        self.assertEqual([c["GCNum"] for c in vouchers.gift_cards(self.customer)], ["C1", "G1"])
 
     def test_a_hold_stops_a_second_invoice(self):
         Invoice.objects.create(customer=self.customer, state=Invoice.State.PRE_INVOICE, gift_card_number="C1",
@@ -629,7 +825,7 @@ class ManualPhotoTests(TestCase):
         ManualPhoto.objects.create(product_id=1, color_id=2, key="up/a", source_url="manual:x")
         LebazaiImage.objects.create(product_id=1, color_id=2, key="lz/old", source_url="http://x")
         with mock.patch("apps.erp.lebazai.lebazai_images", return_value={"B": []}), \
-                mock.patch("apps.erp.lebazai.get_connector", return_value=mock.Mock(barcodes=lambda: [])):
+                mock.patch("apps.erp.lebazai.store.barcodes", return_value=[]):
             lebazai.sync_images(lambda line: None)
         self.assertEqual(list(LebazaiImage.objects.values_list("key", flat=True)), ["up/a"])
 
@@ -639,7 +835,7 @@ class ManualPhotoTests(TestCase):
         picture.name = "a.png"
         picture.seek(0)
         with tempfile.TemporaryDirectory() as folder, override_settings(MEDIA_ROOT=folder), \
-                mock.patch("apps.erp.admin.get_connector", return_value=mock.Mock(barcodes=lambda: [("B1", 5, 7)])):
+                mock.patch("apps.erp.admin.store.barcodes", return_value=[("B1", 5, 7)]):
             reply = self.client.post("/django-admin/erp/manualphoto/add/", {"barcode": "B1", "photo": picture, "position": 0})
             self.assertEqual(reply.status_code, 302)
             photo = ManualPhoto.objects.get()
@@ -704,7 +900,7 @@ class PaidOrderTests(TestCase):
         InvoicePayment.objects.create(invoice=invoice, gateway="zarinpal", amount=1900000, authority="A", reference="R", is_success=True)
         with mock.patch("apps.storefront.payments._notify_admins"):
             payments._mark_paid(invoice)
-        self.assertEqual(ErpStock.objects.get(variant=variant).qty, 3)
+        self.assertEqual(VariantStock.objects.get(variant=variant).qty, 3)
 
         db, engine = FakeDb(), mock.Mock()
         engine.begin.return_value = db
@@ -782,7 +978,7 @@ class OriginalImagesTests(TestCase):
 
     def run_add(self, **kwargs):
         barcodes = [("b1", 1, 10), ("b2x", 2, 20), ("b3", 3, 30)]
-        with mock.patch("apps.erp.lebazai.get_connector", return_value=mock.Mock(barcodes=lambda: barcodes)), \
+        with mock.patch("apps.erp.lebazai.store.barcodes", return_value=barcodes), \
                 mock.patch("apps.erp.lebazai.lebazai_originals", side_effect=lambda **kw: [r for r in self.rows() if r["subcode"] in kw.get("subcodes", [r["subcode"]])]), \
                 mock.patch("apps.erp.lebazai.images.build"), mock.patch("apps.erp.lebazai.images.is_built", return_value=False), \
                 mock.patch("apps.erp.lebazai.requests.get", return_value=mock.Mock(content=b"x", raise_for_status=lambda: None)):
@@ -813,3 +1009,46 @@ class OriginalImagesTests(TestCase):
     def test_dry_run_saves_nothing(self):
         self.assertEqual(self.run_add(departments=["a/b/c"], count=2, dry_run=True)["products"], 2)
         self.assertFalse(LebazaiImage.objects.exists())
+
+
+class SamianSyncTests(TestCase):
+    """A move to Samian changes the sync and nothing else."""
+
+    def setUp(self):
+        Feature.objects.create(id=1, name="رنگ")
+        Feature.objects.create(id=2, name="سایز")
+        FeatureValue.objects.create(id=6, feature_id=1, name="مشكي", value="000000")
+        Product.objects.create(id=1, title="پ", slug="p", description="متن", on_sale=True)
+        ProductVariant.objects.create(id=11, product_id=1, barcode="b1", color_id=6, color_name="مشكي")
+        ProductAIProfile.objects.create(product_id=1, title="عنوان")
+        LebazaiImage.objects.create(product_id=1, color_id=6, key="lz/a", source_url="https://l/a.jpg")
+        sp = SamianProduct.objects.create(samian_id=70, subcode="1", name="پ", sale_price=1000000)
+        ProductSamianLink.objects.create(product_id=1, samian_product_id=70, method="manual")
+        SamianColor.objects.create(samian_id=500, title="مشکی", panel_title="مشکی", hex_code="000000")
+        self.old = SamianBarcode.objects.create(samian_id=900, barcode="b1", samian_product=sp, colorinfo_id=500, is_active=True)
+        self.new = SamianBarcode.objects.create(samian_id=901, barcode="b2", samian_product=sp, colorinfo_id=500, is_active=True)
+        for patcher in (mock.patch("apps.erp.store.get_connector", return_value=SamianConnector()),
+                        mock.patch("apps.erp.samian.sold_by_product", return_value={})):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def run_sync(self):
+        SamianConnector().sync(log=lambda line: None)
+
+    def test_a_barcode_keeps_its_variant_and_a_color_its_id(self):
+        self.run_sync()
+        old, new = ProductVariant.objects.get(barcode="b1"), ProductVariant.objects.get(barcode="b2")
+        self.assertEqual((old.id, old.erp_ref, old.color_id), (11, 900, 6))
+        self.assertEqual((new.id, new.erp_ref, new.color_id), (12, 901, 6))
+
+    def test_photos_and_ai_copy_stay(self):
+        self.run_sync()
+        product = Product.objects.get(pk=1)
+        self.assertEqual((product.price, product.sale_price, product.description), (1000000, 1000000, "متن"))
+        self.assertEqual(ProductAIProfile.objects.get().title, "عنوان")
+        self.assertEqual(LebazaiImage.objects.get().key, "lz/a")
+
+    def test_the_softwares_vouchers_do_not_outlive_it(self):
+        ErpCoupon.objects.create(id=1, serial="S")
+        self.run_sync()
+        self.assertFalse(ErpCoupon.objects.exists())

@@ -30,16 +30,14 @@ from django.http import HttpResponseRedirect
 from django.db.models import Sum
 from django.utils import timezone
 from rest_framework.throttling import AnonRateThrottle
-from sqlalchemy.exc import SQLAlchemyError
 
 from apps import smsir
 from apps.erp import outbox, store as erp_store, vouchers
 from apps.erp.connector import Refused
 from apps.payhub import service as hub
 from apps.payhub import snapppay, zarinpal
-from apps.erp.models import ErpVariant
 from apps.payhub.models import PayRecord
-from apps.website.models import BankGateway, Customer, Invoice, InvoicePayment
+from apps.website.models import BankGateway, Customer, Invoice, InvoicePayment, ProductVariant
 
 from apps.adminapi.paging import to_int
 
@@ -206,7 +204,7 @@ def _out_of_stock(inv: Invoice) -> bool:
         erp_store.online_stock().filter(variant__in=[ln.variant_id for ln in lines])
         .values("variant_id").annotate(total=Sum("qty")).values_list("variant_id", "total")
     )
-    known = set(ErpVariant.objects.filter(id__in=[ln.variant_id for ln in lines]).values_list("id", flat=True))
+    known = set(ProductVariant.objects.filter(id__in=[ln.variant_id for ln in lines]).values_list("id", flat=True))
     return any(ln.variant_id in known and stock.get(ln.variant_id, Decimal(0)) < ln.qty for ln in lines)
 
 
@@ -245,8 +243,6 @@ class PayView(CustomerView):
             _hold_voucher(inv)
         except Refused as exc:
             return answer(None, 409, str(exc))
-        except SQLAlchemyError:
-            return answer(None, 502, hub.CONNECTION_FAILED)
         try:
             url = _start_payment(inv, key)
         except hub.Refused as exc:
@@ -312,8 +308,6 @@ class ZeroAmountView(CustomerView):
             _hold_voucher(inv)
         except Refused as exc:
             return answer(None, 409, str(exc))
-        except SQLAlchemyError:
-            return answer(None, 502, hub.CONNECTION_FAILED)
         _mark_paid(inv)
         return answer(_confirmation(True, inv), message="پرداخت موفق با کارت هدیه.")
 

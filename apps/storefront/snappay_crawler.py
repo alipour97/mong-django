@@ -260,8 +260,7 @@ def build_snappay_product(
         base_url = get_base_url()
 
     pr = bundle.pricing(p.id)
-    erp = bundle.erp.get(p.id)
-    name_en = erp.name_en if erp else ""
+    name_en = p.name_en
     imgs = bundle.main_images(p.id)
     in_stk = bundle.in_stock(p.id)
 
@@ -366,8 +365,8 @@ def build_snappay_product(
         "category": category_str,
         "description": desc_dict,
         "brand": "مانگ",
-        "GTIN": p.barcode or (erp.subcode if erp else "") or "",
-        "gtin": p.barcode or (erp.subcode if erp else "") or "",
+        "GTIN": p.barcode or "",
+        "gtin": p.barcode or "",
     }
 
     if colors:

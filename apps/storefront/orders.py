@@ -35,13 +35,11 @@ from decimal import Decimal
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
-from sqlalchemy.exc import SQLAlchemyError
 
 from apps.erp import vouchers
 from apps.erp.connector import Held, Refused
-from apps.erp.models import ErpVariant
 from apps.erp.store import online_stock
-from apps.website.models import City, CustomerAddress, Invoice, InvoiceLine, Province, ShippingMethod, SiteSetting
+from apps.website.models import City, CustomerAddress, Invoice, InvoiceLine, ProductVariant, Province, ShippingMethod, SiteSetting
 
 from . import catalog
 from .account import CustomerView, answer
@@ -55,7 +53,6 @@ def reply(data=None, status: int = 200, message: str | None = None):
     return envelope(data, status_code=status, message=message or MSG_FETCHED, http_status=200)
 
 FIRST_IN_MONTH = 101
-NO_ANSWER = "فعلا امکان بررسی کارت هدیه و کوپن نیست؛ کمی بعد دوباره امتحان کنید."
 WITH_DELIVERY, BEFORE_REDUCTION = 1, 1  # SiteSetting.gift_card_use_type, coupon_calculation_type
 
 
@@ -104,7 +101,7 @@ def _cart(raw) -> list[tuple[int, Decimal, str]]:
 def _bundle_for(variant_ids) -> tuple[catalog.ProductBundle, dict[int, tuple[int, catalog.Variant]]]:
     """The products of the given variants, and variant id -> (site product id, variant)."""
     wanted = set(variant_ids)
-    pids = ErpVariant.objects.filter(id__in=wanted).values_list("product_id", flat=True)
+    pids = ProductVariant.objects.filter(id__in=wanted).values_list("product_id", flat=True)
     bundle = catalog.ProductBundle.load(set(pids))
     found = {}
     for pid in bundle.products:
@@ -140,7 +137,7 @@ def shipping_dict(m: ShippingMethod) -> dict:
         "taxAmount": float(m.tax_amount), "variableFee": float(m.variable_fee), "description": m.description,
         "icon": catalog.absolute_url(catalog.site_images.site_media_url(m.icon)) if m.icon else "",
         "requiresInsurance": m.requires_insurance, "shippingMethodType": m.type.key if m.type else "",
-        "shippingMethodTypeId": m.type_id or 0,
+        "shippingMethodTypeId": m.type_id or 0, "isDefault": m.is_default,
         "locations": [{"provinceId": loc.province_id, "cityId": loc.city_id} for loc in m.locations.filter(is_deleted=False)] or None,
     }
 
@@ -218,8 +215,6 @@ class AddView(CustomerView):
             voucher = _voucher(gift_number, serial, customer, amount, after, delivery, getattr(_pre_invoice(customer), "pk", None))
         except Refused as exc:
             return reply(None, 400, str(exc))
-        except SQLAlchemyError:
-            return reply(None, 502, NO_ANSWER)
         with transaction.atomic():
             inv = _pre_invoice(customer) or Invoice(customer=customer)
             is_new = inv.pk is None
@@ -423,8 +418,6 @@ class CouponValidationView(CustomerView):
                            "bankPortalEndTime": vouchers.left(exc.until)}, message=str(exc))
         except Refused as exc:
             return answer({"reduction": None, "valid": False, "minPrice": None, "maxPrice": None, "bankPortalEndTime": None}, message=str(exc))
-        except SQLAlchemyError:
-            return answer(None, 502, NO_ANSWER)
         return answer({"reduction": float(coupon.reduction), "valid": True, "minPrice": float(coupon.min_price),
                        "maxPrice": float(coupon.max_price) if coupon.max_price is not None else None, "bankPortalEndTime": None},
                       message="میتوانید از این کوپن استفاده کنید.")
@@ -432,10 +425,7 @@ class CouponValidationView(CustomerView):
 
 class GiftCardsView(CustomerView):
     def get(self, request):
-        try:
-            cards = vouchers.gift_cards(request.user)
-        except SQLAlchemyError:
-            return answer(None, 502, NO_ANSWER)
+        cards = vouchers.gift_cards(request.user)
         return answer([{
             "gcNum": c["GCNum"], "startDate": c["StartDate"], "expDate": c["ExpDate"], "gcBalance": float(c["GCBalance"]),
             "isActive": c["IsActive"], "customerId": request.user.id, "useDepCode": c["UseDepCode"], "minPrice": None, "maxPrice": None,

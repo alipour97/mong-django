@@ -133,6 +133,103 @@ class SiteGiftCard(models.Model):
         super().save(*args, **kwargs)
 
 
+class ErpCoupon(models.Model):
+    """The software's coupon as the last sync read it; the id is the software's. Checked here, never there."""
+
+    id = models.BigIntegerField(primary_key=True)
+    customer_erp_id = models.BigIntegerField("مشتری در نرم‌افزار", null=True, blank=True, db_index=True)  # empty: a general coupon
+    serial = models.CharField("کد", max_length=100, db_index=True)
+    reduction = models.DecimalField("درصد تخفیف", max_digits=8, decimal_places=2, default=0)
+    min_price = models.DecimalField("حداقل مبلغ فاکتور", max_digits=18, decimal_places=2, default=0)
+    max_price = models.DecimalField("حداکثر مبلغ فاکتور", max_digits=18, decimal_places=2, null=True, blank=True)
+    expires = models.DateTimeField("پایان اعتبار", null=True, blank=True)
+    is_used = models.BooleanField("استفاده شده", default=False)
+    used_at = models.DateTimeField("زمان استفاده", null=True, blank=True)
+    is_active = models.BooleanField("فعال", default=True)
+    held_until = models.DateTimeField("تعلیق تا", null=True, blank=True)
+    created = models.DateTimeField("ایجاد", null=True, blank=True)
+    first_name = models.CharField(max_length=128, blank=True, default="")
+    last_name = models.CharField(max_length=128, blank=True, default="")
+    listed = models.BooleanField("در لیست پنل", default=True)  # a general coupon stands for its customers' copies
+    search_text = models.TextField(blank=True, default="", editable=False)  # catalog.norm of what the panel searches
+
+    class Meta:
+        verbose_name = "کوپن نرم‌افزار"
+        verbose_name_plural = "کوپن‌های نرم‌افزار"
+        ordering = ["-id"]
+
+    def __str__(self) -> str:
+        return self.serial
+
+
+class ErpGiftCard(models.Model):
+    """The software's gift card as the last sync read it; the id is the software's. Checked here, never there."""
+
+    id = models.BigIntegerField(primary_key=True)
+    number = models.CharField("شماره کارت", max_length=100, db_index=True)
+    customer_erp_id = models.BigIntegerField("مشتری در نرم‌افزار", null=True, blank=True, db_index=True)
+    mobile = models.CharField("موبایل مشتری", max_length=20, blank=True, default="", db_index=True)
+    balance = models.DecimalField("مانده", max_digits=18, decimal_places=2, default=0)
+    min_price = models.DecimalField("حداقل مبلغ فاکتور", max_digits=18, decimal_places=2, default=0)
+    starts = models.DateTimeField("شروع اعتبار", null=True, blank=True)
+    expires = models.DateTimeField("پایان اعتبار", null=True, blank=True)
+    is_active = models.BooleanField("فعال", default=True)
+    use_whole = models.BooleanField("یک‌بار مصرف", default=False)
+    use_dep_code = models.BooleanField(default=False)
+    held_until = models.DateTimeField("تعلیق تا", null=True, blank=True)
+    created = models.DateTimeField("ایجاد", null=True, blank=True)
+    gift_group_map_id = models.CharField(max_length=64, blank=True, default="")
+    customer_map_id = models.CharField(max_length=64, blank=True, default="")
+    first_name = models.CharField(max_length=128, blank=True, default="")
+    last_name = models.CharField(max_length=128, blank=True, default="")
+    invoice_count = models.IntegerField("تعداد فاکتور", default=0)
+    search_text = models.TextField(blank=True, default="", editable=False)  # catalog.norm of what the panel searches
+
+    class Meta:
+        verbose_name = "کارت هدیهٔ نرم‌افزار"
+        verbose_name_plural = "کارت‌های هدیهٔ نرم‌افزار"
+        ordering = ["-created", "-id"]
+
+    def __str__(self) -> str:
+        return self.number
+
+
+class ErpWriteLog(models.Model):
+    """One statement this site sent to write in the sales software, and how its transaction ended."""
+
+    invoice_id = models.BigIntegerField("فاکتور سایت", db_index=True)
+    software = models.CharField("نرم‌افزار", max_length=32)
+    action = models.CharField("عمل", max_length=128, blank=True, default="")  # INSERT Invoices, UPDATE GiftCards...
+    statement = models.TextField("دستور", blank=True, default="")
+    params = models.JSONField("مقادیر", default=dict, blank=True)
+    result = models.CharField("شناسهٔ برگشتی", max_length=64, blank=True, default="")
+    ok = models.BooleanField("ثبت شد", default=False)
+    error = models.TextField("خطا", blank=True, default="")
+    created = models.DateTimeField("زمان", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "لاگ نوشتن در نرم‌افزار"
+        verbose_name_plural = "لاگ‌های نوشتن در نرم‌افزار"
+        ordering = ["-id"]
+
+    def __str__(self) -> str:
+        return f"{self.invoice_id}: {self.action}"
+
+
+class SyncState(models.Model):
+    """When a sync last finished well."""
+
+    name = models.CharField(max_length=64, unique=True)
+    at = models.DateTimeField()
+
+    class Meta:
+        verbose_name = "وضعیت همگام‌سازی"
+        verbose_name_plural = "وضعیت همگام‌سازی"
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class LebazaiImage(models.Model):
     """An approved LEBAZAI image of a color, built into the local image store, or one uploaded by hand (key up/...)."""
 

@@ -1,7 +1,7 @@
 """
 Coupon/* and the gift card part of Customer/*, as the old AdminApi's CouponController.
 
-Coupons and gift cards live in the sales software, so the panel reads them through the connector.
+The sales software's coupons and gift cards, as its last sync read them. The site's own are in the Django admin.
 
     GET  Coupon/GetAll?search=&fromDate=&toDate=&pageNumber=&pageSize=  fromDate: created, toDate: expires
     GET  Coupon/GetLable
@@ -15,24 +15,23 @@ from datetime import datetime
 
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-from sqlalchemy.exc import SQLAlchemyError
 
-from apps.erp.connector import get_connector
+from apps.erp.models import ErpCoupon, ErpGiftCard
+from apps.storefront.catalog import norm
 from apps.storefront.envelope import jalali
 
 from ..envelope import fail, ok
 from ..paging import one_page, to_int
 from .auth import AdminView
 
-NO_ANSWER = "نرم‌افزار فروش پاسخ نمی‌دهد. لطفا کمی بعد دوباره تلاش کنید."
 MAX_PAGE_SIZE = 200
 
 
 def _moment(value) -> datetime | None:
-    """A date from the panel, in the software's local time."""
+    """A date from the panel."""
     moment = parse_datetime(str(value or ""))
-    if moment and timezone.is_aware(moment):
-        return timezone.localtime(moment).replace(tzinfo=None)
+    if moment and timezone.is_naive(moment):
+        return timezone.make_aware(moment)
     return moment
 
 
@@ -40,76 +39,84 @@ def _paging(q) -> tuple[int, int]:
     return max(to_int(q.get("pageNumber"), 1), 1), min(max(to_int(q.get("pageSize"), 10), 1), MAX_PAGE_SIZE)
 
 
-def _labels(row: dict) -> dict:
-    return {"totalCount": row["total"], "totalActive": row["active"], "totalUnActice": row["total"] - row["active"], "totalUsed": row["used"]}
+def _labels(total: int, active: int, used: int) -> dict:
+    return {"totalCount": total, "totalActive": active, "totalUnActice": total - active, "totalUsed": used}
 
 
-class SoftwareView(AdminView):
-    """A panel page that waits on the sales software."""
-
-    def handle_exception(self, exc):
-        if isinstance(exc, SQLAlchemyError):
-            return fail(NO_ANSWER, 502)
-        return super().handle_exception(exc)
-
-
-class CouponListView(SoftwareView):
+class CouponListView(AdminView):
     def get(self, request):
         q = request.query_params
         page, size = _paging(q)
-        total, rows = get_connector().coupon_page(search=(q.get("search") or "").strip(), created_from=_moment(q.get("fromDate")),
-                                                  expires_to=_moment(q.get("toDate")), page=page, size=size)
+        rows = ErpCoupon.objects.filter(listed=True)
+        search = norm(q.get("search"))
+        if search:
+            rows = rows.filter(search_text__contains=search)
+        created_from, expires_to = _moment(q.get("fromDate")), _moment(q.get("toDate"))
+        if created_from:
+            rows = rows.filter(created__gte=created_from)
+        if expires_to:
+            rows = rows.filter(expires__lte=expires_to)
+        total = rows.count()
         items = [{
-            "id": r["Id"], "customerId": r["CustomerId"], "serial": r["Serial"], "reduction": float(r["Reduction"] or 0),
-            "expiredDate": r["ExpiredDate"], "isUsed": bool(r["IsUsed"]), "usedDate": jalali(r["UsedDate"]),
-            "minPrice": float(r["MinPrice"] or 0), "maxPrice": float(r["MaxPrice"]) if r["MaxPrice"] is not None else None,
-            "isActive": bool(r["IsActive"]), "bankPortalEndTime": r["BankPortalEndTime"],
-            "customerFirstName": r["FirstName"], "customerLastName": r["LastName"],
-        } for r in rows]
+            "id": r.id, "customerId": r.customer_erp_id, "serial": r.serial, "reduction": float(r.reduction),
+            "expiredDate": r.expires, "isUsed": r.is_used, "usedDate": jalali(r.used_at),
+            "minPrice": float(r.min_price), "maxPrice": float(r.max_price) if r.max_price is not None else None,
+            "isActive": r.is_active, "bankPortalEndTime": r.held_until,
+            "customerFirstName": r.first_name or None, "customerLastName": r.last_name or None,
+        } for r in rows[(page - 1) * size:page * size]]
         return ok({"result": one_page(items, total, page, size)})
 
 
-class CouponLabelView(SoftwareView):
+class CouponLabelView(AdminView):
     def get(self, request):
-        return ok({"result": _labels(get_connector().coupon_labels())})
+        rows = ErpCoupon.objects.filter(listed=True)
+        return ok({"result": _labels(rows.count(), rows.filter(is_active=True).count(), rows.filter(is_used=True).count())})
 
 
-class CouponInfoView(SoftwareView):
+class CouponInfoView(AdminView):
     def get(self, request):
         coupon_id = to_int(request.query_params.get("id"))
         if not coupon_id:  # the panel asks once before a coupon is picked
             return ok({"result": None})
-        info = get_connector().coupon_info(coupon_id)
-        if info is None:
+        source = ErpCoupon.objects.filter(id=coupon_id).first()
+        if source is None:
             return fail("کوپن وجود ندارد.", 404)
-        rows = info["rows"]
+        rows = list(ErpCoupon.objects.filter(serial=source.serial, customer_erp_id__isnull=False))
+        used, active = sum(r.is_used for r in rows), sum(r.is_active for r in rows)
         return ok({"result": {
-            "totalCustomerCount": len(rows), "totalUsed": info["used"], "totalUnUsed": len(rows) - info["used"],
-            "totalActive": info["active"], "totalUnActive": len(rows) - info["active"],
-            "customers": [{"id": r["CustomerId"], "couponId": r["Id"], "firstName": r["FirstName"], "lastName": r["LastName"]} for r in rows],
+            "totalCustomerCount": len(rows), "totalUsed": used, "totalUnUsed": len(rows) - used,
+            "totalActive": active, "totalUnActive": len(rows) - active,
+            "customers": [{"id": r.customer_erp_id, "couponId": r.id, "firstName": r.first_name or None, "lastName": r.last_name or None} for r in rows],
         }})
 
 
-class GiftCardListView(SoftwareView):
+class GiftCardListView(AdminView):
     def post(self, request):
         q, d = request.query_params, request.data or {}
         page, size = _paging(q)
-        filters = {
-            "search": str(d.get("search") or "").strip(), "start_from": _moment(d.get("fromStartDate")), "start_to": _moment(d.get("toStartDate")),
-            "exp_from": _moment(d.get("fromExpDate")), "exp_to": _moment(d.get("toExpDate")),
-            "balance_from": to_int(d.get("fromGCBalance")), "balance_to": to_int(d.get("toGCBalance")),
-        }
-        total, rows = get_connector().gift_card_page(filters, page, size)
+        rows = ErpGiftCard.objects.all()
+        search = norm(str(d.get("search") or ""))
+        if search:
+            rows = rows.filter(search_text__contains=search)
+        for lookup, value in (
+            ("starts__gte", _moment(d.get("fromStartDate"))), ("starts__lte", _moment(d.get("toStartDate"))),
+            ("expires__gte", _moment(d.get("fromExpDate"))), ("expires__lte", _moment(d.get("toExpDate"))),
+            ("balance__gte", to_int(d.get("fromGCBalance"))), ("balance__lte", to_int(d.get("toGCBalance"))),
+        ):
+            if value is not None:
+                rows = rows.filter(**{lookup: value})
+        total = rows.count()
         items = [{
-            "id": r["Id"], "gcNum": r["GCNum"], "startDate": jalali(r["StartDate"], with_time=False), "expDate": jalali(r["ExpDate"], with_time=False),
-            "gcBalance": float(r["GCBalance"]), "isActive": bool(r["IsActive"]), "customerId": r["CustomerId"], "useDepCode": bool(r["UseDepCode"]),
-            "minFactorPrice": float(r["MinFactorPrice"] or 0), "giftGroupMapId": r["GiftGroupMapId"], "customerMapId": r["CustomerMapId"],
-            "useCompelete": bool(r["UseCompelete"]), "customerMobile": r["Mobile"], "customerFirstName": r["FirstName"],
-            "customerLastName": r["LastName"], "invoiceCount": r["InvoiceCount"],
-        } for r in rows]
+            "id": r.id, "gcNum": r.number, "startDate": jalali(r.starts, with_time=False), "expDate": jalali(r.expires, with_time=False),
+            "gcBalance": float(r.balance), "isActive": r.is_active, "customerId": r.customer_erp_id, "useDepCode": r.use_dep_code,
+            "minFactorPrice": float(r.min_price), "giftGroupMapId": r.gift_group_map_id or None, "customerMapId": r.customer_map_id or None,
+            "useCompelete": r.use_whole, "customerMobile": r.mobile or None, "customerFirstName": r.first_name or None,
+            "customerLastName": r.last_name or None, "invoiceCount": r.invoice_count,
+        } for r in rows[(page - 1) * size:page * size]]
         return ok({"result": one_page(items, total, page, size)})
 
 
-class GiftCardLabelView(SoftwareView):
+class GiftCardLabelView(AdminView):
     def get(self, request):
-        return ok({"result": _labels(get_connector().gift_card_labels())})
+        rows = ErpGiftCard.objects.all()
+        return ok({"result": _labels(rows.count(), rows.filter(is_active=True).count(), rows.filter(balance=0).count())})

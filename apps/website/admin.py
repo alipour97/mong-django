@@ -77,17 +77,27 @@ class FeatureValueAdmin(LegacyAdmin):
 class ProductVariantInline(admin.TabularInline):
     model = m.ProductVariant
     extra = 0
-    fields = ("barcode", "color", "size", "legacy_qty", "is_deleted")
-    raw_id_fields = ("color", "size")
+    fields = ("barcode", "color_name", "size_name", "erp_ref", "is_deleted")
 
 
 @admin.register(m.Product)
 class ProductAdmin(LegacyAdmin):
-    list_display = ("id", "title", "barcode", "category", "brand", "price", "reduction", "is_active")
-    list_filter = ("is_active", "is_saleable", "show_torob", "brand")
+    """The one place products are edited by hand. The sales software's next sync writes over its own fields (name, category, price...)."""
+
+    list_display = ("id", "title", "barcode", "category", "brand", "price", "reduction", "sale_price", "on_sale")
+    list_filter = ("on_sale", "is_active", "is_saleable", "show_torob", "brand")
     search_fields = ("title", "slug", "barcode", "map_id")
     raw_id_fields = ("category", "brand")
+    readonly_fields = ("sale_price",)
     inlines = [ProductVariantInline]
+
+    def save_model(self, request, obj, form, change):
+        from apps.erp.dadehfa import after_discount
+        from apps.storefront.catalog import clear_caches
+
+        obj.sale_price = after_discount(float(obj.price), float(obj.reduction))
+        super().save_model(request, obj, form, change)
+        clear_caches()
 
 
 @admin.register(m.ProductSamianLink)

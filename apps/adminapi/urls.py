@@ -141,6 +141,7 @@ urlpatterns = [
     path("ShippingMethod/Types", configs.ShippingTypesView.as_view()),
     path("ShippingMethod/Types/<int:type_id>", configs.ShippingTypeUpdateView.as_view()),
     path("ShippingMethod/methods/<int:method_id>", configs.ShippingStateView.as_view()),
+    path("ShippingMethod/default/<int:method_id>", configs.ShippingDefaultView.as_view()),
     path("ShippingMethod/<int:method_id>", configs.ShippingDetailView.as_view()),
 
     path("Bank/GetGateway", configs.GatewayListView.as_view()),

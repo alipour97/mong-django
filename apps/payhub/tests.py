@@ -9,6 +9,7 @@ from io import StringIO
 from unittest import mock
 
 import requests
+from django.contrib import admin
 from django.core.cache import cache
 from django.core.management import call_command
 from django.test import TestCase, override_settings
@@ -17,9 +18,10 @@ from rest_framework.test import APIClient
 
 from apps.adminapi.models import AdminUser
 from apps.storefront import payments
-from apps.website.models import BankGateway, BankInfo, Customer, Invoice, InvoiceLine, InvoicePayment
+from apps.website.models import BankGateway, BankInfo, Customer, Invoice, InvoiceLine, InvoicePayment, ShippingMethod
 
 from . import service, snapppay
+from .admin import SnappLogAdmin
 from .models import PayRecord, SnappLog
 
 S = PayRecord.State
@@ -713,6 +715,16 @@ class SnappLogTests(SiteCase):
         self.assertNotIn("the-password", kept)
         self.assertNotIn("the-client-secret", kept)
 
+    def test_an_issued_access_token_is_a_success(self):
+        snapppay.eligible(5000)
+        self.assertTrue(SnappLog.objects.get(path="/api/online/v1/oauth/token").successful)
+
+    def test_the_list_shows_why_a_call_failed(self):
+        self.snapp.set("eligible", bad(500, 1000))
+        snapppay.eligible(5000)
+        log = SnappLog.objects.filter(path="/api/online/offer/v1/eligible").first()
+        self.assertEqual(SnappLogAdmin(SnappLog, admin.site).reason(log), "1000: e1000")
+
     def test_a_refused_call_is_kept(self):
         self.snapp.set("eligible", bad(500, 1000))
         snapppay.eligible(5000)
@@ -734,15 +746,15 @@ class SnappLogTests(SiteCase):
 class StockTests(SiteCase):
     def test_counts_only_online_warehouses(self):
         from apps.erp.connector import Connector
-        from apps.erp.models import ErpProduct, ErpStock, ErpVariant
+        from apps.website.models import Product, ProductVariant, VariantStock
 
         self.stock_patch.stop()
         mock.patch("apps.erp.store.get_connector", return_value=Connector()).start()
         line = self.invoice.lines.get()
-        ErpProduct.objects.create(product_id=line.product_id, erp_id=1, synced_at=timezone.now())
-        variant = ErpVariant.objects.create(id=line.variant_id, product_id=line.product_id)
-        ErpStock.objects.create(variant=variant, warehouse_id=1, qty=1)
-        ErpStock.objects.create(variant=variant, warehouse_id=9, qty=5)
+        Product.objects.get_or_create(id=line.product_id, defaults={"title": "پ"})
+        variant = ProductVariant.objects.create(id=line.variant_id, product_id=line.product_id)
+        VariantStock.objects.create(variant=variant, warehouse_id=1, qty=1)
+        VariantStock.objects.create(variant=variant, warehouse_id=9, qty=5)
         with mock.patch("apps.erp.store.online_warehouse_ids", return_value=[1]):
             self.assertTrue(payments._out_of_stock(self.invoice))
         with mock.patch("apps.erp.store.online_warehouse_ids", return_value=[1, 9]):
@@ -796,6 +808,28 @@ class PanelTests(SiteCase):
         reply = self.post("/api/admin/v1/User/Add", {"username": "new", "cellPhone": "09000000003", "password": "secret1"})
         self.assertEqual(reply.status_code, 200)
         self.assertTrue(AdminUser.objects.filter(username="new").exists())
+
+    def test_shipping_state_means_active(self):
+        method = ShippingMethod.objects.create(name="پیک")
+        url = f"/api/admin/v1/ShippingMethod/{method.id}"
+        self.assertTrue(self.client.get(url).json()["data"]["result"]["state"])
+        self.post(f"/api/admin/v1/ShippingMethod/methods/{method.id}?state=false")
+        method.refresh_from_db()
+        self.assertTrue(method.is_deleted)
+        self.assertFalse(self.client.get(url).json()["data"]["result"]["state"])
+        self.post(f"/api/admin/v1/ShippingMethod/methods/{method.id}?state=true")
+        method.refresh_from_db()
+        self.assertFalse(method.is_deleted)
+
+    def test_only_one_shipping_method_is_the_default(self):
+        first, second = ShippingMethod.objects.create(name="الف"), ShippingMethod.objects.create(name="ب")
+        self.post(f"/api/admin/v1/ShippingMethod/default/{first.id}?isDefault=true")
+        self.post(f"/api/admin/v1/ShippingMethod/default/{second.id}?isDefault=true")
+        self.assertEqual(list(ShippingMethod.objects.filter(is_default=True)), [second])
+        self.post(f"/api/admin/v1/ShippingMethod/methods/{second.id}?state=false")
+        self.assertFalse(ShippingMethod.objects.filter(is_default=True).exists())
+        reply = self.post(f"/api/admin/v1/ShippingMethod/default/{second.id}?isDefault=true")
+        self.assertEqual(reply.status_code, 400)
 
     def test_cancel(self):
         reply = self.post(f"/api/admin/v1/Invoice/CancelInvoice/{self.invoice.id}").json()

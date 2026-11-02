@@ -92,7 +92,7 @@ class NotifView(AdminView):
         start, end = _aware(today), _aware(today + timedelta(days=1))
         return ok({"result": {
             "articlesPublishedToday": Article.objects.filter(is_deleted=False, publish_date__gte=start, publish_date__lt=end).count(),
-            "outOfStockProducts": sum(1 for r in index.admin_rows() if r.is_saleable and r.qty <= 0),
+            "outOfStockProducts": sum(1 for r in index.admin_rows() if r.on_site and r.qty <= 0),
             "collectionCreatedTodayCount": Collection.objects.filter(is_deleted=False, end_date__gte=start, end_date__lt=end).count(),
         }})
 
@@ -351,7 +351,7 @@ class SearchView(AdminView):
             ],
             "products": [
                 {"id": r.id, "name": r.name, "barcode": r.barcode, "price": r.price, "reduction": r.reduction,
-                 "mediaCount": r.media_count, "qty": r.qty, "isSaleable": r.is_saleable,
+                 "mediaCount": r.media_count, "qty": r.qty, "isSaleable": r.on_site,
                  "categoryName": tree.nodes[r.category_id].title if r.category_id in tree.nodes else "",
                  "parentCategoryName": "", "collectionName": "", "warehouses": [],
                  "hasLongDescription": r.has_long_description, "hasShortDescription": r.has_short_description}

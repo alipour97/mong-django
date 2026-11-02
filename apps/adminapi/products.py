@@ -9,10 +9,15 @@ admin needs to see what is missing.
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 
+from django.db.models import Sum
+
 from apps.storefront import catalog, warm
-from apps.website.models import Product, ProductComment
+from apps.erp.models import LebazaiImage
+from apps.erp.store import online_stock
+from apps.website.models import HiddenImage, Product, ProductComment, SiteSetting
 
 CACHE_KEY = "adminapi:product-rows:v2"
 CACHE_TTL = 600  # edits in the admin mark it stale (clear())
@@ -25,7 +30,7 @@ class AdminRow:
     name: str
     barcode: str
     category_id: int | None
-    is_saleable: bool
+    on_site: bool       # whether the site shows it now, by its own settings
     price: float
     reduction: float
     after: int
@@ -42,23 +47,29 @@ def admin_rows() -> list[AdminRow]:
 
 def _build() -> list[AdminRow]:
     tree = catalog.category_tree()
-    ids = list(
-        catalog.in_erp(Product.objects.filter(is_deleted=False, is_active=True, category_id__in=tree.nodes.keys()))
-        .values_list("id", flat=True)
-    )
-    bundle = catalog.ProductBundle.load(ids)
+    products = catalog.on_sale(Product.objects.filter(is_deleted=False, is_active=True))
+    setting = SiteSetting.objects.filter(is_deleted=False).first()
+    min_qty = float(setting.min_qty) if setting else 0.0
+    only_media = bool(setting and setting.only_has_media_products)
+    # Every product of the software is listed here, with or without photos, so no bundle: only what the rows need.
+    qty: dict[int, float] = defaultdict(float)
+    for pid, total in online_stock().values("variant_id", "variant__product_id").annotate(total=Sum("qty")).values_list("variant__product_id", "total"):
+        qty[pid] += max(0.0, float(total or 0) - min_qty)
+    hidden = set(HiddenImage.objects.values_list("key", flat=True))
+    media: dict[int, int] = defaultdict(int)
+    for pid, key in LebazaiImage.objects.values_list("product_id", "key"):
+        media[pid] += key not in hidden
     scored = set(
-        ProductComment.objects.filter(product_id__in=ids, is_deleted=False, score__isnull=False)
-        .values_list("product_id", flat=True)
+        ProductComment.objects.filter(is_deleted=False, score__isnull=False).values_list("product_id", flat=True)
     )
     rows = []
-    for pid, p in bundle.products.items():
-        pr = bundle.pricing(pid)
+    for p in products.only("id", "title", "barcode", "category_id", "price", "reduction", "sale_price",
+                           "long_description_html", "short_description_html"):
+        pr = catalog.Pricing(float(p.price), float(p.reduction), p.sale_price)
         rows.append(AdminRow(
-            id=pid, title=catalog.norm(p.title), name=p.title, barcode=p.barcode, category_id=p.category_id,
-            is_saleable=p.is_saleable, price=pr.base, reduction=pr.reduction, after=pr.after,
-            qty=sum(bundle.variant_stock(pid, v) for v in bundle.variants.get(pid, [])),
-            media_count=len(bundle.main_images(pid)), has_score=pid in scored,
+            id=p.id, title=catalog.norm(p.title), name=p.title, barcode=p.barcode, category_id=p.category_id,
+            on_site=p.category_id in tree.nodes and pr.after > 0 and (media[p.id] > 0 or not only_media),
+            price=pr.base, reduction=pr.reduction, after=pr.after, qty=qty[p.id], media_count=media[p.id], has_score=p.id in scored,
             has_long_description=bool(p.long_description_html), has_short_description=bool(p.short_description_html),
         ))
     rows.sort(key=lambda r: r.id)

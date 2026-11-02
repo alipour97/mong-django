@@ -113,7 +113,8 @@ def _keep(method: str, path: str, sent: dict, started: float, reply: Reply, text
     answer = answer if isinstance(answer, dict) else {}
     try:
         SnappLog.objects.create(
-            method=method, path=path, request=_hidden(sent), http_status=reply.http or None, successful=reply.ok,
+            method=method, path=path, request=_hidden(sent), http_status=reply.http or None,
+            successful=reply.ok or bool(reply.body.get("access_token")),  # the OAuth answer has no "successful"
             response=json.dumps(_hidden(reply.body), ensure_ascii=False) if SECRETS & reply.body.keys() else text,
             error=error, duration_ms=int((time.monotonic() - started) * 1000),
             payment_token=str(sent.get("paymentToken") or answer.get("paymentToken") or "")[:255],

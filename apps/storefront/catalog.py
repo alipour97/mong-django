@@ -2,14 +2,15 @@
 Read side of the storefront: builds the JSON objects the legacy API returned.
 
 Sources:
-- website.*  (imported from DadehfaOnlineShop): category tree, slugs, titles,
-  descriptions and website media.
-- erp.*      (filled by the connector, apps/erp): price, variants, stock and
-  product images, whichever sales software the site runs on.
+- website.*  the site's own tables: products, variants, stock, categories. The
+  sales software's sync (apps/erp) keeps what it owns up to date in them; slugs,
+  descriptions and website media are the site's.
+- erp.LebazaiImage: product photos, from LEBAZAI or uploaded in the admin.
 
 Rules:
-- The sales software is the reference: a website product is shown only when the
-  connector has it (ProductBundle.load drops the others).
+- The sales software is the reference: a website product is shown only while its
+  last read had it on sale (ProductBundle.load drops the others). Nothing here
+  reaches the software, so the site goes on with its last read without it.
 - Images are served as pre-built WebP from /img/ (apps/website/images.py) once
   build_images ran, else from their source.
 - Stock is the sum over the warehouses sold online (apps.erp.store.online_stock),
@@ -25,10 +26,9 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from django.conf import settings
-from django.core.cache import cache
 from django.db.models import Avg, Sum
 
-from apps.erp.models import ErpImage, ErpProduct, ErpVariant
+from apps.erp.models import LebazaiImage
 from apps.erp.store import online_stock
 from apps.website import images as site_images
 from apps.website.models import (
@@ -40,6 +40,7 @@ from apps.website.models import (
     ProductCollection,
     ProductComment,
     ProductTag,
+    ProductVariant,
     HiddenImage,
     SelectedProduct,
     SiteSetting,
@@ -50,9 +51,9 @@ from . import warm
 # مانگ and توليد are one brand for customers: every product is shown as Mong.
 MONG_BRAND = {"id": 15, "title": "مانگ"}
 
-LISTING_CACHE_KEY = "storefront:listing:v12"
-LISTING_CACHE_TTL = 300  # the connector syncs every few minutes; a stale listing is rebuilt in the background
-TREE_CACHE_KEY = "storefront:category-tree:v1"
+LISTING_CACHE_KEY = "storefront:listing:v13"
+LISTING_CACHE_TTL = 300  # a stale listing is rebuilt in the background
+TREE_CACHE_KEY = "storefront:category-tree:v2"
 TREE_CACHE_TTL = 300
 
 COLOR_DETAIL_ID = 1
@@ -144,9 +145,10 @@ class CategoryTree:
 
 
 def category_tree() -> CategoryTree:
-    tree = cache.get(TREE_CACHE_KEY)
-    if tree:
-        return tree
+    return warm.get(TREE_CACHE_KEY, TREE_CACHE_TTL, _build_category_tree)
+
+
+def _build_category_tree() -> CategoryTree:
     cats = {c.id: c for c in Category.objects.filter(is_online_active=True, is_deleted=False)}
     by_parent: dict[int | None, list[Category]] = defaultdict(list)
     for c in cats.values():
@@ -160,9 +162,7 @@ def category_tree() -> CategoryTree:
         children[cid] = [k.id for k in kids]
         stack.extend(children[cid])
     children[None] = sorted((c.id for c in by_parent[None]), key=lambda i: (cats[i].display_priority, i))
-    tree = CategoryTree(nodes=nodes, children=dict(children))
-    cache.set(TREE_CACHE_KEY, tree, TREE_CACHE_TTL)
-    return tree
+    return CategoryTree(nodes=nodes, children=dict(children))
 
 
 def category_dict(cat: Category, *, children=None, media=None, tags=None) -> dict:
@@ -252,7 +252,7 @@ class Variant:
         return self.size.id if self.size else None
 
 
-def _variant(row: ErpVariant) -> Variant:
+def _variant(row: ProductVariant) -> Variant:
     return Variant(
         id=row.id, erp_ref=row.erp_ref, barcode=row.barcode,
         color=Option(row.color_id, row.color_name, row.color_value, row.color_priority) if row.color_id else None,
@@ -260,14 +260,14 @@ def _variant(row: ErpVariant) -> Variant:
     )
 
 
-def _image_dict(img: ErpImage, hidden: set[str], include_hidden: bool) -> dict:
-    url = site_images.public_url(img.key) if img.key and site_images.is_built(img.key) else site_images.site_media_url(img.source)
+def _image_dict(img: LebazaiImage, hidden: set[str], include_hidden: bool) -> dict:
+    url = site_images.public_url(img.key) if img.key and site_images.is_built(img.key) else site_images.site_media_url(img.source_url)
     return {
-        "id": img.source_id,
+        "id": img.id,
         "mediaUrl": absolute_url(url),
-        "isVideo": img.is_video,
-        "alternative": img.alternative,
-        "tooltipTitle": img.tooltip_title,
+        "isVideo": False,
+        "alternative": "",
+        "tooltipTitle": "",
         **({"key": img.key, "isHidden": img.key in hidden} if include_hidden else {}),
     }
 
@@ -278,7 +278,6 @@ class ProductBundle:
 
     products: dict[int, Product]
     variants: dict[int, list[Variant]] = field(default_factory=dict)
-    erp: dict[int, ErpProduct] = field(default_factory=dict)  # website product id -> what the connector read
     stock: dict[int, float] = field(default_factory=dict)  # variant id -> qty in the online warehouses
     color_gallery: dict[int, dict[int, list[dict]]] = field(default_factory=dict)  # product id -> color id -> images
     only_media: bool = False  # SiteSetting.only_has_media_products: hide colors that have no images
@@ -299,14 +298,13 @@ class ProductBundle:
         if not products:
             return b
 
-        b.erp = ErpProduct.objects.filter(product_id__in=ids).in_bulk()
         # Not in the sales software -> not on the site.
-        b.products = {pid: p for pid, p in products.items() if pid in b.erp}
+        b.products = {pid: p for pid, p in products.items() if p.on_sale}
         ids = list(b.products)
         if not ids:
             return b
 
-        for row in ErpVariant.objects.filter(product_id__in=ids).order_by("id"):
+        for row in ProductVariant.objects.filter(product_id__in=ids).order_by("id"):
             b.variants.setdefault(row.product_id, []).append(_variant(row))
         variant_ids = [v.id for vs in b.variants.values() for v in vs]
         b.stock = {
@@ -321,17 +319,17 @@ class ProductBundle:
 
     def _load_images(self, ids, include_hidden: bool = False):
         hidden = set(HiddenImage.objects.values_list("key", flat=True))
-        for img in ErpImage.objects.filter(product_id__in=ids):
+        for img in LebazaiImage.objects.filter(product_id__in=ids):
             if img.key in hidden and not include_hidden:
                 continue
             self.color_gallery.setdefault(img.product_id, {}).setdefault(img.color_id, []).append(_image_dict(img, hidden, include_hidden))
 
     # -- per product -------------------------------------------------------
     def pricing(self, pid: int) -> Pricing:
-        row = self.erp.get(pid)
-        if not row:
+        p = self.products.get(pid)
+        if not p:
             return Pricing(0.0, 0.0, 0)
-        return Pricing(float(row.base_price), float(row.reduction), row.sale_price)
+        return Pricing(float(p.price), float(p.reduction), p.sale_price)
 
     def variant_stock(self, pid: int, v: Variant) -> float:
         return max(0.0, self.stock.get(v.id, 0.0) - self.min_qty)
@@ -433,7 +431,7 @@ class ProductBundle:
 
     def size_guide(self, pid: int) -> dict | None:
         """The size chart: the sales software's, else one set in the admin for the product, else for its category."""
-        key = self.erp[pid].size_guide_key if pid in self.erp else ""
+        key = self.products[pid].size_guide_key
         if key and site_images.is_built(key):
             return {"id": 0, "isVideo": False, "mediaUrl": absolute_url(site_images.public_url(key)),
                     "alternative": "راهنمای سایز", "tooltipTitle": ""}
@@ -473,7 +471,7 @@ class ProductBundle:
             "brandId": MONG_BRAND["id"],
             "productName": product_name,
             "aiTitle": ai_title,
-            "ProductName_En": none_if_blank(self.erp[pid].name_en),
+            "ProductName_En": none_if_blank(p.name_en),
             "mainImages": self.main_images(pid),
             "productSizeGuid": self.size_guide(pid),
             "product_Base_Price": pr.base,
@@ -514,7 +512,7 @@ class ListingRow:
     in_stock: bool
     color_ids: frozenset
     created: object
-    sold: float          # recent sales, as the connector counts them
+    sold: float          # recent sales, as the sales software counts them
     featured: float      # SelectedProduct.sorting_weight; inf when not selected
     buyer_score: float
 
@@ -528,10 +526,10 @@ def _build_listing_rows() -> list[ListingRow]:
     setting = SiteSetting.objects.filter(is_deleted=False).first()
     only_media = bool(setting and setting.only_has_media_products)
 
-    ids = list(
-        in_erp(Product.objects.filter(is_deleted=False, is_active=True, category_id__in=tree.nodes.keys()))
-        .values_list("id", flat=True)
-    )
+    products = on_sale(Product.objects.filter(is_deleted=False, is_active=True, category_id__in=tree.nodes.keys()))
+    if only_media:
+        products = products.filter(id__in=LebazaiImage.objects.values("product_id"))
+    ids = list(products.values_list("id", flat=True))
     bundle = ProductBundle.load(ids)
     scores = dict(
         ProductComment.objects.filter(product_id__in=ids, is_deleted=False, status=1)
@@ -551,7 +549,7 @@ def _build_listing_rows() -> list[ListingRow]:
             id=pid, title=norm(p.title), category_id=p.category_id,
             price_after=pr.after, reduction=pr.reduction, in_stock=bundle.in_stock(pid),
             color_ids=frozenset(v.color_id for v in bundle.visible_variants(pid)),
-            created=p.created, sold=bundle.erp[pid].sold, featured=featured.get(pid, math.inf),
+            created=p.created, sold=p.sold, featured=featured.get(pid, math.inf),
             buyer_score=float(scores.get(pid) or 0),
         ))
     return rows
@@ -655,7 +653,7 @@ def render_list(ids: list[int]) -> list[dict]:
 def color_families(color_ids) -> list[dict]:
     """The color filter: one entry per color family (سفید covers استخواني, سفيد, ...), id = its first color."""
     families: dict[str, tuple[int, str]] = {}
-    rows = ErpVariant.objects.filter(color_id__in=color_ids).order_by("color_priority", "color_id")
+    rows = ProductVariant.objects.filter(color_id__in=color_ids).order_by("color_priority", "color_id")
     for family, color_id, value in rows.values_list("color_family", "color_id", "color_value").distinct():
         families.setdefault(family, (color_id, value))
     return [
@@ -668,7 +666,7 @@ def expand_color_families(color_ids: set[int]) -> set[int]:
     """A filter on a family's id matches every color of that family."""
     if not color_ids:
         return color_ids
-    colors = ErpVariant.objects.exclude(color_id=None)
+    colors = ProductVariant.objects.exclude(color_id=None)
     families = set(colors.filter(color_id__in=color_ids).values_list("color_family", flat=True))
     return color_ids | set(colors.filter(color_family__in=families).values_list("color_id", flat=True))
 
@@ -678,10 +676,10 @@ def brands_of(rows: list[ListingRow]) -> list[dict]:
 
 
 def clear_caches():
-    cache.delete(TREE_CACHE_KEY)
+    warm.drop(TREE_CACHE_KEY)
     warm.invalidate(LISTING_CACHE_KEY)
 
 
-def in_erp(products):
-    """Restrict a Product queryset to what the sales software has."""
-    return products.filter(erp__isnull=False)
+def on_sale(products):
+    """Restrict a Product queryset to what the sales software's last read had on sale."""
+    return products.filter(on_sale=True)

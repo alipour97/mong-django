@@ -2,7 +2,7 @@
 The configs page: ShippingMethod/*, Bank/*, ThirdParty/*.
 
 Shipping methods keep the old shapes: a disabled method is soft-deleted and
-still listed ("state" = disabled); its icon is a file from Cdn/upload (mediaId).
+still listed ("state" = active); its icon is a file from Cdn/upload (mediaId).
 
 Bank gateways are the banks list (with logos, from Dadehfa) and the gateways
 configured for the site; payments are counted per gateway. Torob visit logs are not
@@ -11,6 +11,7 @@ with zero visits.
 
     GET  ShippingMethod/All | ShippingMethod/<id> | ShippingMethod/Types
     POST ShippingMethod {...} | ShippingMethod/<id> {...} | ShippingMethod/methods/<id>?state=
+    POST ShippingMethod/default/<id>?isDefault=
     POST ShippingMethod/Types "title" | ShippingMethod/Types/<id> "title"
     GET  Bank/GetGateway | Bank/GetInfo | Bank/SoftDelete     POST Bank/AddBankGateway | Bank/UpdateBankGateway
     GET  ThirdParty/LogSummary | ThirdParty/ProductReport?pageNumber=&pageSize= | ThirdParty/ProductVisitPieChart | ThirdParty/ProductVisitBarChart
@@ -45,7 +46,7 @@ def _dto(m: ShippingMethod, provinces: dict, cities: dict) -> dict:
         "isDynamicPricing": m.is_dynamic_pricing, "description": m.description, "requiresInsurance": m.requires_insurance,
         "insuranceCost": float(m.insurance_cost), "taxPercentage": float(m.tax_percentage), "taxAmount": float(m.tax_amount),
         "variableFee": float(m.variable_fee), "insurancePercentage": float(m.insurance_percentage),
-        "shippingMethodType": m.type.name if m.type else None, "state": m.is_deleted,
+        "shippingMethodType": m.type.name if m.type else None, "state": not m.is_deleted, "isDefault": m.is_default,
         "icon": _url(m.icon) if m.icon else m.icon, "sourceDependent": m.source_dependent,
         "locations": [
             {
@@ -138,13 +139,30 @@ class ShippingDetailView(AdminView):
 
 
 class ShippingStateView(AdminView):
-    """POST ShippingMethod/methods/<id>?state=true disables the method, false enables it."""
+    """POST ShippingMethod/methods/<id>?state=true enables the method, false disables it (and it stops being the default)."""
 
     def post(self, request, method_id: int):
-        n = ShippingMethod.objects.filter(id=method_id).update(
-            is_deleted=bool(to_bool(request.query_params.get("state"))), last_modified=timezone.now()
-        )
+        active = to_bool(request.query_params.get("state")) is not False
+        fields = {} if active else {"is_default": False}
+        n = ShippingMethod.objects.filter(id=method_id).update(is_deleted=not active, last_modified=timezone.now(), **fields)
         return ok({"message": "عملیات موفقیت آمیز بود."}) if n else fail(NOT_FOUND, 404)
+
+
+class ShippingDefaultView(AdminView):
+    """POST ShippingMethod/default/<id>?isDefault=true makes it the only default, false leaves none."""
+
+    def post(self, request, method_id: int):
+        method = ShippingMethod.objects.filter(id=method_id).first()
+        if not method:
+            return fail(NOT_FOUND, 404)
+        wanted = bool(to_bool(request.query_params.get("isDefault")))
+        if wanted and method.is_deleted:
+            return fail("روش ارسال غیرفعال نمی‌تواند پیش‌فرض باشد.", 400)
+        with transaction.atomic():
+            ShippingMethod.objects.filter(is_default=True).update(is_default=False, last_modified=timezone.now())
+            if wanted:
+                ShippingMethod.objects.filter(id=method_id).update(is_default=True, last_modified=timezone.now())
+        return ok({"message": "عملیات موفقیت آمیز بود."})
 
 
 def _title(request) -> str:

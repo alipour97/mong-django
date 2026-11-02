@@ -158,7 +158,7 @@ class FeatureValue(LegacyMixin):
 
 
 class Product(SlugKeyMixin, LegacyMixin):
-    """Product page on the website. Pricing and stock come from Samian once linked."""
+    """A product of the site. Its name, price and stock come from the sales software's sync, its copy and photos from LEBAZAI."""
 
     id = models.BigAutoField(primary_key=True)
     title = models.CharField(_("عنوان"), max_length=512)
@@ -197,6 +197,15 @@ class Product(SlugKeyMixin, LegacyMixin):
     product_season_title = models.CharField(max_length=255, blank=True, default="")
     product_style_title = models.CharField(max_length=255, blank=True, default="")
 
+    # Filled by the sales software's sync (apps/erp). The site reads them from here, never from the software.
+    on_sale = models.BooleanField(_("در نرم‌افزار فروش موجود"), default=False, db_index=True)
+    erp_id = models.BigIntegerField(_("شناسه در نرم‌افزار فروش"), null=True, blank=True, db_index=True)
+    sale_price = models.BigIntegerField(_("قیمت بعد از تخفیف (ریال)"), default=0)
+    name_en = models.CharField(_("نام انگلیسی"), max_length=512, blank=True, default="")
+    attributes = models.JSONField(_("ویژگی‌ها"), default=dict, blank=True)
+    size_guide_key = models.CharField(_("کلید عکس راهنمای سایز"), max_length=255, blank=True, default="")
+    sold = models.FloatField(_("فروش اخیر"), default=0)
+
     class Meta:
         verbose_name = _("محصول سایت")
         verbose_name_plural = _("محصولات سایت")
@@ -219,17 +228,21 @@ class ProductTag(LegacyMixin):
 
 
 class ProductVariant(LegacyMixin):
-    """One color/size combination of a product (one barcode)."""
+    """A sellable color and size of a product (one barcode); its id is the site's productVariantId."""
 
     id = models.BigAutoField(primary_key=True)
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="variants")
-    barcode = models.CharField(max_length=64, blank=True, default="", db_index=True)
-    color = models.ForeignKey(FeatureValue, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
-    size = models.ForeignKey(FeatureValue, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
-    price = models.DecimalField(max_digits=18, decimal_places=3, default=0)
-    reduction = models.DecimalField(max_digits=18, decimal_places=3, default=0)
-    discount = models.DecimalField(max_digits=18, decimal_places=3, default=0)
-    legacy_qty = models.DecimalField(_("موجودی در سیستم قبلی"), max_digits=18, decimal_places=3, default=0)
+    erp_ref = models.BigIntegerField(_("شناسه در فاکتور نرم‌افزار"), null=True, blank=True)
+    barcode = models.CharField(max_length=255, blank=True, default="", db_index=True)
+    color_id = models.BigIntegerField(null=True, blank=True, db_index=True)
+    color_name = models.CharField(max_length=255, blank=True, default="")
+    color_value = models.CharField(max_length=64, blank=True, default="")
+    color_priority = models.IntegerField(default=0)
+    color_family = models.CharField(max_length=255, blank=True, default="")
+    size_id = models.BigIntegerField(null=True, blank=True)
+    size_name = models.CharField(max_length=255, blank=True, default="")
+    size_value = models.CharField(max_length=255, blank=True, default="")
+    size_priority = models.IntegerField(default=0)
 
     class Meta:
         verbose_name = _("تنوع محصول")
@@ -237,6 +250,23 @@ class ProductVariant(LegacyMixin):
 
     def __str__(self) -> str:
         return f"{self.barcode} ({self.color_id}/{self.size_id})"
+
+
+class VariantStock(models.Model):
+    """What a warehouse holds of a variant, as the sales software's sync last read it."""
+
+    variant = models.ForeignKey(ProductVariant, on_delete=models.CASCADE, related_name="stock")
+    warehouse_id = models.BigIntegerField(db_index=True)
+    warehouse_title = models.CharField(max_length=255, blank=True, default="")
+    qty = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    class Meta:
+        verbose_name = _("موجودی")
+        verbose_name_plural = _("موجودی‌ها")
+        constraints = [models.UniqueConstraint(fields=["variant", "warehouse_id"], name="website_stock_per_warehouse")]
+
+    def __str__(self) -> str:
+        return f"{self.variant_id} @ {self.warehouse_id}: {self.qty}"
 
 
 class ProductAIProfile(models.Model):
@@ -845,10 +875,12 @@ class ShippingMethod(LegacyMixin):
     tax_percentage = models.DecimalField(max_digits=18, decimal_places=3, default=0)
     tax_amount = models.DecimalField(max_digits=18, decimal_places=3, default=0)
     source_dependent = models.BooleanField(default=False)
+    is_default = models.BooleanField(_("پیش‌فرض"), default=False)  # picked for the customer in the basket
 
     class Meta:
         verbose_name = _("روش ارسال")
         verbose_name_plural = _("روش‌های ارسال")
+        constraints = [models.UniqueConstraint(fields=["is_default"], condition=models.Q(is_default=True), name="one_default_shipping_method")]
 
     def __str__(self) -> str:
         return self.name

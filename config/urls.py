@@ -22,7 +22,6 @@ urlpatterns = [
     # /admin is the Next.js admin panel (nginx); Django admin lives here
     path("django-admin/", admin.site.urls),
     path("api/health/", health_check, name="health-check"),
-    path("api/samian/", include("apps.samian.urls")),
     path("api/v1/", include("apps.storefront.urls")),
     path("api/admin/v1/", include("apps.adminapi.urls")),
     # The payment hub: its routes sit at the root, as on Mong.Pay (apps/payhub/urls.py)

@@ -8,10 +8,14 @@ the login is its own (DADEHFA_WRITE_DB_*), and is refused if it is a sysadmin; a
 statement is checked against the short list below before it reaches the server.
 
 An invoice is marked with its site id in CreatedBy, so a retry after a lost answer finds
-it instead of writing it twice.
+it instead of writing it twice. The coupon or gift card it spent is settled in the same
+transaction, as nothing else does that on the software's side. Every statement that writes
+is logged in ErpWriteLog with how its transaction ended, and failed attempts too.
 """
 from __future__ import annotations
 
+import json
+import logging
 import re
 import secrets
 import urllib.parse
@@ -26,7 +30,9 @@ from sqlalchemy.engine import Engine
 
 from apps.website.models import Invoice
 
-from .models import SiteCoupon
+from .models import ErpWriteLog, SiteCoupon
+
+logger = logging.getLogger(__name__)
 
 GIFT_CARD_BANK = 13
 BANKS = {"zarinpal": 1, "snapppay": 14, "PayTypeGiftCard": GIFT_CARD_BANK}
@@ -73,6 +79,44 @@ def get_engine() -> Engine:
         if conn.execute(text("SELECT IS_SRVROLEMEMBER('sysadmin')")).scalar() == 1:
             raise CannotSend("the writing login must not be a sysadmin")
     return engine
+
+
+class _Logged:
+    """Sends one invoice's statements and keeps a record of those that write."""
+
+    def __init__(self, invoice_id: int):
+        self.invoice_id, self.db, self.rows = invoice_id, None, []
+
+    def execute(self, statement, params=None):
+        sql = str(statement)
+        words = sql.split()
+        if words[0].upper() == "SELECT":
+            return self.db.execute(statement, params)
+        table = words[2] if words[0].upper() == "INSERT" else words[1]
+        row = ErpWriteLog(invoice_id=self.invoice_id, software="dadehfa", action=f"{words[0].upper()} {table}", statement=sql,
+                          params=json.loads(json.dumps(params or {}, default=str)))
+        self.rows.append(row)
+        return _Recorded(self.db.execute(statement, params), row)
+
+    def save(self, error: str = "") -> None:
+        """Called once the transaction has ended: its rows all went in, or none did."""
+        rows = self.rows or ([ErpWriteLog(invoice_id=self.invoice_id, software="dadehfa")] if error else [])
+        for row in rows:
+            row.ok, row.error = not error, error[:2000]
+            logger.info("dadehfa write: invoice %s %s %s %s", self.invoice_id, row.action, row.result, "ok" if row.ok else error)
+        ErpWriteLog.objects.bulk_create(rows)
+
+
+class _Recorded:
+    """A statement's result; the id it hands back goes into the log."""
+
+    def __init__(self, result, row: ErpWriteLog):
+        self.result, self.row = result, row
+
+    def scalar(self):
+        value = self.result.scalar()
+        self.row.result = str(value)
+        return value
 
 
 # -----------------------------------------------------------------------------
@@ -214,17 +258,23 @@ def push(invoice: Invoice) -> None:
     rows = plan(invoice)
     at = timezone.localtime()
     mark = f"site:{invoice.pk}"
-    with get_engine().begin() as db:
-        invoice_id = db.execute(text("SELECT TOP 1 Id FROM Invoices WHERE CreatedBy = :m"), {"m": mark}).scalar()
-        if not invoice_id:
-            customer_id = _customer_id(db, invoice, at)
-            address_id = _address_id(db, invoice, customer_id, at)
-            invoice_id = _insert(db, "Invoices", {
-                **rows.invoice, "CustomerId": customer_id, "CustomerAddressId": address_id, "CouponId": _use_coupon(db, invoice, customer_id, at),
-                "GiftCardId": _use_gift_card(db, invoice), **_stamp(at, mark),
-            })
-            for row in rows.details:
-                _insert(db, "InvoiceDetails", {**row, "InvoiceId": invoice_id, **_stamp(at)})
-            for row in rows.payments:
-                _insert(db, "InvoicePayments", {**row, "InvoiceId": invoice_id, **_stamp(at)})
+    db = _Logged(invoice.pk)
+    try:
+        with get_engine().begin() as db.db:
+            invoice_id = db.execute(text("SELECT TOP 1 Id FROM Invoices WHERE CreatedBy = :m"), {"m": mark}).scalar()
+            if not invoice_id:
+                customer_id = _customer_id(db, invoice, at)
+                address_id = _address_id(db, invoice, customer_id, at)
+                invoice_id = _insert(db, "Invoices", {
+                    **rows.invoice, "CustomerId": customer_id, "CustomerAddressId": address_id, "CouponId": _use_coupon(db, invoice, customer_id, at),
+                    "GiftCardId": _use_gift_card(db, invoice), **_stamp(at, mark),
+                })
+                for row in rows.details:
+                    _insert(db, "InvoiceDetails", {**row, "InvoiceId": invoice_id, **_stamp(at)})
+                for row in rows.payments:
+                    _insert(db, "InvoicePayments", {**row, "InvoiceId": invoice_id, **_stamp(at)})
+    except Exception as exc:
+        db.save(str(exc))
+        raise
+    db.save()
     Invoice.objects.filter(pk=invoice.pk).update(erp_invoice_id=invoice_id, erp_sent_at=timezone.now(), erp_error="")
