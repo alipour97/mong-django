@@ -767,3 +767,49 @@ class TestPaymentTests(TestCase):
     @override_settings(SNAPPAY_IS_STAGE=False)
     def test_a_live_snapppay_payment_is_real(self):
         self.assertFalse(self.finish("snapppay").is_test)
+
+
+class OriginalImagesTests(TestCase):
+    def rows(self):
+        def sku(color, code, *urls):
+            return {"color": color, "barcode": code, "all_barcodes": [code, code + "x"], "images": [{"url": u} for u in urls]}
+        return [
+            {"subcode": "111", "skus": [sku("مشکی", "b1", "http://l/a.jpg", "http://l/b.jpg")]},
+            {"subcode": "222", "skus": [sku("سفید", "b2", "http://l/c.jpg")]},
+            {"subcode": "333", "skus": [sku("سفید", "b3", "http://l/d.jpg")]},
+            {"subcode": "444", "skus": [sku("سفید", "nope", "http://l/e.jpg")]},
+        ]
+
+    def run_add(self, **kwargs):
+        barcodes = [("b1", 1, 10), ("b2x", 2, 20), ("b3", 3, 30)]
+        with mock.patch("apps.erp.lebazai.get_connector", return_value=mock.Mock(barcodes=lambda: barcodes)), \
+                mock.patch("apps.erp.lebazai.lebazai_originals", side_effect=lambda **kw: [r for r in self.rows() if r["subcode"] in kw.get("subcodes", [r["subcode"]])]), \
+                mock.patch("apps.erp.lebazai.images.build"), mock.patch("apps.erp.lebazai.images.is_built", return_value=False), \
+                mock.patch("apps.erp.lebazai.requests.get", return_value=mock.Mock(content=b"x", raise_for_status=lambda: None)):
+            return lebazai.add_originals(log=lambda line: None, **kwargs)
+
+    def test_the_first_n_products_on_sale_get_their_originals(self):
+        result = self.run_add(departments=["a/b/c"], count=2)
+        self.assertEqual((result["products"], result["images"]), (2, 3))
+        self.assertEqual(sorted(LebazaiImage.objects.values_list("product_id", "color_id")), [(1, 10), (1, 10), (2, 20)])
+        self.assertTrue(all(k.startswith("lo/") for k in LebazaiImage.objects.values_list("key", flat=True)))
+
+    def test_a_second_run_picks_the_same_products(self):
+        self.run_add(departments=["a/b/c"], count=1)
+        self.run_add(departments=["a/b/c"], count=1)
+        self.assertEqual(set(LebazaiImage.objects.values_list("product_id", flat=True)), {1})
+        self.assertEqual(LebazaiImage.objects.count(), 2)
+
+    def test_a_product_with_approved_photos_is_left_alone(self):
+        LebazaiImage.objects.create(product_id=1, color_id=10, key="lz/x", source_url="http://x")
+        self.run_add(departments=["a/b/c"], count=1)
+        self.assertEqual(set(LebazaiImage.objects.exclude(key="lz/x").values_list("product_id", flat=True)), {2})
+
+    def test_the_given_subcode_is_among_the_n(self):
+        result = self.run_add(departments=["a/b/c"], count=2, subcodes=["333"])
+        self.assertEqual(set(LebazaiImage.objects.values_list("product_id", flat=True)), {1, 3})
+        self.assertEqual(result["products"], 2)
+
+    def test_dry_run_saves_nothing(self):
+        self.assertEqual(self.run_add(departments=["a/b/c"], count=2, dry_run=True)["products"], 2)
+        self.assertFalse(LebazaiImage.objects.exists())

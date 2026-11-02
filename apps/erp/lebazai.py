@@ -42,8 +42,106 @@ def lebazai_images() -> dict[str, list[str]]:
     return data
 
 
-def _key(url: str) -> str:
-    return "lz/" + hashlib.sha1(url.encode()).hexdigest()
+def _key(url: str, prefix: str = "lz/") -> str:
+    return prefix + hashlib.sha1(url.encode()).hexdigest()
+
+
+# Original (unedited) photos for departments where the approved ones do not suit, e.g. socks. The
+# nightly sync_images only removes lz/ keys, so these stay until they are removed by hand.
+ORIGINAL_PREFIX = "lo/"
+
+
+def lebazai_originals(*, department: str = "", subcodes: list[str] = (), kind: str = "all",
+                      per_color: int | None = None) -> list[dict]:
+    """The products of /original_images/ (format=grouped) for one department path ("a/b/c") or some subcodes."""
+    params = {"brand": settings.LEBAZAI_IMAGE_BRAND, "format": "grouped", "kind": kind}
+    if per_color:
+        params["limit_per_sku"] = per_color
+    if subcodes:
+        params["subcode"] = ",".join(subcodes)
+    for level, title in enumerate((p.strip() for p in department.split("/") if p.strip()), start=1):
+        params[f"department{level}"] = title
+    reply = requests.get(f"{settings.LEBAZAI_API_URL}/original_images/", params=params, timeout=LEBAZAI_TIMEOUT,
+                         verify=getattr(settings, "LEBAZAI_VERIFY_TLS", True),
+                         headers={"X-API-Key": settings.LEBAZAI_API_KEY, "Accept": "application/json"})
+    if reply.status_code != 200:
+        raise SourceError(f"LEBAZAI: HTTP {reply.status_code} on original_images")
+    try:
+        return reply.json().get("products") or []
+    except (ValueError, AttributeError) as exc:
+        raise SourceError("LEBAZAI: unreadable reply on original_images") from exc
+
+
+def add_originals(*, departments: list[str], count: int, subcodes: list[str] = (), kind: str = "all",
+                  per_color: int | None = None, with_photos: bool = False, dry_run: bool = False,
+                  log: Log = logger.info) -> dict:
+    """
+    Gives `count` products of each department their original LEBAZAI photos (the subcodes are always among
+    them, counted in the first department). Products with approved photos are left as they are unless
+    with_photos; products that already got originals count, so a second run picks the same products.
+    """
+    variant_of: dict[str, tuple[int, int]] = {code: (pid, color) for code, pid, color in get_connector().barcodes()}
+    held_back = {pid for pid in LebazaiImage.objects.exclude(key__startswith=ORIGINAL_PREFIX).values_list("product_id", flat=True)}
+
+    def products_of(rows: list[dict]) -> dict[str, dict]:
+        """subcode -> {"pid", "colors": {color_id: [url]}} for the rows that are on sale here."""
+        found: dict[str, dict] = {}
+        for row in rows:
+            colors: dict[int, list[str]] = {}
+            pid = None
+            for sku in row.get("skus") or []:
+                urls = [i["url"] for i in sku.get("images") or [] if i.get("url")]
+                codes = [str(c).strip() for c in [sku.get("barcode"), *(sku.get("all_barcodes") or [])] if c]
+                hit = next((variant_of[c] for c in codes if c in variant_of), None)
+                if hit and urls:
+                    pid = hit[0]
+                    colors.setdefault(hit[1], []).extend(u for u in urls if u not in colors.get(hit[1], []))
+            if pid is not None:
+                found[str(row.get("subcode"))] = {"pid": pid, "colors": colors}
+        return found
+
+    chosen: dict[str, dict] = {}
+    missing = []
+    if subcodes:
+        forced = products_of(lebazai_originals(subcodes=list(subcodes), kind=kind, per_color=per_color))
+        missing = [s for s in subcodes if s not in forced]
+        chosen.update(forced)
+    for n, department in enumerate(departments):
+        picked = 0 if n else len(chosen)
+        for subcode, item in products_of(lebazai_originals(department=department, kind=kind, per_color=per_color)).items():
+            if picked >= count:
+                break
+            if subcode in chosen or (item["pid"] in held_back and not with_photos):
+                continue
+            chosen[subcode] = item
+            picked += 1
+        log(f"{department}: {picked} products")
+
+    built = failed = images_added = 0
+    for subcode, item in chosen.items():
+        for color_id, urls in item["colors"].items():
+            for position, url in enumerate(urls):
+                key = _key(url, ORIGINAL_PREFIX)
+                if dry_run:
+                    images_added += 1
+                    continue
+                if not images.is_built(key):
+                    try:
+                        reply = requests.get(url, timeout=IMAGE_TIMEOUT)
+                        reply.raise_for_status()
+                        images.build(key, reply.content)
+                        built += 1
+                    except (requests.RequestException, OSError, ValueError) as exc:
+                        log(f"image {url}: {exc}")
+                        failed += 1
+                        continue
+                LebazaiImage.objects.update_or_create(
+                    product_id=item["pid"], color_id=color_id, key=key,
+                    defaults={"source_url": url, "position": 100 + position})  # after the approved photos, if any
+                images_added += 1
+    log(f"originals: {len(chosen)} products, {images_added} images ({built} built, {failed} failed)"
+        + (f", subcodes not on sale or without photos: {', '.join(missing)}" if missing else ""))
+    return {"products": len(chosen), "images": images_added, "built": built, "failed": failed, "missing": missing}
 
 
 def sync_images(log: Log = logger.info) -> dict:

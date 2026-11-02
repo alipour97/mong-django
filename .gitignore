@@ -91,12 +91,13 @@ _src/
 .Trashes
 ehthumbs.db
 Thumbs.db
+db.samian.sqlite3
 
 # SQLite WAL files
 db.sqlite3-shm
 db.sqlite3-wal
 deploy/nginx/build/
-*.json
+# *.json
 mong_front/.next-test/
 third-party.mong.ir/
 snappay/
