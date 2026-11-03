@@ -1,9 +1,9 @@
 """
 Dashboard/*, Report/*, Invoice/DailyCounts|InvoiceCountByHour, Products/TopSelling* — the admin home page.
 
-"Invoices" here are successful online orders in Samian, as on the invoices page.
-Best sellers count every confirmed Mong sale from every branch (Lebaza's too),
-the same sales the site's best-seller sort uses.
+Everything here is the online shop's own: its paid orders (the site's and, imported, the old site's) and its
+customers, never the branches' sales. Test orders are left out. The site's best-seller sort is a different
+number: every branch's sales (`sales` job in apps/erp/jobs.py).
 
     GET  Dashboard/Date | Dashboard/DashboardNotif | Dashboard/SynchronizationStatus | Dashboard/Search?query=
     POST Dashboard/SyncRun {job}    GET Dashboard/SyncRun?id=   (a sync job by hand, then its result)
@@ -24,11 +24,11 @@ from django.utils import timezone
 
 from apps.erp import jobs
 from apps.erp.models import SyncRun
-from apps.samian.models import SamianProduct, SamianSalesRow, SamianSalesTransaction, SamianSyncLog
+from apps.samian.models import SamianSyncLog
 from apps.storefront import catalog
 from apps.storefront.envelope import _g2j, jalali
 from apps.website.models import (
-    Article, Category, Collection, Customer, FileFormat, FileMedia, Product, ProductComment, ProductSamianLink,
+    Article, Category, Collection, Customer, FileFormat, FileMedia, Invoice, InvoiceLine, Product, ProductComment,
 )
 
 from .. import products as index
@@ -37,7 +37,6 @@ from ..models import AdminUser
 from ..paging import int_list, to_int
 from .auth import AdminView
 
-CONFIRMED = 1  # Samian transaction status «تاييد شده»; 2 «معلق» is a held, unfinished sale
 
 
 # -----------------------------------------------------------------------------
@@ -69,14 +68,13 @@ def _aware(d: date) -> datetime:
 
 
 def _sales():
-    """Invoices: successful online orders (the invoices page's state 3)."""
-    from .invoices import SUCCESSFUL, _in_state
-    return _in_state(SamianSalesTransaction.objects.filter(store_order_id__isnull=False), SUCCESSFUL)
+    """The online shop's paid orders, without test ones."""
+    return Invoice.objects.filter(state=Invoice.State.SUCCESSFUL, is_deleted=False, is_test=False)
 
 
 def _in_month(qs, jy: int, jm: int):
     start, end = month_range(jy, jm)
-    return qs.filter(transaction_date__gte=_aware(start), transaction_date__lt=_aware(end))
+    return qs.filter(created__gte=_aware(start), created__lt=_aware(end))
 
 
 # -----------------------------------------------------------------------------
@@ -144,7 +142,7 @@ class DailyCountsView(AdminView):
                 start, end = month_range(y, m)
                 per_day = Counter(
                     timezone.localtime(t).date()
-                    for t in _in_month(_sales(), y, m).values_list("transaction_date", flat=True)
+                    for t in _in_month(_sales(), y, m).values_list("created", flat=True)
                 )
                 result[f"{y}-{m}"] = [
                     {"day": i + 1, "count": per_day.get(start + timedelta(days=i), 0)} for i in range((end - start).days)
@@ -160,36 +158,20 @@ class CountByHourView(AdminView):
 
     def get(self, request):
         jy, jm, _ = today_j()
-        hours = [timezone.localtime(t).hour for t in _in_month(_sales(), jy, jm).values_list("transaction_date", flat=True)]
+        hours = [timezone.localtime(t).hour for t in _in_month(_sales(), jy, jm).values_list("created", flat=True)]
         return ok({"result": [
             {"period": name, "periodTime": label, "count": sum(1 for h in hours if lo <= h < hi)} for name, label, lo, hi in PERIODS
         ]})
 
 
-def _sold_rows():
-    """Confirmed Mong sales rows of the last BEST_SELLER_DAYS."""
-    since = timezone.localdate() - timedelta(days=settings.BEST_SELLER_DAYS)
-    return SamianSalesRow.objects.filter(report_date__gte=since, samian_product__isnull=False, transaction__status_id=CONFIRMED)
-
-
-def _site_product_of() -> dict[int, int]:
-    """SamianProduct pk -> site product id."""
-    samian_pk = dict(SamianProduct.objects.values_list("samian_id", "pk"))
-    return {samian_pk[sid]: pid for pid, sid in ProductSamianLink.objects.values_list("product_id", "samian_product_id") if sid in samian_pk}
-
-
 def _net_sold() -> tuple[dict[int, float], dict[int, set]]:
-    """site product id -> net units sold, and -> the transactions it was sold in."""
-    product_of = _site_product_of()
+    """Site product id -> units sold in the online shop's paid orders, and -> those orders."""
     units: dict[int, float] = defaultdict(float)
     tx: dict[int, set] = defaultdict(set)
-    for spk, is_return, qty, tid in _sold_rows().values_list("samian_product_id", "is_return", "quantity", "transaction_id"):
-        pid = product_of.get(spk)
-        if pid is None:
-            continue
-        units[pid] += -abs(float(qty)) if is_return else float(qty)  # returns are stored negative already
-        if not is_return:
-            tx[pid].add(tid)
+    for pid, qty, iid in InvoiceLine.objects.filter(invoice__in=_sales(), product_id__isnull=False).values_list(
+            "product_id", "qty", "invoice_id"):
+        units[pid] += float(qty)
+        tx[pid].add(iid)
     return units, tx
 
 
@@ -263,18 +245,37 @@ def sync_run(run) -> dict | None:
     }
 
 
+PERCENT = {"ok": 100, "late": 70, "error": 0}  # the panel's old lights: 80 and up green, under 50 red
+
+
 def _job_status(job) -> dict:
-    auto = jobs.last(job.key, SyncRun.Trigger.AUTO)
-    latest = jobs.last(job.key)
-    late = auto is None or auto.started_at < timezone.now() - 2 * job.every - timedelta(minutes=5)
-    done = bool(auto and auto.ok and not late)
+    finished, latest = jobs.last_finished(job.key), jobs.last(job.key)
+    state = jobs.state(job, finished)
     return {
         "operationKey": job.key, "operationName": job.title, "operationDescription": job.period,
-        "status": "در حال اجرا" if latest and latest.ok is None else ("موفق" if done else "ناموفق یا عقب"),
-        "percentage": 100 if done else 0, "totalItems": 0,
-        "lastTransaction": (auto.finished_at or auto.started_at).isoformat() if auto else "",
-        "periodStep": job.period, "operationDone": done,
-        "canRun": True, "late": late, "lastAuto": sync_run(auto), "lastRun": sync_run(latest),
+        "status": {"ok": "موفق", "late": "طبق برنامه اجرا نشده", "error": "خطا"}[state], "state": state,
+        "percentage": PERCENT[state], "totalItems": 0,
+        "lastTransaction": (finished.finished_at or finished.started_at).isoformat() if finished else "",
+        "periodStep": job.period, "operationDone": state == "ok",
+        "canRun": True, "late": state == "late", "lastAuto": sync_run(finished), "lastRun": sync_run(latest),
+    }
+
+
+def _pending() -> dict:
+    """Not a job: whether paid orders or payments are still on their way. Green when nothing is left."""
+    from apps.erp import outbox
+    from apps.payhub import service as payhub
+
+    waiting = outbox.waiting().filter(Q(paid_at__isnull=True) | Q(paid_at__lt=timezone.now() - timedelta(minutes=5)))  # a fresh one is on its way
+    queued, failing, unclear = waiting.count(), waiting.exclude(erp_error="").count(), payhub.unclear()
+    state = "error" if failing else "late" if queued or unclear else "ok"
+    lines = [f"{queued} فاکتور پرداخت‌شده هنوز به نرم‌افزار فروش نرفته"] + (
+        [f"{failing} فاکتور با خطا مانده"] if failing else []) + [f"{unclear} پرداخت نامعلوم"]
+    return {
+        "operationKey": "pending", "operationName": "فاکتور و پرداخت ثبت‌نشده", "operationDescription": "، ".join(lines),
+        "status": "، ".join(lines), "state": state, "percentage": PERCENT[state], "totalItems": queued + unclear,
+        "lastTransaction": "", "periodStep": "", "operationDone": state == "ok",
+        "canRun": False, "late": False, "lastAuto": None, "lastRun": None, "lines": lines,
     }
 
 
@@ -294,20 +295,18 @@ def _samian_steps() -> list[dict]:
     return items
 
 
-def _average(items: list[dict]) -> int:
-    return round(sum(i["percentage"] for i in items) / len(items)) if items else 100
-
-
 class SyncStatusView(AdminView):
     def get(self, request):
         incoming = [_job_status(j) for j in jobs.JOBS.values() if j.direction == "in"]
-        outgoing = [_job_status(j) for j in jobs.JOBS.values() if j.direction == "out"]
+        outgoing = [_job_status(j) for j in jobs.JOBS.values() if j.direction == "out"] + [_pending()]
         if settings.ERP_CONNECTOR == "samian":
             incoming += _samian_steps()
+        states_in = [i.get("state") or ("ok" if i["operationDone"] else "error") for i in incoming]
+        states_out = [i["state"] for i in outgoing]
         return ok({"result": {
-            "totalIncomingPercentage": _average(incoming), "totalOutgoingPercentage": _average(outgoing),
-            "incomingOperationDone": all(i["operationDone"] for i in incoming),
-            "outgoingOperationDone": all(i["operationDone"] for i in outgoing),
+            "totalIncomingPercentage": PERCENT[jobs.worst(states_in)], "totalOutgoingPercentage": PERCENT[jobs.worst(states_out)],
+            "incomingState": jobs.worst(states_in), "outgoingState": jobs.worst(states_out),
+            "incomingOperationDone": jobs.worst(states_in) == "ok", "outgoingOperationDone": jobs.worst(states_out) == "ok",
             "incomingData": incoming, "outgoingData": outgoing,
         }})
 

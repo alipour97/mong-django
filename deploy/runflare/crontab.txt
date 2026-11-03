@@ -1,8 +1,11 @@
-# The dadeh service on Runflare (ERP_CONNECTOR=dadehfa).
+# The dadeh service on Runflare (ERP_CONNECTOR=dadehfa). One Runflare cron job per line.
+# Each run is also logged in /app/public/logs/app-<date>.log and shown in the admin panel's sync widget;
+# cron.log keeps what a command prints that the log does not (a crash before Django starts).
 # Products, categories, prices, stock, coupons and gift cards: every 5 minutes.
-*/5 * * * * cd /app && python manage.py sync_erp >> /app/public/sync.log 2>&1
-# New LEBAZAI images and AI copy: nightly.
-0 4 * * * cd /app && python manage.py sync_lebazai_images >> /app/public/sync.log 2>&1
-# Paid orders on their way to the software, and the payment hub's unclear payments.
-* * * * * cd /app && python manage.py erp_outbox >> /app/public/outbox.log 2>&1
-*/5 * * * * cd /app && python manage.py payhub_reconcile >> /app/public/payhub.log 2>&1
+*/5 * * * * cd /app && python manage.py sync_erp >> /app/public/logs/cron.log 2>&1
+# Paid orders to the software, and the payment hub's unclear payments when one is due: every minute.
+* * * * * cd /app && python manage.py erp_outbox >> /app/public/logs/cron.log 2>&1
+# Every branch's sales (best-seller sort) and the old site's new orders: hourly.
+15 * * * * cd /app && python manage.py sync_sales >> /app/public/logs/cron.log 2>&1
+# New LEBAZAI images and AI copy: nightly (00:30 UTC = 04:00 Tehran).
+30 0 * * * cd /app && python manage.py sync_lebazai_images >> /app/public/logs/cron.log 2>&1

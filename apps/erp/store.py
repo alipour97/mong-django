@@ -118,6 +118,8 @@ def apply(read: Read, *, force: bool = False) -> dict:
     held = Product.objects.filter(on_sale=True).count()
     if not force and len(read.products) < held * MIN_SHARE:
         raise SourceError(f"only {len(read.products)} products in this read against {held} on sale, kept what we have")
+    prices = {pid: (price, sale) for pid, price, sale in Product.objects.filter(on_sale=True).values_list("id", "price", "sale_price")}
+    stock = _stock_by_variant()
     with transaction.atomic():
         _merge(Brand, read.brands)
         _merge(Category, read.categories)
@@ -133,8 +135,22 @@ def apply(read: Read, *, force: bool = False) -> dict:
         if get_connector().holds_stock:
             hold_open_orders()
         SyncState.objects.update_or_create(name=SYNC_NAME, defaults={"at": timezone.now()})
+    stock_after = _stock_by_variant()
+    selling = {row["id"]: row for row in read.products}
     return {"products": len(read.products), "variants": len(read.variants), "stock": len(read.stock),
-            "coupons": len(read.coupons), "gift_cards": len(read.gift_cards)}
+            "coupons": len(read.coupons), "gift_cards": len(read.gift_cards),
+            # what changed, for the admin panel
+            "came_on_sale": len(selling.keys() - prices.keys()), "went_off_sale": len(prices.keys() - selling.keys()),
+            "repriced": sum(1 for pid, (price, sale) in prices.items() if pid in selling
+                            and (selling[pid].get("price", price), selling[pid].get("sale_price", sale)) != (price, sale)),
+            "restocked": sum(1 for vid in stock.keys() | stock_after.keys() if stock.get(vid, 0) != stock_after.get(vid, 0))}
+
+
+def _stock_by_variant() -> dict[int, Decimal]:
+    totals: dict[int, Decimal] = {}
+    for vid, qty in VariantStock.objects.values_list("variant_id", "qty"):
+        totals[vid] = totals.get(vid, 0) + qty
+    return totals
 
 
 def synced_at():

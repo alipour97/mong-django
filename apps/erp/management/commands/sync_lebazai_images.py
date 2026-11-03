@@ -8,6 +8,6 @@ class Command(BaseCommand):
     help = "دریافت عکس‌های تاییدشده و پروفایل هوش مصنوعی از LEBAZAI"
 
     def handle(self, *args, **opts):
-        failed = [done.error for done in (jobs.run(key, log=self.stdout.write) for key in ("images", "profiles")) if not done.ok]
-        if failed:
-            raise CommandError("; ".join(failed))
+        done = jobs.run("lebazai", log=self.stdout.write)
+        if not done.ok:
+            raise CommandError(done.error)

@@ -7,9 +7,12 @@ which runs the job in a thread and returns at once, because a full read of the s
 a request may.
 
     erp       products, categories, prices, stock, coupons and gift cards from the sales software
-    images    approved photos from LEBAZAI
-    profiles  AI copy of the products from LEBAZAI
-    outbox    paid invoices to the sales software
+    lebazai   approved photos and the AI copy of the products from LEBAZAI
+    sales     every branch's sales for the best-seller sort, and the old site's new orders
+    outbox    paid invoices to the sales software, and the payment hub's unclear payments when one is due
+
+A job's state for the panel: "ok" when its last run worked and was on time, "late" when it has not run on
+schedule (yellow), "error" when its last run failed (red). A run by hand counts like a scheduled one.
 """
 from __future__ import annotations
 
@@ -21,7 +24,6 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from django.db import close_old_connections
-from django.db.models import Sum
 from django.utils import timezone
 
 from .models import SyncRun
@@ -42,15 +44,6 @@ class Job:
     work: Callable[[Callable[[str], None]], list[str]]  # returns what changed, in Persian
 
 
-def _snapshot() -> tuple[dict, dict]:
-    from apps.website.models import Product, VariantStock
-
-    products = {pid: (on_sale, price, sale_price)
-                for pid, on_sale, price, sale_price in Product.objects.values_list("id", "on_sale", "price", "sale_price")}
-    stock = dict(VariantStock.objects.values("variant_id").annotate(q=Sum("qty")).values_list("variant_id", "q"))
-    return products, stock
-
-
 def _erp(log) -> list[str]:
     from apps.storefront import catalog
 
@@ -61,67 +54,81 @@ def _erp(log) -> list[str]:
         from django.core.management import call_command
 
         call_command("sync_samian_erp")
-    products, stock = _snapshot()
-    read = connector.sync(log=log)
+    r = connector.sync(log=log)
     catalog.clear_caches()
-    products_after, stock_after = _snapshot()
-
-    def selling(p):
-        return p is not None and p[0]
-
-    added = sum(1 for pid, p in products_after.items() if selling(p) and not selling(products.get(pid)))
-    removed = sum(1 for pid, p in products.items() if selling(p) and not selling(products_after.get(pid)))
-    priced = sum(1 for pid, p in products_after.items()
-                 if selling(p) and selling(products.get(pid)) and p[1:] != products[pid][1:])
-    stocked = sum(1 for vid in stock.keys() | stock_after.keys() if (stock.get(vid) or 0) != (stock_after.get(vid) or 0))
     return [
-        f"قیمت {priced} کالا تغییر کرد",
-        f"موجودی {stocked} تنوع تغییر کرد",
-        f"{added} کالا به فروش آمد، {removed} کالا از فروش خارج شد",
-        f"خوانده شد: {read.get('products', 0)} کالا، {read.get('variants', 0)} تنوع، "
-        f"{read.get('coupons', 0)} کوپن، {read.get('gift_cards', 0)} کارت هدیه",
+        f"قیمت {r.get('repriced', 0)} کالا تغییر کرد",
+        f"موجودی {r.get('restocked', 0)} تنوع تغییر کرد",
+        f"{r.get('came_on_sale', 0)} کالا به فروش آمد، {r.get('went_off_sale', 0)} کالا از فروش خارج شد",
+        f"خوانده شد: {r.get('products', 0)} کالا، {r.get('variants', 0)} تنوع، "
+        f"{r.get('coupons', 0)} کوپن، {r.get('gift_cards', 0)} کارت هدیه",
     ]
 
 
-def _images(log) -> list[str]:
+def _lebazai(log) -> list[str]:
     from apps.storefront import catalog
 
     from . import lebazai
 
-    r = lebazai.sync_images(log)
+    images = lebazai.sync_images(log)
+    profiles = lebazai.sync_profiles(log)
     catalog.clear_caches()
-    lines = [f"{r['added']} عکس تازه، {r['moved']} جابه‌جا، {r['removed']} حذف", f"{r['built']} عکس دانلود و ساخته شد"]
-    if r["failed"]:
-        lines.append(f"{r['failed']} عکس دانلود نشد")
+    lines = [f"{images['added']} عکس تازه، {images['moved']} جابه‌جا، {images['removed']} حذف",
+             f"{images['built']} عکس دانلود و ساخته شد"]
+    if images["failed"]:
+        lines.append(f"{images['failed']} عکس دانلود نشد")
+    lines.append(f"اطلاعات {profiles['saved']} کالا به‌روز شد، {profiles['missing']} کالا در LEBAZAI اطلاعات ندارد")
     return lines
 
 
-def _profiles(log) -> list[str]:
+def _sales(log) -> list[str]:
+    from io import StringIO
+
     from apps.storefront import catalog
+    from apps.website.models import Product
 
-    from . import lebazai
+    from .connector import get_connector
 
-    r = lebazai.sync_profiles(log)
-    catalog.clear_caches()
-    return [f"اطلاعات {r['saved']} کالا ذخیره شد", f"{r['missing']} کالا در LEBAZAI اطلاعات ندارد"]
+    connector = get_connector()
+    lines = []
+    sold = connector.sold()
+    if sold is not None:
+        changed = [Product(id=pid, sold=sold.get(pid, 0.0))
+                   for pid, held in Product.objects.values_list("id", "sold") if held != sold.get(pid, 0.0)]
+        Product.objects.bulk_update(changed, ["sold"], batch_size=2000)
+        catalog.clear_caches()
+        lines.append(f"فروش {len(changed)} کالا به‌روز شد ({sum(1 for n in sold.values() if n > 0)} کالا فروش دارند)")
+        log(f"sales: {len(changed)} products changed")
+    if connector.name == "dadehfa":  # the old site still sells; its new orders join the panel's numbers
+        from .management.commands.import_dadehfa_orders import Command as ImportOrders
+
+        importer = ImportOrders(stdout=StringIO())
+        importer.handle(new=True)
+        lines.append(f"{importer.new_invoices} سفارش تازه از سایت قدیم")
+    return lines
 
 
 def _outbox(log) -> list[str]:
+    from apps.payhub import service as payhub
+
     from . import outbox
 
+    looked = payhub.reconcile_if_due()
     r = outbox.run(log)
     lines = [f"{r['sent']} فاکتور به نرم‌افزار فروش رفت"]
     if r["failed"]:
         lines.append(f"{r['failed']} فاکتور نرفت (علت در صفحهٔ فاکتور)")
     if r["taken"]:
         lines.append(f"{r['taken']} فاکتور را نرم‌افزار فروش برداشت")
+    if looked:
+        lines.append(f"{looked} پرداخت نامعلوم بررسی شد")
     return lines
 
 
 JOBS = {job.key: job for job in (
     Job("erp", "کالا، قیمت، موجودی، کوپن و کارت هدیه", "in", "هر ۵ دقیقه", timedelta(minutes=5), _erp),
-    Job("images", "عکس محصولات از LEBAZAI", "in", "هر شب", timedelta(days=1), _images),
-    Job("profiles", "اطلاعات و متن محصولات از LEBAZAI", "in", "هر شب", timedelta(days=1), _profiles),
+    Job("lebazai", "عکس و اطلاعات محصولات از LEBAZAI", "in", "هر شب", timedelta(days=1), _lebazai),
+    Job("sales", "داده‌های فروش", "in", "هر ساعت", timedelta(hours=1), _sales),
     Job("outbox", "ارسال فاکتورهای پرداخت‌شده", "out", "هر دقیقه", timedelta(minutes=1), _outbox),
 )}
 
@@ -188,3 +195,20 @@ def last(key: str, trigger: str | None = None) -> SyncRun | None:
     if trigger:
         rows = rows.filter(trigger=trigger)
     return rows.order_by("-id").first()
+
+
+def last_finished(key: str) -> SyncRun | None:
+    return SyncRun.objects.filter(job=key, ok__isnull=False).order_by("-id").first()
+
+
+def state(job: Job, finished: SyncRun | None) -> str:
+    if finished is not None and not finished.ok:
+        return "error"
+    if finished is None or finished.started_at < timezone.now() - 2 * job.every - timedelta(minutes=5):
+        return "late"
+    return "ok"
+
+
+def worst(states) -> str:
+    states = set(states)
+    return "error" if "error" in states else "late" if "late" in states else "ok"

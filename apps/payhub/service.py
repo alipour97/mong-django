@@ -24,6 +24,7 @@ from datetime import timedelta
 from urllib.parse import quote
 
 from django.conf import settings
+from django.db.models import Q
 from django.utils import timezone
 
 from . import snapppay, zarinpal
@@ -439,6 +440,24 @@ def _resolve(record: PayRecord) -> None:
         _set(record, S.REVIEW, "استعلام اسنپ‌پی پاسخ نداد.")
     else:  # VERIFY, PENDING, or a second inquiry that failed too
         _revert(record, NOT_CONFIRMED)
+
+
+def _due(now) -> Q:
+    """The payments reconcile() has something to do with now."""
+    return (Q(state__in=(S.VERIFYING, S.CONFIRMING), updated__lt=now - STALE_STEP)
+            | Q(state__in=(S.CREATED, S.STARTING, S.REDIRECTED), updated__lt=now - ABANDONED_AFTER)
+            | Q(state=S.RETURNED, updated__lt=now - UNCONFIRMED_AFTER)
+            | Q(state=S.UNKNOWN, updated__lt=now - RECHECK_AFTER))
+
+
+def unclear() -> int:
+    """Payments whose end is not known yet (verifying, returned but not confirmed, unknown): the admin panel's count."""
+    return PayRecord.objects.filter(state__in=(S.VERIFYING, S.CONFIRMING, S.RETURNED, S.UNKNOWN)).count()
+
+
+def reconcile_if_due() -> int:
+    """reconcile() when one of the payments is due, so the every-minute cron mostly asks one count."""
+    return reconcile() if PayRecord.objects.filter(_due(timezone.now())).exists() else 0
 
 
 def reconcile() -> int:

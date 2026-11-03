@@ -4,6 +4,9 @@ Management command: bring customers and their order history over from DadehfaOnl
 rows that are already here are updated, and nothing the site made itself is touched.
 
     python manage.py import_dadehfa_orders
+    python manage.py import_dadehfa_orders --new   # only what is not here yet, nothing here is changed (hourly, `sales` job)
+
+The site's own invoices, which it writes to Dadehfa itself (CreatedBy 'site:<pk>'), are never brought back.
 """
 from __future__ import annotations
 
@@ -39,8 +42,15 @@ def _dt(value: datetime | None):
 
 class Command(BaseCommand):
     help = "ورود مشتریان و سابقه سفارش‌ها از DadehfaOnlineShop (فقط خواندنی)"
+    only_new = False
+    new_invoices = 0
+
+    def add_arguments(self, parser):
+        parser.add_argument("--new", action="store_true", help="فقط سفارش‌ها و مشتریان تازه؛ چیزی که هست تغییر نمی‌کند")
 
     def handle(self, *args, **opts):
+        self.only_new = bool(opts.get("new"))
+        self.new_invoices = 0
         with transaction.atomic():
             owners = self.customers()
             addresses = self.addresses(owners)
@@ -48,6 +58,12 @@ class Command(BaseCommand):
             self.orders(owners, addresses)
             self.make_room()
         self.stdout.write(self.style.SUCCESS("تمام شد"))
+
+    def _save(self, model, rows, columns) -> None:
+        if self.only_new:
+            model.objects.bulk_create(rows, batch_size=BATCH, ignore_conflicts=True)
+        else:
+            model.objects.bulk_create(rows, batch_size=BATCH, update_conflicts=True, unique_fields=["id"], update_fields=columns)
 
     def customers(self) -> dict[int, int]:
         """Old customer id -> the account here. Duplicate mobiles fall on one account, and a mobile that
@@ -68,7 +84,7 @@ class Command(BaseCommand):
                 bulletin_subscription_date=_dt(r["BulletinSubscriptionDate"]), map_id=_s(r["MapId"]), is_deleted=bool(r["IsDeleted"]),
                 created=_dt(r["Created"]), last_modified=_dt(r["LastModified"]), erp_customer_id=r["Id"],
             ))
-        Customer.objects.bulk_create(rows, batch_size=BATCH, update_conflicts=True, unique_fields=["id"], update_fields=CUSTOMER_COLUMNS)
+        self._save(Customer, rows, CUSTOMER_COLUMNS)
         self.stdout.write(f"customers: {len(rows)}")
         return owners
 
@@ -85,7 +101,7 @@ class Command(BaseCommand):
                 erp_address_id=r["Id"],
             ))
         columns = [f.name for f in CustomerAddress._meta.concrete_fields if f.name not in ("id", "samian_contact_id")]
-        CustomerAddress.objects.bulk_create(rows, batch_size=BATCH, update_conflicts=True, unique_fields=["id"], update_fields=columns)
+        self._save(CustomerAddress, rows, columns)
         self.stdout.write(f"addresses: {len(rows)}")
         return {r.id for r in rows}
 
@@ -98,7 +114,7 @@ class Command(BaseCommand):
             for r in iter_rows("SELECT * FROM CustomerFavoriteProducts") if r["CustomerId"] in owners
         ]
         columns = [f.name for f in CustomerFavoriteProduct._meta.concrete_fields if f.name != "id"]
-        CustomerFavoriteProduct.objects.bulk_create(rows, batch_size=BATCH, update_conflicts=True, unique_fields=["id"], update_fields=columns)
+        self._save(CustomerFavoriteProduct, rows, columns)
         self.stdout.write(f"favorites: {len(rows)}")
 
     def orders(self, owners: dict[int, int], addresses: set[int]) -> None:
@@ -109,7 +125,11 @@ class Command(BaseCommand):
         invoices, skipped = [], 0
         coupons = {r["Id"]: r["Serial"] for r in fetch_all("SELECT Id, Serial FROM Coupons WHERE Id IN (SELECT CouponId FROM Invoices)")}
         gifts = {r["Id"]: r["GCNum"] for r in fetch_all("SELECT Id, GCNum FROM GiftCards WHERE Id IN (SELECT GiftCardId FROM Invoices)")}
-        for r in iter_rows(f"SELECT * FROM Invoices WHERE InvoiceType IN ({GROUPS_OF_INVOICES})"):
+        here = set(Invoice.objects.values_list("id", flat=True)) if self.only_new else set()
+        for r in iter_rows(f"SELECT * FROM Invoices WHERE InvoiceType IN ({GROUPS_OF_INVOICES})"
+                           " AND ISNULL(LEFT(CreatedBy, 5), '') <> 'site:'"):
+            if r["Id"] in here:
+                continue
             if r["CustomerId"] not in owners:
                 skipped += 1
                 continue
@@ -130,11 +150,12 @@ class Command(BaseCommand):
             ))
             invoices[-1].legacy_created = _dt(r["Created"])
         columns = [f.name for f in Invoice._meta.concrete_fields if f.name not in ("id", "created", "last_modified", "samian_transaction_id", "erp_error")]
-        Invoice.objects.bulk_create(invoices, batch_size=BATCH, update_conflicts=True, unique_fields=["id"], update_fields=columns)
+        self._save(Invoice, invoices, columns)
         for chunk in range(0, len(invoices), BATCH):  # created fills itself in on insert
             Invoice.objects.bulk_update(
                 [Invoice(id=i.id, created=i.legacy_created) for i in invoices[chunk:chunk + BATCH]], ["created"])
         ids = {i.id for i in invoices}
+        self.new_invoices = len(ids)
         self.stdout.write(f"invoices: {len(ids)} ({skipped} without a customer)")
 
         id_list = ",".join(str(i) for i in sorted(ids)) or "0"
@@ -159,7 +180,7 @@ class Command(BaseCommand):
                 reduction=r["Reduction"] or 0, price_after_reduction=int(r["Price"] - (r["Discount"] / qty if qty else 0)),
             ))
         columns = [f.name for f in InvoiceLine._meta.concrete_fields if f.name != "id"]
-        InvoiceLine.objects.bulk_create(lines, batch_size=BATCH, update_conflicts=True, unique_fields=["id"], update_fields=columns)
+        self._save(InvoiceLine, lines, columns)
         self.stdout.write(f"lines: {len(lines)}")
 
         payments = [
@@ -171,7 +192,7 @@ class Command(BaseCommand):
             for r in iter_rows(f"SELECT * FROM InvoicePayments WHERE InvoiceId IN ({id_list})")
         ]
         columns = [f.name for f in InvoicePayment._meta.concrete_fields if f.name not in ("id", "created", "card_pan")]
-        InvoicePayment.objects.bulk_create(payments, batch_size=BATCH, update_conflicts=True, unique_fields=["id"], update_fields=columns)
+        self._save(InvoicePayment, payments, columns)
         self.stdout.write(f"payments: {len(payments)}")
 
     def make_room(self) -> None:

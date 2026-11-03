@@ -1,5 +1,6 @@
 -- Logins for the site on SQL Server. Run by hand in SSMS, after setting both passwords.
--- The reader sees the shop's database and nothing else. The writer can add invoices and
+-- The reader sees the shop's database, and in the sales software's own database (PTCERPNew) only the two
+-- point-of-sale tables the best-seller numbers are summed from. The writer can add invoices and
 -- what they need, and nothing more: no delete anywhere, no change to an existing invoice.
 -- The few updates are what the .NET site does to a paid invoice: the coupon or gift card it
 -- spent, the variant's Qty (and SalesCount when a voucher paid it all), the default address.
@@ -27,4 +28,11 @@ GRANT UPDATE (GCBalance, IsActive, BankPortalEndTime) ON dbo.GiftCards TO mong_w
 GRANT SELECT ON dbo.VariantFeatureValues TO mong_writer;
 GRANT SELECT, UPDATE (Qty) ON dbo.ProductVariants TO mong_writer;
 GRANT SELECT, UPDATE (SalesCount) ON dbo.Products TO mong_writer;
+GO
+
+USE PTCERPNew;
+GO
+IF USER_ID('mong_reader') IS NULL CREATE USER mong_reader FOR LOGIN mong_reader;
+GRANT SELECT ON dbo.tblPosTransactions TO mong_reader;
+GRANT SELECT ON dbo.tblPosTransactionsItems TO mong_reader;
 GO

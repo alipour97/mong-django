@@ -13,14 +13,16 @@ The rules below were worked out against the shop's own API, row by row:
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 
+from django.conf import settings
 from django.utils import timezone
 
 from apps.legacy.db import fetch_all
 from apps.storefront.catalog import norm
 from apps.website import slugs
-from apps.website.models import Invoice
+from apps.website.models import Invoice, ProductVariant
 
 from . import dadehfa_write, store
 from .connector import Connector, Log
@@ -28,6 +30,7 @@ from .models import ErpCoupon, ErpGiftCard
 
 PRICE_STEP = 10_000
 
+READERS = 4  # the reader engine's pool holds 2 + 2
 ON_SALE = """
     FROM Products p
     WHERE p.IsDeleted = 0 AND p.IsActive = 1 AND p.IsSaleable = 1 AND p.Price > 0
@@ -70,7 +73,7 @@ def _categories() -> list[dict]:
 
 def _products(brand_ids: set[int], category_ids: set[int]) -> list[dict]:
     rows = fetch_all(f"""
-        SELECT p.Id, p.Title, p.Slug, p.HasManualSlug, p.CategoryId, p.BrandId, p.Barcode, p.Price, p.Reduction, p.VAT, p.SalesCount, p.Created
+        SELECT p.Id, p.Title, p.Slug, p.HasManualSlug, p.CategoryId, p.BrandId, p.Barcode, p.Price, p.Reduction, p.VAT, p.Created
         {ON_SALE}""")
     products = []
     for p in rows:
@@ -81,7 +84,7 @@ def _products(brand_ids: set[int], category_ids: set[int]) -> list[dict]:
             "barcode": _text(p["Barcode"])[:64], "category_id": p["CategoryId"] if p["CategoryId"] in category_ids else None,
             "brand_id": p["BrandId"] if p["BrandId"] in brand_ids else None, "price": price,
             "reduction": Decimal(str(reduction)).quantize(Decimal("0.001")), "sale_price": after_discount(price, reduction),
-            "vat": Decimal(str(p["VAT"] or 0)).quantize(Decimal("0.001")), "sold": float(p["SalesCount"] or 0),
+            "vat": Decimal(str(p["VAT"] or 0)).quantize(Decimal("0.001")),
             "new": {"slug": slug, "slug_key": slugs.slug_key(slug), "has_manual_slug": bool(p["HasManualSlug"]), "created": _moment(p["Created"])},
         })
     return products
@@ -112,7 +115,7 @@ def _variants() -> list[store.VariantRow]:
     return rows
 
 
-def _stock(variant_ids: set[int]) -> list[store.StockRow]:
+def _stock_rows() -> list[store.StockRow]:
     return [store.StockRow(r["vid"], r["warehouse"], r["title"] or "", r["qty"]) for r in fetch_all(f"""
         SELECT w.ProductVariantId AS vid, w.WarehouseId AS warehouse, h.WarehouseTitle AS title, SUM(w.Qty) AS qty
         FROM VariantWarehouses w
@@ -120,7 +123,7 @@ def _stock(variant_ids: set[int]) -> list[store.StockRow]:
         LEFT JOIN Warehouses h ON h.Id = w.WarehouseId
         WHERE w.IsDeleted = 0 AND v.IsDeleted = 0 AND v.ProductId IN (SELECT p.Id {ON_SALE})
         GROUP BY w.ProductVariantId, w.WarehouseId, h.WarehouseTitle
-        HAVING SUM(w.Qty) > 0""") if r["vid"] in variant_ids]
+        HAVING SUM(w.Qty) > 0""")]
 
 
 def _coupons() -> list[ErpCoupon]:
@@ -160,13 +163,34 @@ def _gift_cards() -> list[ErpGiftCard]:
 
 
 def read() -> store.Read:
+    """The queries do not wait on each other, so they run side by side: the read is as long as its longest one."""
     out = store.Read(brands=_brands(), categories=_categories())
-    out.products = _products({b["id"] for b in out.brands}, {c["id"] for c in out.categories})
-    on_sale = {p["id"] for p in out.products}
-    out.variants = [v for v in _variants() if v.product_id in on_sale]
-    out.stock = _stock({v.id for v in out.variants})
-    out.coupons, out.gift_cards = _coupons(), _gift_cards()
+    with ThreadPoolExecutor(max_workers=READERS) as pool:
+        products = pool.submit(_products, {b["id"] for b in out.brands}, {c["id"] for c in out.categories})
+        variants, stock = pool.submit(_variants), pool.submit(_stock_rows)
+        coupons, gift_cards = pool.submit(_coupons), pool.submit(_gift_cards)
+        out.products = products.result()
+        on_sale = {p["id"] for p in out.products}
+        out.variants = [v for v in variants.result() if v.product_id in on_sale]
+        ids = {v.id for v in out.variants}
+        out.stock = [row for row in stock.result() if row.variant_id in ids]
+        out.coupons, out.gift_cards = coupons.result(), gift_cards.result()
     return out
+
+
+def sold_by_barcode() -> dict[str, float]:
+    """
+    Net units sold of each barcode in every branch, over all the sales software's history: its point-of-sale
+    transactions (online sales become one too), returns counted negative. Status 2 is a finished sale.
+    """
+    db = settings.DADEHFA_SALES_DB
+    rows = fetch_all(f"""
+        SELECT i.BarCode AS barcode, SUM(i.K_Amount) AS qty
+        FROM [{db}].dbo.tblPosTransactionsItems i
+        JOIN [{db}].dbo.tblPosTransactions t ON t.tblPosTransactions_ID = i.Transactions_ID
+        WHERE i.IsDeleted = 0 AND t.IsDeleted = 0 AND t.Status = 2
+        GROUP BY i.BarCode""")
+    return {_text(r["barcode"]): float(r["qty"] or 0) for r in rows if r["barcode"]}
 
 
 class DadehfaConnector(Connector):
@@ -181,6 +205,14 @@ class DadehfaConnector(Connector):
 
     def push(self, invoice) -> None:
         dadehfa_write.push(invoice)
+
+    def sold(self) -> dict[int, float]:
+        by_barcode = sold_by_barcode()
+        sold: dict[int, float] = {}
+        for pid, barcode in ProductVariant.objects.exclude(barcode="").values_list("product_id", "barcode"):
+            if barcode in by_barcode:
+                sold[pid] = sold.get(pid, 0.0) + by_barcode[barcode]
+        return sold
 
     def follow(self, log: Log) -> None:
         sent = dict(Invoice.objects.filter(erp_invoice_id__isnull=False, erp_taken_at__isnull=True).values_list("erp_invoice_id", "pk"))

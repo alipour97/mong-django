@@ -1320,14 +1320,13 @@ class SyncJobTests(TestCase):
 
     def fake(self, **kw):
         def sync(*, force=False, log):
-            Product.objects.filter(id=1).update(price=120, sale_price=120)
-            Product.objects.filter(id=2).update(on_sale=False)
-            return {"products": 1, "variants": 0, "stock": 0, "coupons": 3, "gift_cards": 0}
-        return mock.patch("apps.erp.connector.get_connector", return_value=SimpleNamespace(name="dadehfa", sync=sync, **kw))
+            return store.apply(store.Read(products=[{"id": 1, "on_sale": True, "price": 120, "sale_price": 120}]), force=True)
+        return mock.patch("apps.erp.connector.get_connector", return_value=SimpleNamespace(
+            name="dadehfa", sync=sync, holds_stock=False, **kw))
 
     def test_the_cron_run_is_recorded_with_what_changed(self):
         from . import jobs
-        with self.fake():
+        with self.fake(), mock.patch("apps.erp.store.get_connector", return_value=SimpleNamespace(holds_stock=False)):
             call_command("sync_erp", stdout=io.StringIO())
         run = SyncRun.objects.get()
         self.assertEqual((run.job, run.trigger, run.ok), ("erp", "auto", True))
@@ -1351,15 +1350,46 @@ class SyncJobTests(TestCase):
         busy = SyncRun.objects.create(job="erp", trigger="manual")
         self.assertEqual(jobs.start("erp", background=False), busy)
         SyncRun.objects.filter(pk=busy.pk).update(started_at=timezone.now() - timedelta(hours=1))  # died with its process
-        with self.fake():
+        with self.fake(), mock.patch("apps.erp.store.get_connector", return_value=SimpleNamespace(holds_stock=False)):
             fresh = jobs.start("erp", by="a", background=False)
         self.assertNotEqual(fresh, busy)
         self.assertEqual((fresh.trigger, fresh.ok, fresh.by), ("manual", True, "a"))
 
-    def test_the_outbox_job_counts(self):
-        with mock.patch("apps.erp.outbox.run", return_value={"sent": 2, "failed": 1, "taken": 0}):
+    def test_the_outbox_job_counts_and_reconciles_only_when_due(self):
+        with mock.patch("apps.erp.outbox.run", return_value={"sent": 2, "failed": 1, "taken": 0}), \
+                mock.patch("apps.payhub.service.reconcile", side_effect=AssertionError("nothing is due")):
             call_command("erp_outbox", stdout=io.StringIO())
         self.assertEqual(SyncRun.objects.get().changes, ["2 فاکتور به نرم‌افزار فروش رفت", "1 فاکتور نرفت (علت در صفحهٔ فاکتور)"])
+
+    def test_sales_set_the_best_seller_numbers(self):
+        Product.objects.filter(id=2).update(sold=9)
+        connector = SimpleNamespace(name="other", sold=lambda: {1: 5.0})
+        with mock.patch("apps.erp.connector.get_connector", return_value=connector):
+            call_command("sync_sales", stdout=io.StringIO())
+        self.assertEqual(dict(Product.objects.values_list("id", "sold")), {1: 5.0, 2: 0.0})
+        self.assertEqual(SyncRun.objects.get().changes, ["فروش 2 کالا به‌روز شد (1 کالا فروش دارند)"])
+
+    def test_dadehfa_sales_add_up_every_barcode_of_a_product(self):
+        ProductVariant.objects.create(id=10, product_id=1, barcode="A")
+        ProductVariant.objects.create(id=11, product_id=1, barcode="B")
+        ProductVariant.objects.create(id=12, product_id=2, barcode="C")
+        rows = [{"barcode": "A", "qty": Decimal(3)}, {"barcode": "B", "qty": Decimal(-1)}, {"barcode": "Z", "qty": Decimal(7)}]
+        with mock.patch("apps.erp.dadehfa.fetch_all", return_value=rows) as fetch:
+            self.assertEqual(DadehfaConnector().sold(), {1: 2.0})
+        self.assertIn("[PTCERPNew].dbo.tblPosTransactionsItems", fetch.call_args[0][0])
+
+    def test_a_late_or_failed_job_is_yellow_or_red_and_a_manual_run_counts(self):
+        from . import jobs
+        job = jobs.JOBS["erp"]
+        self.assertEqual(jobs.state(job, None), "late")
+        run = SyncRun.objects.create(job="erp", trigger="manual", ok=True, finished_at=timezone.now())
+        self.assertEqual(jobs.state(job, jobs.last_finished("erp")), "ok")
+        SyncRun.objects.filter(pk=run.pk).update(started_at=timezone.now() - timedelta(hours=1))
+        self.assertEqual(jobs.state(job, jobs.last_finished("erp")), "late")
+        SyncRun.objects.create(job="erp", ok=False, finished_at=timezone.now(), error="x")
+        self.assertEqual(jobs.state(job, jobs.last_finished("erp")), "error")
+        self.assertEqual(jobs.worst(["ok", "late", "error"]), "error")
+        self.assertEqual(jobs.worst(["ok", "late"]), "late")
 
 
 class SyncPanelTests(TestCase):
@@ -1370,21 +1400,36 @@ class SyncPanelTests(TestCase):
         self.no_auth.start()
         self.addCleanup(self.no_auth.stop)
 
-    def test_status_shows_the_last_automatic_run_of_each_job(self):
+    def status(self):
+        return self.client.get("/api/admin/v1/Dashboard/SynchronizationStatus").json()["data"]["result"]
+
+    def test_status_shows_each_jobs_last_run_and_state(self):
         SyncRun.objects.create(job="erp", trigger="auto", ok=True, finished_at=timezone.now(), changes=["x"])
-        SyncRun.objects.create(job="erp", trigger="manual", ok=False, finished_at=timezone.now(), error="e")
-        result = self.client.get("/api/admin/v1/Dashboard/SynchronizationStatus").json()["data"]["result"]
+        SyncRun.objects.create(job="erp", trigger="manual", started_at=timezone.now())  # running now
+        result = self.status()
         erp = next(i for i in result["incomingData"] if i["operationKey"] == "erp")
-        self.assertTrue(erp["operationDone"])
+        self.assertEqual(erp["state"], "ok")
         self.assertEqual(erp["lastAuto"]["changes"], ["x"])
-        self.assertFalse(erp["lastRun"]["ok"])
-        images = next(i for i in result["incomingData"] if i["operationKey"] == "images")
-        self.assertTrue(images["late"])  # never ran
-        self.assertEqual([i["operationKey"] for i in result["outgoingData"]], ["outbox"])
+        self.assertTrue(erp["lastRun"]["running"])
+        lebazai = next(i for i in result["incomingData"] if i["operationKey"] == "lebazai")
+        self.assertEqual(lebazai["state"], "late")  # never ran
+        self.assertEqual(result["incomingState"], "late")
+        self.assertEqual([i["operationKey"] for i in result["outgoingData"]], ["outbox", "pending"])
+
+    def test_pending_turns_yellow_with_an_order_waiting_and_red_with_one_that_failed(self):
+        SyncRun.objects.create(job="outbox", ok=True, finished_at=timezone.now())
+        self.assertEqual(self.status()["outgoingState"], "ok")
+        customer = Customer.objects.create(cellphone="09120000001")
+        Invoice.objects.create(customer=customer, state=Invoice.State.SUCCESSFUL, paid_at=timezone.now() - timedelta(hours=1))
+        self.assertEqual(self.status()["outgoingState"], "late")
+        Invoice.objects.update(erp_error="refused")
+        pending = self.status()["outgoingData"][-1]
+        self.assertEqual(pending["state"], "error")
+        self.assertIn("1 فاکتور با خطا مانده", pending["lines"])
 
     def test_running_one_by_hand(self):
         with mock.patch("apps.erp.jobs.threading.Thread") as thread:
-            started = self.client.post("/api/admin/v1/Dashboard/SyncRun", {"job": "images"}, format="json").json()
+            started = self.client.post("/api/admin/v1/Dashboard/SyncRun", {"job": "lebazai"}, format="json").json()
         thread.return_value.start.assert_called_once()
         run = started["data"]["result"]
         self.assertTrue(run["running"])
@@ -1393,3 +1438,58 @@ class SyncPanelTests(TestCase):
         done = self.client.get(f"/api/admin/v1/Dashboard/SyncRun?id={run['id']}").json()["data"]["result"]
         self.assertEqual((done["running"], done["ok"], done["changes"]), (False, True, ["y"]))
         self.assertEqual(self.client.post("/api/admin/v1/Dashboard/SyncRun", {"job": "nope"}, format="json").status_code, 404)
+
+
+class DashboardTests(TestCase):
+    """The panel's numbers are the online shop's own orders, without test ones."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(AdminUser.objects.create(username="a", cellphone="09120000000"))
+        patch = mock.patch("apps.adminapi.views.auth.AdminView.authentication_classes", [])
+        patch.start()
+        self.addCleanup(patch.stop)
+        Product.objects.create(id=1, title="پرفروش", slug="p")
+        Product.objects.create(id=2, title="کم‌فروش", slug="n")
+        customer = Customer.objects.create(cellphone="09120000001")
+        for qty, pid, test, state in ((3, 1, False, 3), (1, 2, False, 3), (9, 2, True, 3), (9, 2, False, 4)):
+            invoice = Invoice.objects.create(customer=customer, state=state, is_test=test)
+            InvoiceLine.objects.create(invoice=invoice, product_id=pid, variant_id=pid, qty=qty, price=1)
+
+    def test_best_seller_and_counts(self):
+        best = self.client.get("/api/admin/v1/Products/TopSelling").json()["data"]["result"]
+        self.assertEqual((best["productId"], best["totalOrders"]), (1, 3))
+        labels = self.client.get("/api/admin/v1/Report/GetDashboardLablesReports").json()["data"]["result"]
+        self.assertEqual((labels["totalInvoices"], labels["totalCustomers"]), (2, 1))
+
+
+class ImportNewOrdersTests(TestCase):
+    def test_only_new_orders_are_added_and_the_sites_own_are_skipped(self):
+        from .management.commands import import_dadehfa_orders as importer
+        customer = Customer.objects.create(id=5, cellphone="09120000005", first_name="سایت")
+        Invoice.objects.create(id=1, customer=customer, state=3, description="already here")
+        statements = []
+
+        def rows(sql, params=None, chunk=2000):
+            statements.append(sql)
+            if "FROM Customers" in sql:
+                return iter([{"Id": 5, "CellPhone": "09120000005", "FirstName": "قدیمی", "LastName": "", "Email": None, "NationalCode": None,
+                              "BirthDate": None, "JobId": None, "IsActive": True, "IsBulletinEnable": False,
+                              "BulletinSubscriptionDate": None, "MapId": None, "IsDeleted": False, "Created": None, "LastModified": None,
+                              "ErpCustomerId": None}])
+            if "FROM Invoices" in sql:
+                base = {"CustomerId": 5, "CustomerAddressId": None, "InvoiceType": 3, "ShippingMethodId": None, "Amount": 1,
+                        "ReductionAmount": 0, "DeliveryAmount": 0, "DeductionAmount": 0, "PayableAmount": 1, "Description": "",
+                        "GiftCardId": None, "CouponId": None, "Reduction": 0, "LastModified": None, "MapId": None,
+                        "IsDeleted": False, "Created": timezone.now()}
+                return iter([{**base, "Id": 1, "Description": "changed there"}, {**base, "Id": 2}])
+            return iter([])
+
+        command = importer.Command(stdout=io.StringIO())
+        with mock.patch.object(importer, "iter_rows", side_effect=rows), mock.patch.object(importer, "fetch_all", return_value=[]):
+            command.handle(new=True)
+        self.assertEqual(command.new_invoices, 1)
+        self.assertEqual(Invoice.objects.get(id=1).description, "already here")
+        self.assertTrue(Invoice.objects.filter(id=2).exists())
+        self.assertEqual(Customer.objects.get(id=5).first_name, "سایت")
+        self.assertIn("'site:'", next(sql for sql in statements if "FROM Invoices" in sql))

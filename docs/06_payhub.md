@@ -42,7 +42,7 @@
 | `unknown` | پاسخ روشن نبود؛ بعد از ۴۰ دقیقه دوباره استعلام می‌شود |
 | `review` | **باید کارشناس بررسی کند** (در `django-admin`، فهرست «پرداخت‌های هاب») |
 
-`manage.py payhub_reconcile` هر ۵ دقیقه با cron اجرا می‌شود:
+`payhub_reconcile` را کران هر دقیقهٔ `erp_outbox` هر وقت پرداختی موعدش رسیده باشد اجرا می‌کند (دستی هم `manage.py payhub_reconcile`):
 
 - پرداختی که verify شده ولی ۲۰ دقیقه نهایی نشده است، revert می‌شود.
 - `unknown` بعد از ۴۰ دقیقه استعلام می‌شود.
@@ -72,7 +72,7 @@
 
 1. ابتدا `deploy/nginx/payhub.mong.ir.conf` نصب و SSL صادر می‌شود.
 2. سپس `manage.py migrate payhub` اجرا و gunicorn با `--timeout 120` دوباره راه‌اندازی می‌شود.
-3. خط `payhub_reconcile` از `crontab.txt` به cron اضافه می‌شود.
+3. کران `erp_outbox` از `crontab.txt` تعریف شده باشد (کران جدا برای `payhub_reconcile` لازم نیست).
 4. دامنهٔ ثبت‌شده نزد اسنپ‌پی باید `payhub.mong.ir` باشد.
 
 ## انتقال سایت قدیم

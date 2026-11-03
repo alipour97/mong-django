@@ -63,6 +63,10 @@ class Connector:
     def push(self, invoice) -> None:
         """Hands a paid invoice over. Nothing happens until the software has a way in."""
 
+    def sold(self) -> dict[int, float] | None:
+        """Site product id -> net units sold in every branch, for the best-seller sort; None if sync() sets it."""
+        return None
+
     def follow(self, log: Log) -> None:
         """Marks the invoices the software has taken."""
 

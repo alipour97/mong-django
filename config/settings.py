@@ -4,6 +4,7 @@ Django settings for mong_samian project.
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 import os
+import re
 import sys
 from dotenv import load_dotenv
 
@@ -265,6 +266,8 @@ DADEHFA_DB = {
     "USER": os.getenv("DADEHFA_DB_USER", ""),
     "PASSWORD": os.getenv("DADEHFA_DB_PASSWORD", ""),
 }
+# The sales software's own database beside it, read for every branch's sales (same login, SELECT on two tables).
+DADEHFA_SALES_DB = re.sub(r"\W", "", os.getenv("DADEHFA_SALES_DB", "PTCERPNew"))
 
 # Only these Samian brands belong to the Mong website (مانگ, توليد). Syncs skip everything else.
 SAMIAN_BRAND_IDS = [int(x) for x in os.getenv("SAMIAN_BRAND_IDS", "140430,14041").split(",") if x.strip()]

@@ -124,6 +124,7 @@ python manage.py export_media
 | `LEGACY_CDN_ROOT` | `/app/public/media/cdn` |
 | `LOGS_DIR`، `LOG_LEVEL` | لازم نیست: لاگ هر روز در `/app/public/logs/app-<تاریخ>.log` (کنار `MEDIA_ROOT`) نوشته و ۳۰ روز نگه داشته می‌شود؛ سطح پیش‌فرض `INFO` |
 | `DADEHFA_DB_USER`، `DADEHFA_DB_PASSWORD` | لاگین `mong_reader` |
+| `DADEHFA_SALES_DB` | لازم نیست؛ پیش‌فرض `PTCERPNew`، دیتابیس نرم‌افزار فروش که فروش همهٔ شعب برای مرتب‌سازی پرفروش‌ترین‌ها از آن خوانده می‌شود |
 | `DADEHFA_WRITE_DB_USER`، `DADEHFA_WRITE_DB_PASSWORD` | لاگین `mong_writer` |
 | `SMS_KEY` | کلید sms.ir برای کد ورود |
 | `ZARINPAL_SANDBOX` | `true` در تست |
