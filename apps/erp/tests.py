@@ -351,6 +351,21 @@ class WriteTests(TestCase):
         self.assertEqual((line["VariantFeatureValueId"], line["Discount"], line["Reduction"]), (901, 200000, Decimal("10.000")))
         self.assertEqual((self.db.row("InvoicePayments")["BankId"], self.invoice.erp_invoice_id is not None, self.invoice.erp_error), (1, True, ""))
         self.assertIsNotNone(self.invoice.erp_sent_at)
+        self.assertEqual((head["CreatedBy"], head["LastModified"], head["Description"]), (f"site:{self.invoice.pk}", head["Created"], "سریع"))
+
+    def test_payment_codes_like_the_shops_own(self):
+        """Zarinpal in the shop's rows: TraceNumber = Authority = the tracking code, TransactionId = Zarinpal's authority."""
+        self.invoice.payments.update(authority="A" + "0" * 40, reference="7" * 70)
+        self.push()
+        pay = self.db.row("InvoicePayments")
+        self.assertEqual((pay["TraceNumber"], pay["Authority"], pay["TransactionId"]), ("7" * 64, "7" * 64, "A" + "0" * 40))
+        self.assertEqual((pay["FullName"], pay["CellPhone"], pay["IsSuccess"]), ("علی پ", "09121234567", 1))
+
+    def test_the_shops_quantity_goes_down(self):
+        self.push()
+        taken = [p for s, p in self.db.statements if s.startswith("UPDATE ProductVariants")]
+        self.assertEqual(taken, [{"q": Decimal(2), "ref": 901}])
+        self.assertFalse(any(s.startswith("UPDATE Products ") for s, _ in self.db.statements))
 
     def test_a_known_customer_is_not_added_again(self):
         self.db = FakeDb({"FROM Customers": 7, "FROM CustomerAddresses": 8})
@@ -380,24 +395,56 @@ class WriteTests(TestCase):
         Invoice.objects.filter(pk=self.invoice.pk).update(gift_card_number="G1", gift_card_id=44, deduction_amount=500000, payable_amount=1400000)
         self.invoice.refresh_from_db()
         self.push()
-        banks = [p["BankId"] for s, p in self.db.statements if s.startswith("INSERT INTO InvoicePayments")]
-        self.assertCountEqual(banks, [1, write.GIFT_CARD_BANK])
-        self.assertTrue(any(s.startswith("UPDATE GiftCards") and p["d"] == 500000 for s, p in self.db.statements))
+        rows = [p for s, p in self.db.statements if s.startswith("INSERT INTO InvoicePayments")]
+        self.assertEqual([p["BankId"] for p in rows], [write.GIFT_CARD_BANK, 1])
+        card, gateway = rows
+        invoice_id = gateway["InvoiceId"]
+        self.assertEqual((card["TraceNumber"], card["TransactionId"], card["Authority"], card["PaymentAmount"]),
+                         (f"{invoice_id}#G#44", None, gateway["Authority"], 500000))
+        self.assertTrue(any(s.startswith("UPDATE GiftCards") and p["d"] == 500000 and p["free"] == 0 for s, p in self.db.statements))
         self.assertEqual(self.db.row("Invoices")["GiftCardId"], 44)
+
+    def test_a_card_that_paid_it_all(self):
+        Invoice.objects.filter(pk=self.invoice.pk).update(gift_card_number="G1", gift_card_id=44, deduction_amount=1900000, payable_amount=0)
+        self.invoice.payments.all().delete()
+        self.invoice.refresh_from_db()
+        self.push()
+        card = self.db.row("InvoicePayments")
+        invoice_id = card["InvoiceId"]
+        self.assertEqual((card["TraceNumber"], card["TransactionId"], card["Authority"], card["BankId"]),
+                         (f"{invoice_id}#G#G1", str(invoice_id), None, write.GIFT_CARD_BANK))
+        self.assertEqual(self.db.row("Invoices")["Description"], "سریع\r\nپرداخت با کارت هدیه")
+        self.assertTrue(any(s.startswith("UPDATE GiftCards") and p["free"] == 1 for s, p in self.db.statements))
+        self.assertTrue(any(s.startswith("UPDATE Products ") and p == {"q": 2, "ref": 901} for s, p in self.db.statements))
 
     def test_a_general_coupon_gets_the_customers_own_copy(self):
         Invoice.objects.filter(pk=self.invoice.pk).update(coupon_serial="S1")
         self.invoice.refresh_from_db()
-        self.db = FakeDb({"FROM Coupons": {"ExpiredDate": None, "MinPrice": 0, "MaxPrice": None, "Reduction": 10, "MapId": "9"}})
+        self.db = FakeDb({"CustomerId IS NULL": {"ExpiredDate": None, "MinPrice": 0, "MaxPrice": None, "Reduction": 10, "MapId": "9"}})
         self.push()
-        self.assertEqual(self.db.row("Coupons")["IsUsed"], 1)
+        self.assertEqual((self.db.row("Coupons")["IsUsed"], self.db.row("Coupons")["IsActive"]), (1, 1))
         self.assertEqual(self.db.row("Invoices")["CouponId"], self.db.next_id - 3)
 
     def test_an_own_coupon_is_marked_used(self):
         Invoice.objects.filter(pk=self.invoice.pk).update(coupon_serial="S1", coupon_id=77)
         self.invoice.refresh_from_db()
         self.push()
-        self.assertTrue(any(s.startswith("UPDATE Coupons") and p["id"] == 77 for s, p in self.db.statements))
+        self.assertTrue(any(s.startswith("UPDATE Coupons SET IsActive = 1, BankPortalEndTime = NULL, IsUsed = 1") and p["id"] == 77
+                            for s, p in self.db.statements))
+
+    def test_the_customers_own_copy_in_the_software_is_used_first(self):
+        Invoice.objects.filter(pk=self.invoice.pk).update(coupon_serial="S1")
+        self.invoice.refresh_from_db()
+        self.db = FakeDb({"CustomerId = :c": 66})
+        self.push()
+        self.assertNotIn("Coupons", self.db.tables())
+        self.assertEqual(self.db.row("Invoices")["CouponId"], 66)
+
+    def test_a_new_default_address_is_the_only_default(self):
+        CustomerAddress.objects.filter(pk=self.address.pk).update(is_default=True)
+        self.invoice.refresh_from_db()
+        self.push()
+        self.assertTrue(any(s.startswith("UPDATE CustomerAddresses SET IsDefault = 0") for s, _ in self.db.statements))
 
     def test_a_line_without_reference_stays_for_someone_to_look_at(self):
         self.invoice.lines.update(erp_ref=None)
@@ -406,7 +453,7 @@ class WriteTests(TestCase):
 
     def test_only_the_listed_statements_pass(self):
         for good in ("INSERT INTO Invoices (Amount) OUTPUT INSERTED.Id VALUES (:Amount)", "UPDATE Coupons SET IsUsed = 1 WHERE Id = :id",
-                     "SELECT TOP 1 Id FROM Customers"):
+                     "SELECT TOP 1 Id FROM Customers", "UPDATE ProductVariants SET Qty = Qty - :q WHERE Id = :id"):
             write.check(good)
         for bad in ("DELETE FROM Invoices", "UPDATE Invoices SET MapId = 1", "UPDATE Customers SET Password = ''", "INSERT INTO Products (Id) VALUES (1)",
                     "SELECT 1; DROP TABLE Invoices", "EXEC sp_who", "UPDATE GiftCards SET x = 1; DELETE FROM Coupons"):
@@ -424,10 +471,21 @@ class WriteTests(TestCase):
             with self.assertRaisesRegex(write.CannotSend, "sysadmin"):
                 write.get_engine()
 
+    def test_a_sysadmin_login_only_where_it_is_allowed(self):
+        write.get_engine.cache_clear()
+        self.addCleanup(write.get_engine.cache_clear)
+        conn = mock.MagicMock()
+        conn.__enter__.return_value.execute.return_value.scalar.return_value = 1
+        with override_settings(DADEHFA_WRITE_DB_USER="u", DADEHFA_WRITE_DB_PASSWORD="p", DADEHFA_ALLOW_SYSADMIN=True), \
+                mock.patch("apps.erp.dadehfa_write.create_engine") as engine, mock.patch("apps.erp.dadehfa_write.event"):
+            engine.return_value.connect.return_value = conn
+            self.assertIs(write.get_engine(), engine.return_value)
+
     def test_no_writing_login_no_writing(self):
         write.get_engine.cache_clear()
         self.addCleanup(write.get_engine.cache_clear)
-        with override_settings(DADEHFA_WRITE_DB_USER=""), self.assertRaises(write.CannotSend):
+        no_login = {**settings.DADEHFA_DB, "USER": "", "PASSWORD": ""}
+        with override_settings(DADEHFA_WRITE_DB_USER="", DADEHFA_DB=no_login), self.assertRaises(write.CannotSend):
             write.get_engine()
 
 
@@ -562,9 +620,11 @@ class SoftwareVoucherTests(TestCase):
         with self.assertRaises(Refused):
             self.read_coupon(general=self.coupon())
 
-    def test_a_test_payment_uses_nothing(self):
+    def test_a_test_payment_uses_it_too(self):
+        """A test order is written to the software like any other, so it spends the coupon there."""
         self.invoice(coupon_serial="S", paid_at=timezone.now(), state=Invoice.State.SUCCESSFUL, is_test=True)
-        self.assertIsNone(self.read_coupon(general=self.coupon()).id)
+        with self.assertRaises(Refused):
+            self.read_coupon(general=self.coupon())
 
     def test_what_a_paid_order_took_comes_off_the_card(self):
         self.invoice(gift_card_id=7, deduction_amount=300000, paid_at=timezone.now(), state=Invoice.State.SUCCESSFUL)
@@ -921,22 +981,28 @@ class PaidOrderTests(TestCase):
 
 
 class TestPaymentTests(TestCase):
-    """Sandbox money is not money: nothing of such an order may reach the software."""
+    """Sandbox money still makes an invoice in the software, so the whole way can be tried; its Description says it is a test."""
 
     def setUp(self):
         use_dadehfa(self)
         self.customer = Customer.objects.create(cellphone="09121234567")
 
-    def test_never_sent_and_never_held(self):
-        order(self.customer, is_test=True)
-        self.assertFalse(outbox.waiting().exists())
-        self.assertFalse(store.open_orders().exists())
+    def test_sent_and_held_like_any_other(self):
+        invoice = order(self.customer, is_test=True)
+        self.assertEqual(list(outbox.waiting()), [invoice])
+        self.assertEqual(list(store.open_orders()), [invoice])
 
     @override_settings(ERP_WRITES_ENABLED=True)
-    def test_the_writer_refuses_it_too(self):
-        invoice = order(self.customer, is_test=True)
-        with mock.patch("apps.erp.dadehfa_write.get_engine", side_effect=AssertionError):
+    def test_the_writer_writes_it_with_a_note(self):
+        address = CustomerAddress.objects.create(customer=self.customer, address="تهران", province_id=8, city_id=301)
+        invoice = order(self.customer, is_test=True, address=address, description="سریع")
+        InvoicePayment.objects.create(invoice=invoice, gateway="zarinpal", amount=1900000, authority="A", reference="R", is_success=True)
+        db, engine = FakeDb(), mock.Mock()
+        engine.begin.return_value = db
+        with mock.patch("apps.erp.dadehfa_write.get_engine", return_value=engine):
             write.push(invoice)
+        self.assertEqual(db.row("Invoices")["Description"], f"{write.TEST_MARK}\r\nسریع")
+        self.assertIsNotNone(Invoice.objects.get(pk=invoice.pk).erp_sent_at)
 
     def finish(self, gateway: str) -> Invoice:
         from apps.storefront import payments

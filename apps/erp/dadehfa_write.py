@@ -1,16 +1,19 @@
 """
 Paid invoices into DadehfaOnlineShop, the one way this project writes there. The row shapes
-copy what the .NET service leaves for a paid invoice: InvoiceType 3 with an empty MapId is
-what its SyncInvoices job picks up and carries to the ERP.
+copy what the .NET site (api.mongnew.ir) leaves for a paid invoice: PaymentVerificationHandler
+after a gateway, PayInvoiceByIdHandler when the voucher paid it all. InvoiceType 3 with an
+empty MapId is what its SyncInvoices job picks up and carries to the ERP.
 
 Three locks, on top of the review: ERP_WRITES_ENABLED stays off until a test order is agreed;
-the login is its own (DADEHFA_WRITE_DB_*), and is refused if it is a sysadmin; and every
-statement is checked against the short list below before it reaches the server.
+the login is its own (DADEHFA_WRITE_DB_*), and is refused if it is a sysadmin unless
+DADEHFA_ALLOW_SYSADMIN; and every statement is checked against the short list below before it
+reaches the server.
 
 An invoice is marked with its site id in CreatedBy, so a retry after a lost answer finds
-it instead of writing it twice. The coupon or gift card it spent is settled in the same
-transaction, as nothing else does that on the software's side. Every statement that writes
-is logged in ErpWriteLog with how its transaction ended, and failed attempts too.
+it instead of writing it twice. The coupon or gift card it spent, the variants' Qty and the
+default address are settled in the same transaction, as the .NET site does. Test orders go
+too, with a note in Description. Every statement that writes is logged in ErpWriteLog with
+how its transaction ended, and failed attempts too.
 """
 from __future__ import annotations
 
@@ -37,11 +40,14 @@ logger = logging.getLogger(__name__)
 GIFT_CARD_BANK = 13
 BANKS = {"zarinpal": 1, "snapppay": 14, "PayTypeGiftCard": GIFT_CARD_BANK}
 SYSTEM = "Created By System"
+TEST_MARK = "سفارش تست: پولی جابه‌جا نشده"
+# Description is nvarchar(300); the payment columns are 64, CellPhone 16 and FullName 80.
+DESCRIPTION, CODE, PHONE, NAME = 300, 64, 16, 80
 
 _ALLOWED = re.compile(
     r"^\s*(SELECT\b|SET\s+NOCOUNT\b"
     r"|INSERT\s+INTO\s+(Customers|CustomerAddresses|Coupons|Invoices|InvoiceDetails|InvoicePayments)\b"
-    r"|UPDATE\s+(Coupons|GiftCards)\s+SET\b)", re.I)
+    r"|UPDATE\s+(Coupons|GiftCards|CustomerAddresses|ProductVariants|Products)\s+SET\b)", re.I)
 _FORBIDDEN = re.compile(r"\b(DELETE|MERGE|TRUNCATE|DROP|ALTER|CREATE|EXEC|EXECUTE|GRANT|REVOKE|DENY)\b|;", re.I)
 _STRINGS = re.compile(r"N?'(?:[^']|'')*'")
 
@@ -63,7 +69,8 @@ def check(statement: str) -> None:
 @lru_cache(maxsize=1)
 def get_engine() -> Engine:
     cfg = settings.DADEHFA_DB
-    user, password = settings.DADEHFA_WRITE_DB_USER, settings.DADEHFA_WRITE_DB_PASSWORD
+    user = settings.DADEHFA_WRITE_DB_USER or cfg.get("USER", "")
+    password = settings.DADEHFA_WRITE_DB_PASSWORD or cfg.get("PASSWORD", "")
     if not user or not password:
         raise CannotSend("DADEHFA_WRITE_DB_USER / DADEHFA_WRITE_DB_PASSWORD are not set")
     engine = create_engine(
@@ -76,7 +83,8 @@ def get_engine() -> Engine:
         check(statement)
 
     with engine.connect() as conn:
-        if conn.execute(text("SELECT IS_SRVROLEMEMBER('sysadmin')")).scalar() == 1:
+        allow_sysadmin = getattr(settings, "DADEHFA_ALLOW_SYSADMIN", False)
+        if not allow_sysadmin and conn.execute(text("SELECT IS_SRVROLEMEMBER('sysadmin')")).scalar() == 1:
             raise CannotSend("the writing login must not be a sysadmin")
     return engine
 
@@ -124,11 +132,16 @@ class _Recorded:
 # -----------------------------------------------------------------------------
 @dataclass
 class Plan:
-    """The rows of one invoice, ready to send; built apart so it can be read and compared with real invoices."""
+    """
+    The rows of one invoice, ready to send; built apart so it can be read and compared with real invoices.
+    In the voucher's payment row "{invoice}" stands for the software's invoice id, known once the head is in.
+    """
 
     invoice: dict
+    free: bool = False
     details: list[dict] = field(default_factory=list)
     payments: list[dict] = field(default_factory=list)
+    taken: dict[int, Decimal] = field(default_factory=dict)  # VariantFeatureValueId: qty, off ProductVariants.Qty
 
 
 def _percent(value) -> Decimal:
@@ -136,15 +149,28 @@ def _percent(value) -> Decimal:
 
 
 def full_name(invoice: Invoice) -> str:
-    return f"{invoice.customer.first_name} {invoice.customer.last_name}".strip()
+    """Customer.FullName in .NET: first and last name with a space between, even when one is empty."""
+    return f"{invoice.customer.first_name or ''} {invoice.customer.last_name or ''}"
+
+
+def _description(invoice: Invoice, free: bool) -> str:
+    text = invoice.description
+    if free:  # PayInvoiceByIdHandler adds how it was paid on a line of its own
+        text += "\r\n" + ("پرداخت با کارت هدیه" if invoice.gift_card_id or invoice.gift_card_number else "پرداخت با کوپن")
+    if invoice.is_test:
+        text = f"{TEST_MARK}\r\n{text}" if text else TEST_MARK
+    return text[:DESCRIPTION]
 
 
 def plan(invoice: Invoice) -> Plan:
+    # No gateway when the voucher covered it all: PayInvoiceByIdHandler. Otherwise PaymentVerificationHandler.
+    free = invoice.payable_amount <= 0
     delivery = invoice.delivery_amount
     goods_after = invoice.amount - invoice.reduction_amount
-    rows = Plan(invoice={
+    cellphone, name = invoice.customer.cellphone[:PHONE], full_name(invoice)[:NAME]
+    rows = Plan(free=free, invoice={
         "Amount": invoice.amount, "Reduction": _percent(invoice.coupon_reduction), "Discount": invoice.reduction_amount,
-        "Tax": 0, "VAT": 0, "InvoiceType": Invoice.State.SUCCESSFUL.value, "Description": invoice.description,
+        "Tax": 0, "VAT": 0, "InvoiceType": Invoice.State.SUCCESSFUL.value, "Description": _description(invoice, free),
         "IsDeleted": 0, "TsCodeId": 0, "DeliveryAmount": delivery, "DeductionAmount": invoice.deduction_amount,
         "FixedAmount": delivery, "InsuranceFee": 0, "ShippingMethodId": invoice.shipping_method_id, "TaxAmount": 0,
         "VariableAmount": 0, "AmountAfterReduction": goods_after, "AmountAfterVatAndTax": goods_after,
@@ -159,22 +185,40 @@ def plan(invoice: Invoice) -> Plan:
             "Discount": int((line.price - line.price_after_reduction) * line.qty), "Tax": 0, "VAT": 0, "Qty": line.qty,
             "IsDeleted": 0, "TsCodeId": 0,
         })
+        rows.taken[line.erp_ref] = rows.taken.get(line.erp_ref, Decimal(0)) + Decimal(line.qty)
+    paid = []
     for payment in invoice.payments.filter(is_success=True):
         if payment.gateway not in BANKS:
             raise CannotSend(f"payment {payment.pk}: unknown gateway {payment.gateway!r}")
-        rows.payments.append({
-            "PaymentAmount": payment.amount, "BankId": BANKS[payment.gateway], "TransactionId": payment.transaction_id or payment.reference,
-            "TraceNumber": payment.reference, "CellPhone": invoice.customer.cellphone, "FullName": full_name(invoice),
-            "Authority": payment.authority, "IsSuccess": 1, "IsDeleted": 0, "TsCodeId": 0, "DeliveryAmount": delivery,
+        # As in the shop's own rows: TraceNumber and Authority are one tracking code, TransactionId the gateway's own
+        # (Zarinpal's authority, SnappPay's transactionId).
+        trace = (payment.reference or payment.authority)[:CODE] or None
+        paid.append({
+            "PaymentAmount": payment.amount, "BankId": BANKS[payment.gateway], "TransactionId": (payment.transaction_id or payment.authority)[:CODE] or None,
+            "TraceNumber": trace, "CellPhone": cellphone, "FullName": name, "Authority": trace,
+            "IsSuccess": 1, "IsDeleted": 0, "TsCodeId": 0, "DeliveryAmount": delivery,
         })
-    paid_by_card = any(p["BankId"] == GIFT_CARD_BANK for p in rows.payments)
-    if not paid_by_card and (invoice.gift_card_number or invoice.payable_amount <= 0):  # what the voucher paid is a payment of its own
+    paid_by_card = any(p["BankId"] == GIFT_CARD_BANK for p in paid)
+    voucher = None
+    if paid_by_card:
+        pass
+    elif free:
+        code = invoice.gift_card_number or invoice.coupon_serial or "Unknown"
+        voucher = {
+            "TransactionId": "{invoice}", "Authority": None,
+            "TraceNumber": f"{{invoice}}#{'G' if invoice.gift_card_number else 'C'}#{code}"[:CODE],
+        }
+    elif invoice.gift_card_number:  # with a gateway the card's row comes first and carries the card's id
+        voucher = {
+            "TransactionId": None, "Authority": paid[0]["Authority"] if paid else None,
+            "TraceNumber": f"{{invoice}}#G#{invoice.gift_card_id or invoice.gift_card_number}"[:CODE],
+        }
+    if voucher:
         rows.payments.append({
-            "PaymentAmount": invoice.deduction_amount, "BankId": GIFT_CARD_BANK, "TransactionId": str(invoice.pk),
-            "TraceNumber": f"{invoice.pk}#{'G' if invoice.gift_card_number else 'C'}#{invoice.gift_card_number or invoice.coupon_serial}",
-            "CellPhone": invoice.customer.cellphone, "FullName": full_name(invoice), "Authority": None, "IsSuccess": 1,
-            "IsDeleted": 0, "TsCodeId": 0, "DeliveryAmount": delivery,
+            "PaymentAmount": invoice.deduction_amount, "BankId": GIFT_CARD_BANK, "CellPhone": cellphone, "FullName": name,
+            "IsSuccess": 1, "IsDeleted": 0, "TsCodeId": 0, "DeliveryAmount": delivery, **voucher,
         })
+    rows.payments += paid
     if not rows.details or not rows.payments:
         raise CannotSend("an invoice needs at least one line and one successful payment")
     return rows
@@ -214,6 +258,8 @@ def _address_id(db, invoice: Invoice, customer_id: int, at) -> int:
                        {"c": customer_id, "a": address.address}).scalar()
     if found:
         return found
+    if address.is_default:  # AddCustomerAddressRequestHandler: one default address per customer
+        db.execute(text("UPDATE CustomerAddresses SET IsDefault = 0 WHERE CustomerId = :c AND IsDefault = 1"), {"c": customer_id})
     return _insert(db, "CustomerAddresses", {
         "CustomerId": customer_id, "IsDefault": 1 if address.is_default else 0, "Address": address.address[:500],
         "ProvinceId": address.province_id, "CityId": address.city_id, "FirstName": address.first_name[:40] or None,
@@ -224,13 +270,18 @@ def _address_id(db, invoice: Invoice, customer_id: int, at) -> int:
 
 
 def _use_coupon(db, invoice: Invoice, customer_id: int, at) -> int | None:
+    """The customer's own copy of the coupon, marked used as PaymentVerificationHandler leaves it."""
     if not invoice.coupon_serial or SiteCoupon.objects.filter(serial=invoice.coupon_serial).exists():
         return None
-    if invoice.coupon_id:
-        db.execute(text("UPDATE Coupons SET IsUsed = 1, UsedDate = :at WHERE Id = :id"), {"at": at.replace(tzinfo=None), "id": invoice.coupon_id})
-        return invoice.coupon_id
+    own = invoice.coupon_id or db.execute(text(
+        "SELECT TOP 1 Id FROM Coupons WHERE Serial = :s AND CustomerId = :c AND (IsUsed IS NULL OR IsUsed = 0) AND IsDeleted = 0 ORDER BY Id"),
+        {"s": invoice.coupon_serial, "c": customer_id}).scalar()
+    if own:
+        db.execute(text("UPDATE Coupons SET IsActive = 1, BankPortalEndTime = NULL, IsUsed = 1, UsedDate = :at WHERE Id = :id"),
+                   {"at": at.replace(tzinfo=None), "id": own})
+        return own
     source = db.execute(text("SELECT TOP 1 ExpiredDate, MinPrice, MaxPrice, Reduction, MapId FROM Coupons "
-                             "WHERE Serial = :s AND CustomerId IS NULL AND IsDeleted = 0"), {"s": invoice.coupon_serial}).mappings().first()
+                             "WHERE Serial = :s AND CustomerId IS NULL AND IsActive = 1 AND IsDeleted = 0"), {"s": invoice.coupon_serial}).mappings().first()
     if source is None:
         raise CannotSend("the general coupon is gone")
     return _insert(db, "Coupons", {
@@ -240,20 +291,36 @@ def _use_coupon(db, invoice: Invoice, customer_id: int, at) -> int | None:
     })
 
 
-def _use_gift_card(db, invoice: Invoice) -> int | None:
+def _use_gift_card(db, invoice: Invoice, free: bool) -> int | None:
+    """
+    The balance as the .NET site leaves it: what was taken comes off, and a card used up or for one use only
+    is switched off. Only PayInvoiceByIdHandler (no gateway) also empties a one-use card.
+    """
     if not invoice.gift_card_id:
         return None
     db.execute(text("""UPDATE GiftCards SET
-            GCBalance = CASE WHEN UseCompelete = 1 OR GCBalance <= :d THEN 0 ELSE GCBalance - :d END,
-            IsActive = CASE WHEN UseCompelete = 1 OR GCBalance <= :d THEN 0 ELSE IsActive END,
+            GCBalance = CASE WHEN GCBalance <= :d OR (:free = 1 AND UseCompelete = 1) THEN 0 ELSE GCBalance - :d END,
+            IsActive = CASE WHEN UseCompelete = 1 OR GCBalance <= :d THEN 0 ELSE 1 END,
             BankPortalEndTime = NULL
-        WHERE Id = :id"""), {"d": invoice.deduction_amount, "id": invoice.gift_card_id})
+        WHERE Id = :id"""), {"d": invoice.deduction_amount, "free": 1 if free else 0, "id": invoice.gift_card_id})
     return invoice.gift_card_id
 
 
+_VARIANT = "(SELECT ProductVariantId FROM VariantFeatureValues WHERE Id = :ref)"
+
+
+def _take_stock(db, rows: Plan) -> None:
+    """The shop's own Qty goes down at once, as the .NET site does; its next stock sync puts the ERP's figure back."""
+    for ref, qty in rows.taken.items():
+        db.execute(text(f"UPDATE ProductVariants SET Qty = Qty - :q WHERE Id = {_VARIANT}"), {"q": qty, "ref": ref})
+        if rows.free:  # only PayInvoiceByIdHandler counts the sale on the product
+            db.execute(text(f"UPDATE Products SET SalesCount = SalesCount + :q WHERE Id = (SELECT ProductId FROM ProductVariants WHERE Id = {_VARIANT})"),
+                       {"q": int(qty), "ref": ref})
+
+
 def push(invoice: Invoice) -> None:
-    """Writes one paid invoice. Does nothing until ERP_WRITES_ENABLED; safe to call again."""
-    if not settings.ERP_WRITES_ENABLED or invoice.erp_sent_at or invoice.is_test:
+    """Writes one paid invoice, test orders too. Does nothing until ERP_WRITES_ENABLED; safe to call again."""
+    if not settings.ERP_WRITES_ENABLED or invoice.erp_sent_at:
         return
     rows = plan(invoice)
     at = timezone.localtime()
@@ -267,12 +334,15 @@ def push(invoice: Invoice) -> None:
                 address_id = _address_id(db, invoice, customer_id, at)
                 invoice_id = _insert(db, "Invoices", {
                     **rows.invoice, "CustomerId": customer_id, "CustomerAddressId": address_id, "CouponId": _use_coupon(db, invoice, customer_id, at),
-                    "GiftCardId": _use_gift_card(db, invoice), **_stamp(at, mark),
+                    "GiftCardId": _use_gift_card(db, invoice, rows.free), **_stamp(at, mark),
+                    "LastModified": at.isoformat(sep=" ", timespec="seconds"),
                 })
                 for row in rows.details:
                     _insert(db, "InvoiceDetails", {**row, "InvoiceId": invoice_id, **_stamp(at)})
                 for row in rows.payments:
+                    row = {k: v.replace("{invoice}", str(invoice_id)) if isinstance(v, str) else v for k, v in row.items()}
                     _insert(db, "InvoicePayments", {**row, "InvoiceId": invoice_id, **_stamp(at)})
+                _take_stock(db, rows)
     except Exception as exc:
         db.save(str(exc))
         raise

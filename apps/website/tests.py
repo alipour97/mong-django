@@ -32,3 +32,7 @@ class AiSlugTests(TestCase):
     def test_long_title_is_cut_at_a_word(self):
         base = slugs.ai_slug_base("روپوش زنانه کتان کجراه یقه مردانه دکمه‌دار با آستین کیمونو بلند آزاد و برش اورسایز قد متوسط")
         self.assertEqual(base, "روپوش-زنانه-کتان-کجراه-یقه-مردانه-دکمه-دار-با-آستین-کیمونو-بلند-آزاد")
+
+    def test_title_punctuation_is_a_word_break(self):
+        base = slugs.ai_slug_base("شومیز زنانه یقه مردانه، آستین بلند؛ دو جیب")
+        self.assertEqual(base, "شومیز-زنانه-یقه-مردانه-آستین-بلند-دو-جیب")

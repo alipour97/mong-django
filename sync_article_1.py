@@ -31,11 +31,11 @@ CONTENT_HTML = """
 <div class="article-content" style="line-height: 2.1; font-size: 16px; color: #2d3748;">
   <p class="lead" style="font-size: 18px; font-weight: 500; color: #1a202c; margin-bottom: 24px;">
     حتماً برای شما هم پیش آمده که روبروی کمدی پر از لباس بایستید و با کلافگی بگویید: <strong>«من هیچ لباسی برای پوشیدن ندارم!»</strong>. 
-    این تناقض بزرگ دنیای مد—یعنی کمدی پر و استایلی تکراری یا خسته‌کننده—دقیقاً همان نقطه‌ای است که طراحان و استایلیست‌های حرفه‌ای را به سمت یک راهکار مدرن و هوشمندانه به نام <strong>«کمد کپسولی» (Capsule Wardrobe)</strong> هدایت کرده است.
+    این تناقض بزرگ دنیای مد—یعنی کمدی پر و استایلی تکراری یا سردرگم‌کننده—دقیقاً همان نقطه‌ای است که طراحان و استایلیست‌های حرفه‌ای را به سمت یک راهکار مدرن و هوشمندانه به نام <strong>«کمد کپسولی» (Capsule Wardrobe)</strong> هدایت کرده است.
   </p>
 
   <p>
-    کمد کپسولی به این معنا نیست که خودتان را به لباس‌های بی‌روح یا تکراری محدود کنید؛ بلکه یعنی انتخابی هوشمندانه از آیتم‌های کلاسیک، باکیفیت و همه‌کاره که مانند قطعات یک پازل به زیبایی در کنار هم می‌نشینند. در این راهنمای جامع و اختصاصی، این مفهوم جهانی را با فرهنگ پوشش، سبک زندگی و نیازهای خانم‌های ایرانی بومی‌سازی کرده‌ایم تا با ۱۰ تکه لباس کلیدی از کالکشن <strong>دپارتمان استور مانگ</strong>، بیش از ۳۰ ست چشم‌نواز و متنوع برای موقعیت‌های کاری، دانشگاهی، دورهمی و روزمره بسازید.
+    کمد کپسولی به این معنا نیست که خودتان را به لباس‌های بی‌روح یا تکراری محدود کنید؛ بلکه یعنی انتخابی هوشمندانه از آیتم‌های کلاسیک، باکیفیت و همه‌کاره که مانند قطعات یک پازل به زیبایی در کنار هم می‌نشینند. در این راهنمای جامع و اختصاصی، این مفهوم جهانی را با سبک پوشش و نیازهای روزمره خانم‌های ایرانی متناسب کرده‌ایم تا با ۱۰ تکه لباس کلیدی از کالکشن <strong>دپارتمان استور مانگ</strong>، بیش از ۳۰ ست چشم‌نواز و متنوع برای موقعیت‌های کاری، دانشگاهی، دورهمی و روزمره بسازید.
   </p>
 
   <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 32px 0;" />
@@ -44,15 +44,15 @@ CONTENT_HTML = """
     کمد کپسولی چیست و چرا برای خانم‌های ایرانی ضروری است؟
   </h2>
   <p>
-    مفهوم کمد کپسولی بر یک اصل طلایی استوار است: «کیفیت و هماهنگی به جای کمیت سردرگم‌کننده». امروزه استایلیست‌های مد این رویکرد را به عنوان پایدارترین، اقتصادی‌ترین و شیک‌ترین سبک پوشش مینیمال معرفی می‌کنند. هدف کمد کپسولی داشتن بین <strong>۱۰ تا ۲۵ آیتم اصلی</strong> است که رنگ‌ها، برش‌ها و قواره آن‌ها به گونه‌ای انتخاب شوند که بیشترین تعداد ترکیب ممکن را خلق کنند.
+    مفهوم کمد کپسولی بر یک اصل طلایی استوار است: <strong>«کیفیت و هماهنگی به جای کمیت سردرگم‌کننده»</strong>. امروزه استایلیست‌های مد این رویکرد را به عنوان پایدارترین، اقتصادی‌ترین و شیک‌ترین سبک پوشش مینیمال معرفی می‌کنند. هدف کمد کپسولی داشتن بین <strong>۱۰ تا ۲۵ آیتم اصلی</strong> است که رنگ‌ها، برش‌ها و قواره آن‌ها به گونه‌ای انتخاب شوند که بیشترین تعداد ترکیب ممکن را خلق کنند.
   </p>
   <p>
-    برای یک خانم ایرانی، استایل روزمره پیچیدگی‌های بیشتری نسبت به مدل‌های غربی دارد؛ پوشش لایه‌ای، نیاز به مانتوها و تن‌پوش‌های باوقار، رعایت تناسب در محیط‌های کاری و دانشگاهی، و در عین حال تمایل به به‌روز بودن و حفظ ظرافت زنانه. کمد کپسولی دقیقاً این دغدغه‌ها را حل می‌کند:
+    برای یک خانم ایرانی، استایل روزمره نیازمند ظرافت‌های خاصی است؛ پوشش لایه‌ای، نیاز به مانتوها و تن‌پوش‌های باوقار، رعایت تناسب در محیط‌های کاری و دانشگاهی، و در عین حال تمایل به به‌روز بودن و حفظ آراستگی. کمد کپسولی دقیقاً این دغدغه‌ها را حل می‌کند:
   </p>
   <ul style="padding-right: 20px; margin-bottom: 24px;">
     <li><strong>پایان سردرگمی صبحگاهی:</strong> هر آیتمی را که از کمد بردارید، با حداقل ۳ آیتم دیگر ست می‌شود.</li>
-    <li><strong>صرفه‌جویی اقتصادی چشمگیر:</strong> به جای خرید ۱۰ مانتوی ارزان‌قیمت که بعد از دو بار شستشو از فرم می‌افتند، ۲ مانتوی ماندگار و خوش‌دوخت تهیه می‌کنید.</li>
-    <li><strong>امضای استایل شخصی (Personal Style):</strong> استایلی مرتب، ساختاریافته و شیک که به دیگران حس وقار و سلیقه را منتقل می‌کند.</li>
+    <li><strong>صرفه‌جویی اقتصادی چشمگیر:</strong> به جای خرید ۱۰ مانتوی کم‌کیفیت، ۲ یا ۳ مانتوی ماندگار و خوش‌دوخت تهیه می‌کنید.</li>
+    <li><strong>امضای استایل شخصی (Personal Style):</strong> استایلی مرتب، ساختاریافته و شیک که حس وقار و سلیقه بالا را منتقل می‌کند.</li>
   </ul>
 
   <h2 id="capsule-color-palette" style="font-size: 22px; font-weight: 700; color: #1a202c; margin-top: 36px; margin-bottom: 16px;">
@@ -63,7 +63,7 @@ CONTENT_HTML = """
   </p>
   <div style="background-color: #f7fafc; border-right: 4px solid #3182ce; padding: 18px 24px; border-radius: 8px; margin: 20px 0;">
     <p style="margin: 0 0 10px 0;"><strong>۱. رنگ‌های پایه و ساختاری (Base Neutrals):</strong> مشکی، سرمه‌ای، ذغالی و طوسی تیره. این رنگ‌ها برای کت‌ها، شلوارهای رسمی و کفش‌ها ایده‌آل هستند چون بیشترین استفاده را دارند و دیرتر کهنه یا کثیف به نظر می‌رسند.</p>
-    <p style="margin: 0 0 10px 0;"><strong>۲. رنگ‌های خنثی روشن (Light Neutrals):</strong> کرم، استخوانی، شتری، بژ و سفید نچرال. این رنگ‌ها به استایل شما نور، شادابی و وقار می‌بخشند و برای شومیزها، مانتوهای کتی روزمره و ترنچ‌کت عالی هستند.</p>
+    <p style="margin: 0 0 10px 0;"><strong>۲. رنگ‌های خنثی روشن (Light Neutrals):</strong> کرم، استخوانی، شتری، بژ و سفید نچرال. این رنگ‌ها به استایل شما نور، شادابی و وقار می‌بخشند و برای شومیزها، مانتوهای کتی روزمره و بارانی عالی هستند.</p>
     <p style="margin: 0;"><strong>۳. رنگ‌های بیانی و تاکیدی (Accent Colors):</strong> زرشکی، سبز زیتونی، آجری یا خردلی مات. این رنگ‌ها معمولاً در شال، کیف، یا بافت‌های ظریف به کار می‌روند تا استایل از حالت یکنواختی خارج شود.</p>
   </div>
 
@@ -73,7 +73,7 @@ CONTENT_HTML = """
     ۱۰ آیتم ضروری برای کمد کپسولی ایرانی (بر اساس کالکشن مانگ)
   </h2>
   <p>
-    بر اساس بررسی‌های تخصصی استایلیست‌های مانگ و تحلیل محصولات پرفروش، این ۱۰ آیتم طلایی شاکله اصلی کمد کپسولی شما را می‌سازند:
+    بر اساس بررسی‌های تخصصی تیم استایلینگ مانگ و تحلیل کالکشن‌های منتخب، این آیتم‌های طلایی شاکله اصلی کمد کپسولی شما را می‌سازند:
   </p>
 
   <h3 id="item-1-manteau-odyssey" style="font-size: 19px; font-weight: 600; color: #2b6cb0; margin-top: 28px; margin-bottom: 12px;">
@@ -82,90 +82,173 @@ CONTENT_HTML = """
   <p>
     هیچ کمد کپسولی بدون یک کت با دوخت بی‌نقص کامل نیست. مانتو کتی اودیسه با الگوی آزاد و ساختار دکمه‌دار جلو، تلفیقی استادانه از استایل کلاسیک و معاصر است.
   </p>
-  <div style="background: #edf2f7; border-radius: 8px; padding: 16px 20px; margin: 16px 0;">
-    <p style="margin: 0; font-style: italic; color: #4a5568;">
-      💡 <strong>یادداشت استایلیست مانگ:</strong> «این مانتو کتی را با شلوار پارچه‌ای راسته و کفش لوفر برای موقعیت‌های کاری ست کنید، یا با شلوار جین نیم‌بگ برای یک دورهمی دوستانه بپوشید.»
-    </p>
+  
+  <!-- Product Card 1 -->
+  <div style="display: flex; flex-wrap: wrap; gap: 16px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 20px 0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); align-items: center;">
+    <div style="width: 130px; height: 175px; border-radius: 8px; overflow: hidden; background: #f7fafc; flex-shrink: 0; margin: 0 auto;">
+      <img src="http://office.lebazacenter.com/media/photos/lp_generated/Mong/0050001601/mong-0050001601-%D9%85%D8%B4%D9%83%D9%8A/front_temp1_3.png" alt="مانتو کتی زنانه مدل اودیسه" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy" />
+    </div>
+    <div style="flex: 1; min-width: 220px;">
+      <span style="display: inline-block; background: #ebf8ff; color: #2b6cb0; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 12px; margin-bottom: 6px;">آیتم کلیدی کمد کپسولی</span>
+      <h4 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 700; color: #1a202c;">مانتو کتی زنانه مدل اودیسه</h4>
+      <p style="margin: 0 0 12px 0; font-size: 13px; color: #4a5568; line-height: 1.7;">
+        💡 <em>توصیه استایلیست مانگ:</em> این مانتو کتی را با شلوار پارچه‌ای راسته و لوفر برای جلسات کاری ست کنید، یا با شلوار نیم‌بگ برای قرارهای دوستانه بپوشید.
+      </p>
+      <a href="/products-item/کت-عروسکی-اودیسه" target="_blank" style="display: inline-block; background: #3182ce; color: #ffffff; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; text-decoration: none;">
+        مشاهده و خرید محصول در مانگ &larr;
+      </a>
+    </div>
   </div>
-  <p>
-    <a href="/products-item/کت-عروسکی-اودیسه" style="color: #3182ce; font-weight: 600; text-decoration: underline;" target="_blank">مشاهده و بررسی مانتو کتی اودیسه در مانگ &larr;</a>
-  </p>
 
-  <h3 id="item-2-manteau-diplomat" style="font-size: 19px; font-weight: 600; color: #2b6cb0; margin-top: 28px; margin-bottom: 12px;">
-    ۲. مانتو زنانه یقه آرشال دیپلمات راه راه
-  </h3>
-  <p>
-    اگر می‌خواهید در جلسات، محل کار یا دانشگاه کشیده‌تر و باوقارتر دیده شوید، خطوط راه‌راه دیپلمات عمودی بهترین دوست شما هستند. این مانتو با یقه آرشال پهن و ایستایی چشم‌نواز، تعادلی هوشمندانه میان آزادی حرکت و فرمالیته اداری برقرار می‌کند.
-  </p>
-  <div style="background: #edf2f7; border-radius: 8px; padding: 16px 20px; margin: 16px 0;">
-    <p style="margin: 0; font-style: italic; color: #4a5568;">
-      💡 <strong>یادداشت استایلیست مانگ:</strong> «این مانتو را با شلوار راسته پارچه‌ای و یک جفت لوفر شیک ست کنید تا استایلی منظم، باوقار و مناسب محیط کار خلق شود.»
-    </p>
-  </div>
-  <p>
-    <a href="/products-item/مانتو-لینن-بامبو-یقه-ارشال-دیپلمات" style="color: #3182ce; font-weight: 600; text-decoration: underline;" target="_blank">مشاهده جزئیات مانتو دیپلمات در مانگ &larr;</a>
-  </p>
-
-  <h3 id="item-3-tailored-trousers-711" style="font-size: 19px; font-weight: 600; color: #2b6cb0; margin-top: 28px; margin-bottom: 12px;">
-    ۳. شلوار راسته زنانه جلو دوخت‌دار ۷۱۱ (گاباردین)
+  <h3 id="item-2-tailored-trousers-711" style="font-size: 19px; font-weight: 600; color: #2b6cb0; margin-top: 28px; margin-bottom: 12px;">
+    ۲. شلوار راسته زنانه جلو دوخت‌دار ۷۱۱ (گاباردین)
   </h3>
   <p>
     شلوارهای راسته با خط دوخت اتوخورده سراسری، پاهای شما را کشیده نشان می‌دهند و بزرگ‌ترین حسن آن‌ها این است که خط اتوی آن‌ها هرگز در اثر نشستن یا شستشو از بین نمی‌رود. این شلوار مشکی راسته، پایه ثابت بیش از نیمی از استایل‌های شما خواهد بود.
   </p>
-  <div style="background: #edf2f7; border-radius: 8px; padding: 16px 20px; margin: 16px 0;">
-    <p style="margin: 0; font-style: italic; color: #4a5568;">
-      💡 <strong>یادداشت استایلیست مانگ:</strong> «این شلوار را با یک مانتو کتی خوش‌دوخت و کفش لوفر ست کنید تا استایلی کاملاً مرتب، کشیده و مناسب موقعیت‌های رسمی و کاری داشته باشید.»
-    </p>
+
+  <!-- Product Card 2 -->
+  <div style="display: flex; flex-wrap: wrap; gap: 16px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 20px 0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); align-items: center;">
+    <div style="width: 130px; height: 175px; border-radius: 8px; overflow: hidden; background: #f7fafc; flex-shrink: 0; margin: 0 auto;">
+      <img src="http://office.lebazacenter.com/media/photos/lp_generated/Mong/0740000711/mong-0740000711-%D9%85%D8%B4%D9%83%D9%8A/front_temp1_mc2_4.png" alt="شلوار راسته زنانه جلو دوخت دار 711" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy" />
+    </div>
+    <div style="flex: 1; min-width: 220px;">
+      <span style="display: inline-block; background: #ebf8ff; color: #2b6cb0; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 12px; margin-bottom: 6px;">شلوار پایه چهارفصل</span>
+      <h4 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 700; color: #1a202c;">شلوار راسته زنانه جلو دوخت‌دار ۷۱۱</h4>
+      <p style="margin: 0 0 12px 0; font-size: 13px; color: #4a5568; line-height: 1.7;">
+        💡 <em>توصیه استایلیست مانگ:</em> این شلوار را با یک مانتو کتی خوش‌دوخت ست کنید تا استایلی کاملاً مرتب، کشیده و مناسب موقعیت‌های رسمی و اداری داشته باشید.
+      </p>
+      <a href="/products-item/شلوار-گاباردين-جلو-دوخت-دار-711" target="_blank" style="display: inline-block; background: #3182ce; color: #ffffff; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; text-decoration: none;">
+        مشاهده و خرید محصول در مانگ &larr;
+      </a>
+    </div>
   </div>
-  <p>
-    <a href="/products-item/شلوار-گاباردين-جلو-دوخت-دار-711" style="color: #3182ce; font-weight: 600; text-decoration: underline;" target="_blank">مشاهده شلوار راسته جلو دوخت‌دار ۷۱۱ &larr;</a>
-  </p>
 
-  <h3 id="item-4-basic-shirt" style="font-size: 19px; font-weight: 600; color: #2b6cb0; margin-top: 28px; margin-bottom: 12px;">
-    ۴. شومیز بیسیک سفید یا نود (مدل آیان ۳)
-  </h3>
-  <p>
-    شومیز بیسیک همان عنصری است که زیر هر کت، مانتو، پالتو یا ژیله‌ای می‌درخشد. شومیز آیان ۳ با برش استاندارد و پارچه سبک و خوش‌ریزش، نقطه آغاز بی‌شمار ست استایلیش است.
-  </p>
-  <p>
-    <a href="/products-item/شومیز-آیان-3" style="color: #3182ce; font-weight: 600; text-decoration: underline;" target="_blank">مشاهده شومیز زنانه آیان ۳ &larr;</a>
-  </p>
-
-  <h3 id="item-5-sport-coat" style="font-size: 19px; font-weight: 600; color: #2b6cb0; margin-top: 28px; margin-bottom: 12px;">
-    ۵. کت دو جیب فوتر اسپرت
+  <h3 id="item-3-sport-coat" style="font-size: 19px; font-weight: 600; color: #2b6cb0; margin-top: 28px; margin-bottom: 12px;">
+    ۳. کت دو جیب فوتر اسپرت
   </h3>
   <p>
     برای روزهای خنک سال، یک کت فوتر خوش‌برش با دو جیب کاربردی، حال و هوای مینیمال و شیکی به ظاهر شما می‌دهد. این کت به اندازه پالتو سنگین نیست و به راحتی با شلوار جین یا راسته ست می‌شود.
   </p>
+
+  <!-- Product Card 3 -->
+  <div style="display: flex; flex-wrap: wrap; gap: 16px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 20px 0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); align-items: center;">
+    <div style="width: 130px; height: 175px; border-radius: 8px; overflow: hidden; background: #f7fafc; flex-shrink: 0; margin: 0 auto;">
+      <img src="https://cdn.mong.ir/9/webgeneral/c67db9fe-4bca-4563-a707-01af898a5ce3.webp" alt="کت دو جیب فوتر اسپرت" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy" />
+    </div>
+    <div style="flex: 1; min-width: 220px;">
+      <span style="display: inline-block; background: #fefcbf; color: #744210; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 12px; margin-bottom: 6px;">ترند پاییز و زمستان</span>
+      <h4 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 700; color: #1a202c;">کت دو جیب فوتر اسپرت</h4>
+      <p style="margin: 0 0 12px 0; font-size: 13px; color: #4a5568; line-height: 1.7;">
+        💡 <em>توصیه استایلیست مانگ:</em> جنس فوتر نرم با ایستایی چشم‌نواز؛ ایده‌آل برای ست شدن با بافت ظریف یقه اسکی یا شومیز بیسیک.
+      </p>
+      <a href="/products-item/کت-دو-جيب-فوتر-اسپرت" target="_blank" style="display: inline-block; background: #3182ce; color: #ffffff; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; text-decoration: none;">
+        مشاهده و خرید محصول در مانگ &larr;
+      </a>
+    </div>
+  </div>
+
+  <h3 id="item-4-basic-shirt" style="font-size: 19px; font-weight: 600; color: #2b6cb0; margin-top: 28px; margin-bottom: 12px;">
+    ۴. شومیز بیسیک زنانه آیان ۳
+  </h3>
   <p>
-    <a href="/products-item/کت-دو-جيب-فوتر-اسپرت" style="color: #3182ce; font-weight: 600; text-decoration: underline;" target="_blank">مشاهده کت دو جیب فوتر در مانگ &larr;</a>
+    شومیز بیسیک همان عنصری است که زیر هر کت، مانتو، پالتو یا ژیله‌ای می‌درخشد. شومیز آیان ۳ با برش استاندارد و پارچه سبک و خوش‌ریزش، نقطه آغاز بی‌شمار ست استایلیش است.
   </p>
 
-  <h3 id="item-6-classic-coat" style="font-size: 19px; font-weight: 600; color: #2b6cb0; margin-top: 28px; margin-bottom: 12px;">
-    ۶. پالتو کلاسیک زنانه (مدل لکسی Lexy یا یارا)
+  <!-- Product Card 4 -->
+  <div style="display: flex; flex-wrap: wrap; gap: 16px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 20px 0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); align-items: center;">
+    <div style="width: 130px; height: 175px; border-radius: 8px; overflow: hidden; background: #f7fafc; flex-shrink: 0; margin: 0 auto;">
+      <img src="https://cdn.mong.ir/9/webgeneral/d6441fb8-4b6e-4cec-916f-0d1ecfffb690.webp" alt="شومیز زنانه آیان ۳" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy" />
+    </div>
+    <div style="flex: 1; min-width: 220px;">
+      <span style="display: inline-block; background: #ebf8ff; color: #2b6cb0; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 12px; margin-bottom: 6px;">شاه‌کلید کمد کپسولی</span>
+      <h4 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 700; color: #1a202c;">شومیز بیسیک زنانه آیان ۳</h4>
+      <p style="margin: 0 0 12px 0; font-size: 13px; color: #4a5568; line-height: 1.7;">
+        💡 <em>توصیه استایلیست مانگ:</em> یقه و مچ‌های شکیل این شومیز هنگام لایه‌بندی زیر پلیور یا کت، جلوه‌ای بسیار لوکس و منظم ایجاد می‌کنند.
+      </p>
+      <a href="/products-item/شومیز-آیان-3" target="_blank" style="display: inline-block; background: #3182ce; color: #ffffff; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; text-decoration: none;">
+        مشاهده و خرید محصول در مانگ &larr;
+      </a>
+    </div>
+  </div>
+
+  <h3 id="item-5-classic-coat" style="font-size: 19px; font-weight: 600; color: #2b6cb0; margin-top: 28px; margin-bottom: 12px;">
+    ۵. پالتو کلاسیک زنانه مدل لکسی (Lexy)
   </h3>
   <p>
     پالتوی خوش‌دوخت در رنگ‌های طوسی، شتری یا مشکی ستون اصلی استایل زمستانه است. بلندی مناسب این پالتوها هماهنگی ایده‌آلی با نیم‌بوت و شلوارهای راسته یا بوت‌کات ایجاد می‌کند.
   </p>
-  <p>
-    <a href="/products-item/پالتو-لکسی-lexy" style="color: #3182ce; font-weight: 600; text-decoration: underline;" target="_blank">مشاهده پالتو لکسی در مانگ &larr;</a>
-  </p>
 
-  <h3 id="item-7-casual-trousers" style="font-size: 19px; font-weight: 600; color: #2b6cb0; margin-top: 28px; margin-bottom: 12px;">
-    ۷. شلوار کژوال یا جین نیم‌بگ (شلوار ژاکان / ترنم)
+  <!-- Product Card 5 -->
+  <div style="display: flex; flex-wrap: wrap; gap: 16px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 20px 0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); align-items: center;">
+    <div style="width: 130px; height: 175px; border-radius: 8px; overflow: hidden; background: #f7fafc; flex-shrink: 0; margin: 0 auto;">
+      <img src="https://cdn.mong.ir/9/webgeneral/ce2ddba2-7de1-45d0-b1b5-885fab19e3a8.webp" alt="پالتو کلاسیک زنانه مدل لکسی" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy" />
+    </div>
+    <div style="flex: 1; min-width: 220px;">
+      <span style="display: inline-block; background: #feebc8; color: #7b341e; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 12px; margin-bottom: 6px;">آیتم باوقار زمستانه</span>
+      <h4 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 700; color: #1a202c;">پالتو کلاسیک زنانه مدل لکسی</h4>
+      <p style="margin: 0 0 12px 0; font-size: 13px; color: #4a5568; line-height: 1.7;">
+        💡 <em>توصیه استایلیست مانگ:</em> فرم راسته با بلندی استاندارد که خطوط عمودی ایجاد کرده و قد را کشیده‌تر نشان می‌دهد.
+      </p>
+      <a href="/products-item/پالتو-لکسی-lexy" target="_blank" style="display: inline-block; background: #3182ce; color: #ffffff; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; text-decoration: none;">
+        مشاهده و خرید محصول در مانگ &larr;
+      </a>
+    </div>
+  </div>
+
+  <h3 id="item-6-casual-trousers" style="font-size: 19px; font-weight: 600; color: #2b6cb0; margin-top: 28px; margin-bottom: 12px;">
+    ۶. شلوار کژوال زنانه مدل ژاکان
   </h3>
   <p>
     کنار شلوار رسمی، داشتن یک شلوار نیم‌بگ یا راسته کژوال از پارچه باکیفیت به شما اجازه می‌دهد در سریع‌ترین زمان استایل‌های روزمره، دورهمی و قرارهای عصرانه را بسازید.
   </p>
-  <p>
-    <a href="/products-item/شلوار-ژاکان" style="color: #3182ce; font-weight: 600; text-decoration: underline;" target="_blank">مشاهده شلوار ژاکان &larr;</a>
-  </p>
 
-  <h3 id="item-8-knitwear" style="font-size: 19px; font-weight: 600; color: #2b6cb0; margin-top: 28px; margin-bottom: 12px;">
-    ۸. بلوز بافت یقه ۵ سانت ظریف
+  <!-- Product Card 6 -->
+  <div style="display: flex; flex-wrap: wrap; gap: 16px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 20px 0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); align-items: center;">
+    <div style="width: 130px; height: 175px; border-radius: 8px; overflow: hidden; background: #f7fafc; flex-shrink: 0; margin: 0 auto;">
+      <img src="https://cdn.mong.ir/9/webgeneral/342c484c-66fe-4291-9391-e87c9e00a5d8.webp" alt="شلوار کژوال زنانه مدل ژاکان" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy" />
+    </div>
+    <div style="flex: 1; min-width: 220px;">
+      <span style="display: inline-block; background: #ebf8ff; color: #2b6cb0; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 12px; margin-bottom: 6px;">راحت و مدرن</span>
+      <h4 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 700; color: #1a202c;">شلوار کژوال زنانه مدل ژاکان</h4>
+      <p style="margin: 0 0 12px 0; font-size: 13px; color: #4a5568; line-height: 1.7;">
+        💡 <em>توصیه استایلیست مانگ:</em> دوخت دقیق و آزادی ملایم برای راحتی حداکثری در رفت‌وآمدهای روزمره و ست با کتانی سفید.
+      </p>
+      <a href="/products-item/شلوار-ژاکان" target="_blank" style="display: inline-block; background: #3182ce; color: #ffffff; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; text-decoration: none;">
+        مشاهده و خرید محصول در مانگ &larr;
+      </a>
+    </div>
+  </div>
+
+  <h3 id="item-7-knitwear" style="font-size: 19px; font-weight: 600; color: #2b6cb0; margin-top: 28px; margin-bottom: 12px;">
+    ۷. بلوز بافت یقه هفت آکریل پنبه (بیسیک)
   </h3>
   <p>
     بافت‌های ظریف و فیت بهترین گزینه برای لایه‌بندی در فصل‌های سرد هستند، زیرا حجم غیرضروری به بالاتنه اضافه نمی‌کنند و به سادگی زیر کت یا پالتو پوشیده می‌شوند.
+  </p>
+
+  <!-- Product Card 7 -->
+  <div style="display: flex; flex-wrap: wrap; gap: 16px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 20px 0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); align-items: center;">
+    <div style="width: 130px; height: 175px; border-radius: 8px; overflow: hidden; background: #f7fafc; flex-shrink: 0; margin: 0 auto;">
+      <img src="https://cdn.mong.ir/9/webgeneral/8b0d88a1-37c2-4ddf-91f8-7ab670468338.webp" alt="بلوز بافت یقه هفت آکریل پنبه" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy" />
+    </div>
+    <div style="flex: 1; min-width: 220px;">
+      <span style="display: inline-block; background: #e2e8f0; color: #2d3748; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 12px; margin-bottom: 6px;">لایه میانی گرم و ظریف</span>
+      <h4 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 700; color: #1a202c;">بلوز بافت یقه هفت آکریل پنبه</h4>
+      <p style="margin: 0 0 12px 0; font-size: 13px; color: #4a5568; line-height: 1.7;">
+        💡 <em>توصیه استایلیست مانگ:</em> یقه هفت باز که اجازه می‌دهد لبه یقه شومیز سفید از زیر آن نمایان شود و استایلی جذاب و آکادمیک بسازد.
+      </p>
+      <a href="/products-item/بافت-یقه-هفت-آکریل-پنبه" target="_blank" style="display: inline-block; background: #3182ce; color: #ffffff; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; text-decoration: none;">
+        مشاهده و خرید محصول در مانگ &larr;
+      </a>
+    </div>
+  </div>
+
+  <h3 id="item-8-manteau-diplomat" style="font-size: 19px; font-weight: 600; color: #2b6cb0; margin-top: 28px; margin-bottom: 12px;">
+    ۸. مانتو زنانه یقه آرشال دیپلمات راه راه
+  </h3>
+  <p>
+    اگر می‌خواهید در جلسات، محل کار یا دانشگاه کشیده‌تر و باوقارتر دیده شوید، خطوط راه‌راه دیپلمات عمودی بهترین دوست شما هستند. این مانتو با یقه آرشال پهن و ایستایی چشم‌نواز، تعادلی هوشمندانه میان آزادی حرکت و فرمالیته اداری برقرار می‌کند.
   </p>
 
   <h3 id="item-9-scarf" style="font-size: 19px; font-weight: 600; color: #2b6cb0; margin-top: 28px; margin-bottom: 12px;">

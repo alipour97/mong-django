@@ -35,6 +35,23 @@ def _media(url: str) -> str:
     return catalog.absolute_url(site_images.site_media_url(url)) if url else url
 
 
+def _find_article(qs, uniq: str) -> Article | None:
+    if not uniq:
+        return None
+    a = qs.filter(uniq_url__iexact=uniq).first()
+    if a:
+        return a
+    import re
+    if m := re.match(r"^(\d+)[A-Za-z]-(.+)$", uniq):
+        art_id, slug = int(m.group(1)), m.group(2)
+        a = qs.filter(Q(uniq_url__iexact=slug) | Q(id=art_id)).first()
+        if a:
+            return a
+    elif uniq.isdigit():
+        return qs.filter(id=int(uniq)).first()
+    return None
+
+
 def _authors(articles) -> dict[int, str]:
     ids = {a.author_id for a in articles if a.author_id}
     return {u.id: f"{u.first_name} {u.last_name}".strip() for u in AdminUser.objects.filter(id__in=ids)}
@@ -60,7 +77,7 @@ class RecentView(PublicView):
 class ByUniqUrlView(PublicView):
     def get(self, request):
         uniq = (request.query_params.get("uniqUrl") or "").strip().strip("/")
-        a = visible().filter(uniq_url__iexact=uniq).first()
+        a = _find_article(visible(), uniq)
         if not a:
             return ok(None, message="اطلاعات مورد نظر یافت نشد.")
         Article.objects.filter(id=a.id).update(view_count=F("view_count") + 1)
@@ -112,7 +129,7 @@ class SuggestedView(PublicView):
     def get(self, request):
         q = request.query_params
         limit = max(1, min(_to_int(q.get("limit"), 4), 20))
-        current = Article.objects.filter(uniq_url__iexact=(q.get("uniqUrl") or "").strip().strip("/"), is_deleted=False).first()
+        current = _find_article(Article.objects.filter(is_deleted=False), (q.get("uniqUrl") or "").strip().strip("/"))
         if not current:
             return not_found(message="Article not found.")
         cats = current.category_links.filter(is_deleted=False).values("category_id")
@@ -133,7 +150,7 @@ class SuggestedView(PublicView):
 class CommentsView(PublicView):
     def get(self, request):
         uniq = (request.query_params.get("uniqUrl") or "").strip().strip("/")
-        a = visible().filter(uniq_url__iexact=uniq).first()
+        a = _find_article(visible(), uniq)
         comments = list(a.comments.filter(is_deleted=False, status=1).order_by("-created", "-id")) if a else []
         if not comments:
             return ok([], message="کامنتی وجود ندارد.")

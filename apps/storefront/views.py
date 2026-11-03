@@ -580,6 +580,10 @@ class ProductAddressView(PublicView):
         return Response({"slug": p.slug})
 
 
+# AI style tags that read as product facts; the rest (age group, formality score…) stay internal.
+_PUBLIC_AI_TAGS = {"نوع", "مناسبت", "سبک", "فصل", "طرح"}
+
+
 class SearchEngineMetaView(PublicView):
     def get(self, request, entity_type: str, slug: str):
         if entity_type == "product":
@@ -604,14 +608,8 @@ class SearchEngineMetaView(PublicView):
         reviews = ProductComment.objects.filter(product=p, is_deleted=False, status=1).count()
         url = f"/products-item/{p.slug}"
 
-        keywords = []
-        if ai and ai.search_keywords:
-            keywords.extend(ai.search_keywords)
-        if ai and ai.tags:
-            for t in ai.tags:
-                val = t.get("value")
-                if val and val not in keywords:
-                    keywords.append(val)
+        # Only the search phrases: the AI's style tags are internal labels ("4 — نیمه‌رسمی", "میانسال، مسن").
+        keywords = list(dict.fromkeys(ai.search_keywords)) if ai and ai.search_keywords else []
         if not keywords:
             keywords = [t["title"] for t in catalog.tags_for(ProductTag, "product_id", [p.id]).get(p.id, [])]
         keywords_str = ", ".join(keywords) if keywords else ""
@@ -641,6 +639,20 @@ class SearchEngineMetaView(PublicView):
             },
             "category": category,
         }
+        variants = bundle.visible_variants(p.id)
+        colors = list(dict.fromkeys(v.color.name for v in variants if v.color))
+        sizes = list(dict.fromkeys(v.size.name for v in variants if v.size))
+        if colors:
+            data["color"] = "، ".join(colors)
+        if sizes:
+            data["size"] = sizes
+        facts = [
+            {"type": "PropertyValue", "name": t["label"], "value": t["value"]}
+            for t in (ai.tags if ai and ai.tags else [])
+            if t.get("label") in _PUBLIC_AI_TAGS and t.get("value")
+        ]
+        if facts:
+            data["additionalProperty"] = facts
         # Google rejects a rating built from zero reviews, which sinks the whole Product snippet.
         if reviews:
             data["aggregateRating"] = {

@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def waiting():
-    return Invoice.objects.filter(state=Invoice.State.SUCCESSFUL, is_deleted=False, is_test=False, erp_sent_at__isnull=True).order_by("id")
+    return Invoice.objects.filter(state=Invoice.State.SUCCESSFUL, is_deleted=False, erp_sent_at__isnull=True).order_by("id")
 
 
 def send(invoice: Invoice) -> bool:

@@ -56,11 +56,13 @@ def slug_key(text: str) -> str:
 # longer title is cut at a word, so the address stays readable when shared.
 AI_SLUG_MAX = 70
 _DANGLING = {"و", "با", "از", "در", "به", "برای", "یا", "که", "تا"}
+# Punctuation in an AI title becomes a word break: "،" would be copied as %D8%8C.
+_TITLE_PUNCT = re.compile(r"[،؛؟,;:!?()«»\"'.]+")
 
 
 def ai_slug_base(ai_title: str) -> str:
     # A half-space separates parts of a word ("سگک‌دار"); dropped it would read "سگکدار".
-    base = slug_key((ai_title or "").replace("\u200c", "-"))
+    base = slug_key(_TITLE_PUNCT.sub(" ", (ai_title or "").replace("\u200c", "-")))
     if len(base) > AI_SLUG_MAX:
         words = base[:AI_SLUG_MAX + 1].rsplit("-", 1)[0].split("-")
         while len(words) > 1 and words[-1] in _DANGLING:  # "...-آزاد-و" reads cut off

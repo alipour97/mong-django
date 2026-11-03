@@ -39,12 +39,15 @@ def held_until(invoice_id: int | None = None, **voucher) -> datetime | None:
 
 
 def _unsent(**voucher):
-    """Paid orders the last sync cannot show yet: not written to the software, or written after that sync read it."""
+    """
+    Paid orders the last sync cannot show yet: not written to the software, or written after that sync read it.
+    Test orders count: they are written and spend the voucher there too.
+    """
     since_sync = Q(erp_sent_at__isnull=True, erp_invoice_id__isnull=True)
     synced = store.synced_at()
     if synced:
         since_sync |= Q(erp_sent_at__gt=synced)
-    return Invoice.objects.filter(since_sync, paid_at__isnull=False, is_deleted=False, is_test=False, **voucher)
+    return Invoice.objects.filter(since_sync, paid_at__isnull=False, is_deleted=False, **voucher)
 
 
 def spent_on_card(card_id: int) -> int:

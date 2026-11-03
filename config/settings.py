@@ -266,8 +266,11 @@ LEBAZAI_API_URL = os.getenv("LEBAZAI_API_URL", "https://office.lebazacenter.com/
 LEBAZAI_API_KEY = os.getenv("LEBAZAI_API_KEY", "")
 LEBAZAI_IMAGE_BRAND = os.getenv("LEBAZAI_IMAGE_BRAND", "mong")
 # A login of its own for the invoice write, limited to the tables it needs. Never the reading one.
-DADEHFA_WRITE_DB_USER = os.getenv("DADEHFA_WRITE_DB_USER", "")
-DADEHFA_WRITE_DB_PASSWORD = os.getenv("DADEHFA_WRITE_DB_PASSWORD", "")
+# Falls back to DADEHFA_DB_USER / DADEHFA_DB_PASSWORD if DADEHFA_WRITE_DB_* are not set.
+DADEHFA_WRITE_DB_USER = os.getenv("DADEHFA_WRITE_DB_USER") or os.getenv("DADEHFA_DB_USER", "")
+DADEHFA_WRITE_DB_PASSWORD = os.getenv("DADEHFA_WRITE_DB_PASSWORD") or os.getenv("DADEHFA_DB_PASSWORD", "")
+# Off unless set: a sysadmin login (sa) may write only where someone chose it, as on a local machine.
+DADEHFA_ALLOW_SYSADMIN = os.getenv("DADEHFA_ALLOW_SYSADMIN", "false").lower() in ("1", "true", "yes")
 
 # Admin panel API (apps/adminapi)
 ADMIN_TOKEN_MINUTES = int(os.getenv("ADMIN_TOKEN_MINUTES", "600"))
