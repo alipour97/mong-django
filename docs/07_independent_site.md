@@ -138,7 +138,7 @@ Use case هر سه باید `All` باشد. این مقدارها موقع build
 |---|---|
 | `SITE_URL` | `https://dadeh.mong.ir` |
 | `API_ORIGIN` | `https://api.dadeh.mong.ir` |
-| `SITE_NOINDEX` | `true` برای مخفی ماندن از گوگل، `false` برای سنجش واقعی یا سوییچ |
+| `SITE_NOINDEX` | لازم نیست. هر دامنه‌ای جز `mong.ir` (مثل `new.mong.ir`) خودکار noindex می‌شود؛ `true` فقط برای noindex کردن خود `mong.ir` |
 
 ## دیباگ سرعت و کوئری‌ها
 
@@ -185,7 +185,7 @@ python manage.py timing_report
 ## سوییچ به `mong.ir`
 
 1. درست پیش از سوییچ `python manage.py import_dadehfa_orders` را دوباره اجرا کنید تا مشتری‌ها و سفارش‌های تازه هم بیایند.
-2. در `dadeh-front`: `SITE_URL=https://mong.ir` و `SITE_NOINDEX=false`، سپس build دوباره.
+2. در `dadeh-front`: `SITE_URL=https://mong.ir` (و `SITE_NOINDEX` اگر هست حذف یا `false`)، سپس build دوباره. noindex روی `mong.ir` خودش برداشته می‌شود و `new.mong.ir` باید با 301 به `mong.ir` برود.
 3. در `dadeh`: `SITE_URL=https://mong.ir`.
 4. دامنهٔ `mong.ir` را از `shop` بردارید و به `dadeh-front` بدهید.
 5. `.NET` و جاب‌هایش را خاموش نکنید.

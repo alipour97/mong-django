@@ -1,41 +1,36 @@
 {
- "request": {
-  "method": "GET",
-  "base": "admin",
-  "path": "SearchEngine/product/%DA%A9%D8%A7%D9%BE%D8%B4%D9%86-%DA%86%D8%B1%D9%85-%DB%8C%D9%82%D9%87-%DA%A9%D8%B4%D8%A8%D8%A7%D9%81%D8%AA/meta",
-  "body": null
- },
- "status": 200,
- "response": {
-  "context": "https://schema.org/",
-  "type": "Product",
-  "name": "كاپشن چرم يقه كشبافت",
-  "image": [
-   "https://cdn.mong.ir/9/webgeneral/cc328093-0a88-4d45-a275-3b8a6a9888ba.webp",
-   "https://cdn.mong.ir/9/webgeneral/1d600d04-a8e3-405e-a37d-696ffd647ac6.webp"
-  ],
-  "video": [],
-  "description": "كاپشن . كاپشن چرم يقه كشبافت . %23سبک%0a%20loose%23فصل%0a%204052%23گروه%0a%20casual (روزمره)%23رده سني%0a%20جوان(بين 18 تا35)%23قواره%0a%20Short . قیمت 9,987,000 تومان",
-  "canonical": "/products-item/کاپشن-چرم-یقه-کشبافت",
-  "brand": {
-   "type": "Brand",
-   "name": "مانگ"
+  "request": {
+    "method": "GET",
+    "base": "admin",
+    "path": "SearchEngine/product/%DA%A9%D8%A7%D9%BE%D8%B4%D9%86-%DA%86%D8%B1%D9%85-%DB%8C%D9%82%D9%87-%DA%A9%D8%B4%D8%A8%D8%A7%D9%81%D8%AA/meta",
+    "body": null
   },
-  "sku": "0310002966",
-  "offers": {
-   "type": "Offer",
-   "url": "/products-item/کاپشن-چرم-یقه-کشبافت",
-   "priceCurrency": "IRR",
-   "price": "99,870,000",
-   "priceValidUntil": "2026-10-26",
-   "availability": "https://schema.org/InStock",
-   "itemCondition": "https://schema.org/NewCondition"
-  },
-  "aggregateRating": {
-   "type": "AggregateRating",
-   "ratingValue": "0.00",
-   "reviewCount": "0"
-  },
-  "category": "كاپشن"
- }
+  "status": 200,
+  "response": {
+    "context": "https://schema.org/",
+    "type": "Product",
+    "name": "كاپشن چرم يقه كشبافت",
+    "image": [
+      "https://cdn.mong.ir/9/webgeneral/cc328093-0a88-4d45-a275-3b8a6a9888ba.webp",
+      "https://cdn.mong.ir/9/webgeneral/1d600d04-a8e3-405e-a37d-696ffd647ac6.webp"
+    ],
+    "video": [],
+    "description": "كاپشن . كاپشن چرم يقه كشبافت . %23سبک%0a%20loose%23فصل%0a%204052%23گروه%0a%20casual (روزمره)%23رده سني%0a%20جوان(بين 18 تا35)%23قواره%0a%20Short . قیمت 9,987,000 تومان",
+    "canonical": "/products-item/کاپشن-چرم-یقه-کشبافت",
+    "brand": {
+      "type": "Brand",
+      "name": "مانگ"
+    },
+    "sku": "0310002966",
+    "offers": {
+      "type": "Offer",
+      "url": "/products-item/کاپشن-چرم-یقه-کشبافت",
+      "priceCurrency": "IRR",
+      "price": 99870000,
+      "priceValidUntil": "2026-10-26",
+      "availability": "https://schema.org/InStock",
+      "itemCondition": "https://schema.org/NewCondition"
+    },
+    "category": "كاپشن"
+  }
 }

@@ -554,7 +554,7 @@ class SearchEngineMetaView(PublicView):
             keywords = [t["title"] for t in catalog.tags_for(ProductTag, "product_id", [p.id]).get(p.id, [])]
         keywords_str = ", ".join(keywords) if keywords else ""
 
-        return Response({
+        data = {
             "context": "https://schema.org/",
             "type": "Product",
             "name": product_name,
@@ -570,18 +570,21 @@ class SearchEngineMetaView(PublicView):
                 "type": "Offer",
                 "url": url,
                 "priceCurrency": "IRR",
-                "price": f"{pr.after:,}",
+                "price": int(pr.after),  # schema.org wants a bare number; "69,800,000" is invalid
                 "priceValidUntil": timezone.localdate().isoformat(),
                 "availability": "https://schema.org/InStock" if bundle.in_stock(p.id) else "https://schema.org/OutOfStock",
                 "itemCondition": "https://schema.org/NewCondition",
             },
-            "aggregateRating": {
+            "category": category,
+        }
+        # Google rejects a rating built from zero reviews, which sinks the whole Product snippet.
+        if reviews:
+            data["aggregateRating"] = {
                 "type": "AggregateRating",
                 "ratingValue": f"{float(p.overall_score_average or 0):.2f}",
                 "reviewCount": str(reviews),
-            },
-            "category": category,
-        })
+            }
+        return Response(data)
 
     def _category(self, slug):
         cat = _category_by_slug(slug)
