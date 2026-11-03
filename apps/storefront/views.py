@@ -590,6 +590,11 @@ class SearchEngineMetaView(PublicView):
             return self._product(slug)
         if entity_type == "category":
             return self._category(slug)
+        if entity_type == "blog":
+            from . import blog
+
+            a = blog.find_visible(slug)
+            return Response(blog.seo_meta(a)) if a else Response(None, status=404)
         return Response(None, status=404)
 
     def _product(self, slug):
@@ -708,6 +713,13 @@ class SearchEngineBreadcrumbsView(PublicView):
             if not c:
                 return Response(None, status=404)
             items = catalog.breadcrumb_items(c.id)
+        elif entity_type == "blog":
+            from . import blog
+
+            a = blog.find_visible(slug)
+            if not a:
+                return Response(None, status=404)
+            items = blog.breadcrumbs(a)
         else:
             return Response(None, status=404)
         return Response({

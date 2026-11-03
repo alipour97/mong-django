@@ -23,7 +23,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from apps.website import images
-from apps.website.models import FileFormat
+from apps.website.models import FileFormat, FileMedia
 
 logger = logging.getLogger(__name__)
 
@@ -179,3 +179,14 @@ def save(uploaded) -> dict:
         "local_path": str(relative),
     }
 
+
+
+def save_media(uploaded, domain: str, alternative: str = "") -> FileMedia:
+    """Store an UploadedFile and add it to the gallery."""
+    saved = save(uploaded)
+    now = timezone.now()
+    return FileMedia.objects.create(
+        file_name=uploaded.name, url=saved["url"], format_id=saved["format_id"], upload_time=now,
+        size=saved["size"], width=saved["width"], height=saved["height"], domain=domain,
+        alternative=alternative, created=now,
+    )

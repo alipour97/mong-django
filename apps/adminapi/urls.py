@@ -134,6 +134,9 @@ urlpatterns = [
     path("Article/SoftDeleteCategory", blog.DeleteCategoryView.as_view()),
     path("Article/SoftDeleteTag", blog.DeleteTagView.as_view()),
     path("Article/CheckUniqUrl", blog.CheckUrlView.as_view()),
+    path("Article/Import", blog.ImportView.as_view()),
+    path("Article/<int:article_id>/Preview", blog.PreviewView.as_view()),
+    path("Article/Package/<str:kind>", blog.PackageFileView.as_view()),
     path("Article/SoftDelete/<int:article_id>", blog.DeleteView.as_view()),
     path("Article/<int:article_id>", blog.DetailView.as_view()),
 

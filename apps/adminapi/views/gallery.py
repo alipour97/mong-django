@@ -96,14 +96,9 @@ class UploadView(AdminView):
         if not uploaded:
             return fail("فایلی ارسال نشده است", 400)
         try:
-            saved = uploads.save(uploaded)
+            f = uploads.save_media(uploaded, request.get_host())
         except uploads.UploadError as exc:
             return fail(str(exc), 400)
-        f = FileMedia.objects.create(
-            file_name=uploaded.name, url=saved["url"], format_id=saved["format_id"], upload_time=timezone.now(),
-            size=saved["size"], width=saved["width"], height=saved["height"], domain=request.get_host(),
-            created=timezone.now(),
-        )
         return ok({"result": {"id": f.id, "url": _url(f.url)}})
 
 

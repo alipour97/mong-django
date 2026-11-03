@@ -10,6 +10,11 @@ as its MediaAttachment (table Articles), like the old API did.
     POST Article/<id> (same body)
     GET  Article/Categories | Article/Tags        POST Article/categories "title" | Article/tags "name"
     GET  Article/SoftDeleteCategory?categoryId= | Article/SoftDeleteTag?tagId=
+    POST Article/Import (multipart "file": an article package zip, "replace", "publish") -> {result: {id, ...}}
+    GET  Article/<id>/Preview                    the article as the site shows it, published or not
+    GET  Article/Package/guide | Article/Package/sample   how to write a package, and a sample zip
+
+The content is stored through website/article_html.clean(), from the editor and from a package alike.
 """
 from __future__ import annotations
 
@@ -18,8 +23,9 @@ from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework.response import Response
 
-from apps.storefront import catalog
+from apps.storefront import blog as site_blog
 from apps.storefront.envelope import jalali
+from apps.website import article_html
 from apps.website.models import (
     Article, ArticleBlogCategory, ArticleTag, ArticleTagRelation, BlogCategory, FileMedia, MediaAttachment,
 )
@@ -147,7 +153,7 @@ def _save(request, a: Article | None):
         is_new = a is None
         a = a or Article(created=timezone.now(), view_count=0, author_id=to_int(art.get("authorId")) or request.user.id)
         a.title, a.uniq_url = title, uniq
-        a.content, a.description = art.get("content") or "", art.get("articleDescription") or ""
+        a.content, a.description = article_html.clean(art.get("content") or ""), art.get("articleDescription") or ""
         a.show_on_page = bool(art.get("showOnPage"))
         a.publish_date = _date(art.get("publishDate")) or (timezone.now() if is_new else a.publish_date)
         a.last_modified = timezone.now()
@@ -219,3 +225,66 @@ class DeleteTagView(AdminView):
     def get(self, request):
         n = ArticleTag.objects.filter(id=to_int(request.query_params.get("tagId")), is_deleted=False).update(is_deleted=True)
         return ok({"res": True}) if n else fail("tag not found.", 404)
+
+
+class ImportView(AdminView):
+    def post(self, request):
+        from .. import blog_package
+
+        uploaded = request.FILES.get("file")
+        if not uploaded:
+            return fail("فایل زیپ مقاله ارسال نشده است", 400)
+        if uploaded.size > blog_package.MAX_ZIP_BYTES:
+            return fail("حجم زیپ بیش از ۶۰ مگابایت است", 400)
+        flag = lambda key: str(request.data.get(key, "")).lower() in ("1", "true", "yes")  # noqa: E731
+        publish = request.data.get("publish")
+        try:
+            r = blog_package.import_package(
+                uploaded, author_id=request.user.id, domain=request.get_host(), replace=flag("replace"),
+                publish=None if publish in (None, "") else flag("publish"),
+            )
+        except blog_package.SlugTaken as exc:
+            return fail(str(exc), 409, {"slugTaken": True, "articleId": exc.article.id, "articleTitle": exc.article.title})
+        except blog_package.PackageError as exc:
+            return fail(str(exc), 400, {"problems": exc.problems})
+        a = r.article
+        return ok({"result": {
+            "id": a.id, "title": a.title, "articleUniqUrl": a.uniq_url, "showOnPage": a.show_on_page,
+            "created": r.created, "photos": r.photos, "products": r.products, "warnings": r.warnings,
+        }})
+
+
+class PreviewView(AdminView):
+    def get(self, request, article_id: int):
+        a = _articles().filter(id=article_id).first()
+        if not a:
+            return fail(NOT_FOUND, 404)
+        return ok({"result": site_blog.page_data(a)})
+
+
+class PackageFileView(AdminView):
+    """The guide to give an AI (or a writer) and a sample package (adminapi/article_package/)."""
+
+    def get(self, request, kind: str):
+        import io
+        import zipfile
+        from pathlib import Path
+
+        from django.http import HttpResponse
+
+        docs = Path(__file__).resolve().parent.parent / "article_package"
+        if kind == "guide":
+            response = HttpResponse((docs / "guide.md").read_bytes(), content_type="text/markdown; charset=utf-8")
+            response["Content-Disposition"] = 'attachment; filename="mong-blog-article-guide.md"'
+            return response
+        if kind != "sample":
+            return fail(NOT_FOUND, 404)
+        out = io.BytesIO()
+        folder = docs / "sample"
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in sorted(folder.rglob("*")):
+                if f.is_file():
+                    zf.write(f, f.relative_to(folder).as_posix())
+        response = HttpResponse(out.getvalue(), content_type="application/zip")
+        response["Content-Disposition"] = 'attachment; filename="mong-blog-sample-article.zip"'
+        return response

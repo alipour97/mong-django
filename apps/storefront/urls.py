@@ -67,7 +67,9 @@ urlpatterns = [
     # Blog
     path("Article/GetRecentArticles", blog.RecentView.as_view()),
     path("Article/GetArticleByUniqUrl", blog.ByUniqUrlView.as_view()),
+    path("Article/View/<int:article_id>", blog.ViewCountView.as_view()),
     path("Article/GetAllCategoryArticle", blog.CategoriesView.as_view()),
+    path("Article/ListMeta", blog.ListMetaView.as_view()),
     path("Article/GetArticleByCategoryId", blog.ByCategoryView.as_view()),
     path("Article/GetSuggestedArticles", blog.SuggestedView.as_view()),
     path("Article/GetAllArticleComments", blog.CommentsView.as_view()),

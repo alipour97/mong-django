@@ -2,23 +2,32 @@
 Article/* on the site: the blog, as api.mong.ir served it.
 
 An article is on the site while show_on_page is on, its publish date has
-passed and it has not expired. Opening an article counts a view. Comments
-and likes are in interactions.py.
+passed and it has not expired. The page counts a view with Article/View/<id>
+(GetArticleByUniqUrl counts one too unless asked with count=0, which the
+server-rendered page does). Comments and likes are in interactions.py.
+
+The article's HTML is stored clean (website/article_html.py) and prepared here
+for the page: heading ids and the table of contents, the FAQ, responsive photos,
+and product cards with today's price in place of the product placeholders.
 """
 from __future__ import annotations
 
 import math
+import re
+from html import escape
+from urllib.parse import unquote
 
 from django.db.models import F, Q
 from django.utils import timezone
 
 from apps.adminapi.models import AdminUser
+from apps.website import article_html
 from apps.website import images as site_images
-from apps.website.models import Article, ArticleComment, BlogCategory, Customer, MediaAttachment
+from apps.website.models import Article, ArticleComment, BlogCategory, Customer, MediaAttachment, Product, ProductVariant
 
 from . import catalog
 from .envelope import MSG_FETCHED_ONE, jalali, not_found, ok
-from .views import PublicView
+from .views import PublicView, _product_by_slug
 
 _to_int = lambda v, d: int(v) if str(v or "").lstrip("-").isdigit() else d  # noqa: E731
 
@@ -74,36 +83,171 @@ class RecentView(PublicView):
         return ok([_summary(a, authors) for a in articles])
 
 
+# -----------------------------------------------------------------------------
+# Products in articles
+# -----------------------------------------------------------------------------
+_PRODUCT_PATH = re.compile(r"/(?:products-item/([^/?#]+)|p/(\d+))")
+_BARCODE_MIN = 8  # product ids have up to 6 digits, barcodes 10 or more
+
+
+def resolve_product(ref: str) -> Product | None:
+    """A product named in an article: its address or short link, id, barcode, or exact name."""
+    ref = (ref or "").strip()
+    if not ref:
+        return None
+    qs = catalog.on_sale(Product.objects.filter(is_deleted=False))
+    if m := _PRODUCT_PATH.search(ref):
+        return qs.filter(pk=int(m.group(2))).first() if m.group(2) else _product_by_slug(unquote(m.group(1)))
+    digits = ref.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+    if digits.isdigit():
+        if len(digits) < _BARCODE_MIN:
+            return qs.filter(pk=int(digits)).first()
+        found = qs.filter(barcode=digits).first()
+        if not found:
+            variant = ProductVariant.objects.filter(barcode=digits, is_deleted=False).first()
+            found = qs.filter(pk=variant.product_id).first() if variant else None
+        return found
+    found = _product_by_slug(ref)
+    if found:
+        return found
+    key = catalog.norm(ref)
+    return next((p for p in qs.only("id", "title").order_by("id") if catalog.norm(p.title) == key), None)
+
+
+def _fa(n: int) -> str:
+    return f"{int(n):,}".translate(str.maketrans("0123456789,", "۰۱۲۳۴۵۶۷۸۹٬"))
+
+
+CARD_IMAGE_WIDTHS = (384, 640)
+
+
+def _card(bundle: catalog.ProductBundle, pid: int, single: bool) -> str:
+    p = bundle.products[pid]
+    pr = bundle.pricing(pid)
+    ai = bundle.ai_profiles.get(pid)
+    name = catalog.display_name(p.title)
+    about = catalog.display_name(ai.title) if ai and ai.title else ""
+    images = [i for i in bundle.main_images(pid) if not i["isVideo"]]
+    if images:
+        url = images[0]["mediaUrl"]
+        srcset = ", ".join(f"{url}?w={w} {w}w" for w in CARD_IMAGE_WIDTHS)
+        sizes = "(max-width: 640px) 40vw, 240px" if single else "(max-width: 640px) 50vw, 250px"
+        img = (f'<img src="{escape(url)}?w=384" srcset="{escape(srcset)}" sizes="{sizes}" alt="{escape(about or name)}" '
+               f'width="600" height="800" loading="lazy" decoding="async">')
+    else:
+        img = '<img src="/general-images/cart-place-holder.webp" alt="" width="600" height="800" loading="lazy">'
+    in_stock = bundle.in_stock(pid)
+    price = f'<span class="blog-product__now">{_fa(pr.after // 10)} <small>تومان</small></span>'
+    if pr.after < pr.base:
+        off = round(100 * (pr.base - pr.after) / pr.base) if pr.base else 0
+        price = (f'<del>{_fa(pr.base // 10)}</del>{price}'
+                 + (f'<span class="blog-product__off">٪{_fa(off)}</span>' if off else ""))
+    if not in_stock:
+        price = '<span class="blog-product__soldout">ناموجود</span>'
+    return (
+        f'<a class="blog-product" href="/products-item/{escape(p.slug)}">'
+        f'<span class="blog-product__img">{img}</span>'
+        f'<span class="blog-product__body">'
+        f'<span class="blog-product__name">{escape(name)}</span>'
+        + (f'<span class="blog-product__about">{escape(about)}</span>' if about and single else "")
+        + f'<span class="blog-product__price">{price}</span>'
+        f'<span class="blog-product__cta">{"مشاهده و خرید" if in_stock else "مشاهده محصول"}</span>'
+        f'</span></a>'
+    )
+
+
+def render_products(refs: list[str], single: bool) -> str:
+    ids: list[int] = []
+    for ref in refs:
+        p = resolve_product(ref)
+        if p and p.id not in ids:
+            ids.append(p.id)
+    if not ids:
+        return ""
+    bundle = catalog.ProductBundle.load(ids)
+    cards = [_card(bundle, pid, single) for pid in ids if pid in bundle.products]
+    if not cards:
+        return ""
+    kind = "blog-products blog-products--single" if single and len(cards) == 1 else "blog-products"
+    return f'<div class="{kind}">{"".join(cards)}</div>'
+
+
+def prepared(a: Article) -> article_html.Prepared:
+    return article_html.prepare(a.content, render_products)
+
+
+def page_data(a: Article) -> dict:
+    """The article as the page shows it (also the admin's preview)."""
+    authors = _authors([a])
+    body = prepared(a)
+    return {
+        **_summary(a, authors),
+        "articleContent": body.html,
+        "toc": body.toc,
+        "faq": body.faq,
+        "readingMinutes": max(1, round(body.words / 200)),
+        "publishDateIso": a.publish_date.isoformat() if a.publish_date else None,
+        "modifiedDateIso": (a.last_modified or a.publish_date).isoformat() if (a.last_modified or a.publish_date) else None,
+        "expirationDate": a.expiration_date.isoformat() if a.expiration_date else None,
+        "likeCount": a.likes.filter(is_deleted=False, liked=True).count(),
+        "commentCount": a.comments.filter(is_deleted=False, status=1).count(),
+        "isLike": None,
+        "user": None,
+        "tags": [{"id": t.id, "name": t.name} for t in a.tags.filter(is_deleted=False, article_links__is_deleted=False).distinct()],
+        "articleCategories": [
+            {"id": c.id, "name": c.title}
+            for c in a.categories.filter(is_deleted=False, article_links__is_deleted=False).distinct()
+        ],
+        "mediaAttachments": [],
+    }
+
+
 class ByUniqUrlView(PublicView):
     def get(self, request):
-        uniq = (request.query_params.get("uniqUrl") or "").strip().strip("/")
-        a = _find_article(visible(), uniq)
+        q = request.query_params
+        a = _find_article(visible(), (q.get("uniqUrl") or "").strip().strip("/"))
         if not a:
             return ok(None, message="اطلاعات مورد نظر یافت نشد.")
-        Article.objects.filter(id=a.id).update(view_count=F("view_count") + 1)
-        a.view_count += 1
-        authors = _authors([a])
-        data = {
-            **_summary(a, authors),
-            "articleContent": site_images.rewrite_media_in_text(a.content),
-            "expirationDate": a.expiration_date.isoformat() if a.expiration_date else None,
-            "likeCount": a.likes.filter(is_deleted=False, liked=True).count(),
-            "isLike": None,
-            "user": None,
-            "tags": [{"id": t.id, "name": t.name} for t in a.tags.filter(is_deleted=False, article_links__is_deleted=False).distinct()],
-            "articleCategories": [
-                {"id": c.id, "name": c.title}
-                for c in a.categories.filter(is_deleted=False, article_links__is_deleted=False).distinct()
-            ],
-            "mediaAttachments": [],
-        }
-        return ok(data, message=MSG_FETCHED_ONE)
+        if q.get("count") != "0":
+            Article.objects.filter(id=a.id).update(view_count=F("view_count") + 1)
+            a.view_count += 1
+        return ok(page_data(a), message=MSG_FETCHED_ONE)
+
+
+class ViewCountView(PublicView):
+    """POST Article/View/<id>: the page counts its view from the browser, so cached pages still count."""
+
+    def post(self, request, article_id: int):
+        n = visible().filter(id=article_id).update(view_count=F("view_count") + 1)
+        return ok(bool(n))
 
 
 class CategoriesView(PublicView):
     def get(self, request):
         cats = BlogCategory.objects.filter(is_deleted=False).order_by("id")
         return ok([{"id": c.id, "title": c.title} for c in cats])
+
+
+class ListMetaView(PublicView):
+    """GET Article/ListMeta?categoryId=: the blog page's heading and search snippet."""
+
+    def get(self, request):
+        cat = BlogCategory.objects.filter(id=_to_int(request.query_params.get("categoryId"), 0), is_deleted=False).first()
+        if cat:
+            return ok({
+                "heading": f"مقالات {cat.title}",
+                "intro": "",
+                # The site appends " | مانگ" to every title.
+                "seoTitle": _clip(f"مقالات {cat.title} در بلاگ", SEO_TITLE_MAX),
+                "description": _clip(f"مقاله‌های {cat.title} در بلاگ مانگ: راهنمای استایل، ست کردن لباس و نکته‌های خرید لباس زنانه.",
+                                     SEO_DESCRIPTION_MAX),
+            })
+        return ok({
+            "heading": "بلاگ مانگ",
+            "intro": "راهنمای استایل، ست کردن لباس و نکته‌های خرید مانتو، شلوار و لباس زنانه",
+            "seoTitle": "بلاگ: راهنمای استایل و خرید لباس زنانه",
+            "description": "راهنمای استایل، ست کردن لباس، انتخاب سایز و نکته‌های خرید مانتو، شلوار و لباس زنانه در بلاگ مانگ.",
+        })
 
 
 class ByCategoryView(PublicView):
@@ -174,3 +318,55 @@ class CommentsView(PublicView):
 
 def sitemap_items(item) -> list[dict]:
     return [item(a.uniq_url, a.last_modified or a.publish_date) for a in visible().order_by("-publish_date")]
+
+
+# -----------------------------------------------------------------------------
+# SearchEngine/blog/<slug>/meta and /breadcrumbs
+# -----------------------------------------------------------------------------
+SEO_TITLE_MAX = 60
+SEO_DESCRIPTION_MAX = 160
+
+
+def _clip(text: str, limit: int) -> str:
+    text = " ".join((text or "").split())
+    if len(text) <= limit:
+        return text
+    return text[:limit].rsplit(" ", 1)[0].rstrip(" ،,.-|:؛")
+
+
+def find_visible(slug: str) -> Article | None:
+    return _find_article(visible(), unquote(slug or "").strip().strip("/"))
+
+
+def seo_meta(a: Article) -> dict:
+    """BlogPosting JSON-LD; seoTitle and canonical are for the page's metadata only."""
+    url = f"/blog/{a.uniq_url}"
+    tags = [t.name for t in a.tags.filter(is_deleted=False, article_links__is_deleted=False).distinct()]
+    category = a.categories.filter(is_deleted=False, article_links__is_deleted=False).first()
+    modified = a.last_modified or a.publish_date
+    author = _authors([a]).get(a.author_id) or ""
+    return {
+        "context": "https://schema.org",
+        "type": "BlogPosting",
+        "headline": _clip(a.title, 110),
+        "seoTitle": _clip(a.title, SEO_TITLE_MAX),
+        "description": _clip(a.description or article_html.plain_text(a.content), SEO_DESCRIPTION_MAX),
+        "canonical": url,
+        "url": url,
+        "image": _media(a.thumbnail) or None,
+        "datePublished": a.publish_date.isoformat() if a.publish_date else None,
+        "dateModified": modified.isoformat() if modified else None,
+        "author": {"type": "Person", "name": author} if author else {"type": "Organization", "name": catalog.MONG_BRAND["title"], "url": "/"},
+        "publisher": {"type": "Organization", "name": catalog.MONG_BRAND["title"], "url": "/"},
+        "inLanguage": "fa-IR",
+        "keywords": ", ".join(tags),
+        "articleSection": category.title if category else None,
+        "wordCount": len(article_html.plain_text(a.content).split()),
+    }
+
+
+def breadcrumbs(a: Article | None) -> list[dict]:
+    items = [{"position": 1, "name": "خانه", "url": "/"}, {"position": 2, "name": "بلاگ", "url": "/blog"}]
+    if a:
+        items.append({"position": 3, "name": a.title, "url": f"/blog/{a.uniq_url}"})
+    return items
