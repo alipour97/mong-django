@@ -124,8 +124,7 @@ def _mark_paid(inv: Invoice, *, test: bool = False) -> None:
         for line in inv.lines.all():
             erp_store.take(line.variant_id, line.qty)
     transaction.on_commit(catalog.clear_caches)
-    if not test:
-        transaction.on_commit(lambda: _notify_admins(number))
+    transaction.on_commit(lambda: _notify_admins(number))
     transaction.on_commit(lambda: outbox.send_soon(inv.id))
 
 

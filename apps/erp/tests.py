@@ -1066,7 +1066,7 @@ class TestPaymentTests(TestCase):
     @override_settings(ZARINPAL_SANDBOX=True)
     def test_a_sandbox_zarinpal_payment_is_a_test(self):
         self.assertTrue(self.finish("zarinpal").is_test)
-        self.assertFalse(self.notified)
+        self.assertTrue(self.notified)  # admins are texted for test orders too
 
     @override_settings(ZARINPAL_SANDBOX=False)
     def test_a_live_zarinpal_payment_is_real(self):
