@@ -34,6 +34,7 @@ from apps.website.models import (
     PrimaryConfig,
     Product,
     ProductComment,
+    ProductSlugAlias,
     ProductCommentLike,
     ProductTag,
     Province,
@@ -183,7 +184,11 @@ class CategoryGetByIdView(PublicView):
         media = catalog.attachments(MediaAttachment.Table.CATEGORIES, [cat.id]).get(cat.id)
         tags = catalog.tags_for(CategoryTag, "category_id", [cat.id]).get(cat.id)
         data = catalog.category_dict(cat, media=media, tags=tags)
-        data.update({"parentMapId": cat.parent_map_id or None, "created": iso(cat.created)})
+        data.update({
+            "parentMapId": cat.parent_map_id or None,
+            "created": iso(cat.created),
+            "guide": catalog.category_guide(cat),
+        })
         return ok(data)
 
 
@@ -210,7 +215,7 @@ class CategoryGetCategorySummariesView(PublicView):
         ids = _ids(request)
         cats = Category.objects.filter(id__in=ids, is_deleted=False).in_bulk()
         media = catalog.attachments(MediaAttachment.Table.CATEGORIES, cats.keys())
-        data = [{"id": c.id, "title": c.title, "slug": c.slug, "medias": media.get(c.id, [])} for c in (cats[i] for i in ids if i in cats)]
+        data = [{"id": c.id, "title": catalog.display_name(c.title), "slug": c.slug, "medias": media.get(c.id, [])} for c in (cats[i] for i in ids if i in cats)]
         return ok(data)
 
 
@@ -219,7 +224,7 @@ class CategoryGetCategorySummariesView(PublicView):
 # -----------------------------------------------------------------------------
 def _collection_dict(c: Collection, media: list, media_key: str) -> dict:
     return {
-        "id": c.id, "title": c.title, "inMainPage": c.in_main_page, "reduction": float(c.reduction),
+        "id": c.id, "title": catalog.display_name(c.title), "inMainPage": c.in_main_page, "reduction": float(c.reduction),
         "beginningDate": jalali(c.beginning_date), "endDate": jalali(c.end_date),
         "displayPriority": c.display_priority, media_key: media,
     }
@@ -495,7 +500,13 @@ def _by_slug(qs, slug: str, preferred=()):
 def _product_by_slug(slug: str) -> Product | None:
     listed = {r.id for r in catalog.listing_rows()}
     qs = catalog.on_sale(Product.objects.filter(is_deleted=False)).select_related("category", "brand")
-    return _by_slug(qs, slug, listed)
+    found = _by_slug(qs, slug, listed)
+    if found:
+        return found
+    # An address the product had before (services/ai_slugs.py): the page sees the
+    # current one in the meta's canonical and answers with a 301.
+    alias = ProductSlugAlias.objects.filter(slug_key=slugs.slug_key(slug)).first()
+    return qs.filter(pk=alias.product_id).first() if alias else None
 
 
 def _category_by_slug(slug: str) -> Category | None:
@@ -507,6 +518,47 @@ def _toman(rial: int) -> str:
     return f"{int(rial) // 10:,}"
 
 
+# Search snippets: Google shows about 60 characters of a title (the site appends
+# " | مانگ") and about 160 of a description, so longer text is cut at a word.
+SEO_TITLE_MAX = 54
+SEO_DESCRIPTION_MAX = 160
+
+
+def _clip(text: str, limit: int) -> str:
+    text = " ".join((text or "").split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rsplit(" ", 1)[0]
+    return cut.rstrip(" ،,.-|:؛")
+
+
+_womens = catalog.womens
+
+
+def _category_seo(cat: Category, leaves: list[Category]) -> tuple[str, str]:
+    item = _womens(catalog.display_name(cat.title))
+    title = _clip(f"خرید {item} | جدیدترین مدل‌ها و قیمت روز", SEO_TITLE_MAX)
+    description = f"خرید آنلاین {item} با جدیدترین مدل‌ها، رنگ‌ها و سایزهای مختلف و قیمت روز در فروشگاه اینترنتی مانگ."
+    kinds = [catalog.display_name(c.title) for c in leaves if c.id != cat.id][:3]
+    if kinds:
+        description += " شامل " + "، ".join(kinds) + "."
+    return title, _clip(description, SEO_DESCRIPTION_MAX)
+
+
+def _product_seo_title(name: str, ai_title: str, category: str) -> str:
+    """The AI title says what the item is ("کت زنانه توئیت ..."); the name is the model ("ولنتینا")."""
+    if ai_title:
+        ai_title = catalog.display_name(ai_title)
+        title = f"{ai_title} مدل {name}"
+        # The AI title alone when it already names the model ("دورس ... مدل 1982" for "دورس 1982"),
+        # or rather than a cut model name.
+        if set(name.split()) <= set(ai_title.split()) or len(title) > SEO_TITLE_MAX:
+            title = ai_title
+    else:
+        title = f"خرید {name} | {_womens(category)}" if category else f"خرید {name}"
+    return _clip(title, SEO_TITLE_MAX)
+
+
 class SearchEngineIndexView(PublicView):
     def get(self, request, entity_type: str, slug: str):
         if entity_type == "product":
@@ -516,6 +568,16 @@ class SearchEngineIndexView(PublicView):
             c = _category_by_slug(slug)
             return Response(c.id if c else 0)
         return Response(0)
+
+
+class ProductAddressView(PublicView):
+    """The short share link /p/<id> asks here for the product's current address."""
+
+    def get(self, request, product_id: int):
+        p = catalog.on_sale(Product.objects.filter(is_deleted=False, pk=product_id)).only("slug").first()
+        if not p:
+            return Response(None, status=404)
+        return Response({"slug": p.slug})
 
 
 class SearchEngineMetaView(PublicView):
@@ -533,9 +595,9 @@ class SearchEngineMetaView(PublicView):
         bundle = catalog.ProductBundle.load([p.id])
         pr = bundle.pricing(p.id)
         images = bundle.main_images(p.id)
-        category = p.category.title if p.category else ""
+        category = catalog.display_name(p.category.title) if p.category else ""
         ai = getattr(p, "ai_profile", None)
-        product_name = p.title
+        product_name = catalog.display_name(p.title)
         ai_title = ai.title if ai and ai.title else ""
         meta_desc = ai.meta_description if ai and ai.meta_description else p.short_desc
         parts = [category, product_name, ai_title, meta_desc, f"قیمت {_toman(pr.after)} تومان"]
@@ -559,6 +621,8 @@ class SearchEngineMetaView(PublicView):
             "type": "Product",
             "name": product_name,
             "alternateName": ai_title or None,
+            # For the <title> only; the page drops it before writing the JSON-LD.
+            "seoTitle": _product_seo_title(product_name, ai_title, category),
             "image": [i["mediaUrl"] for i in images if not i["isVideo"]],
             "video": [i["mediaUrl"] for i in images if i["isVideo"]],
             "description": meta_desc or " . ".join(x for x in parts if x),
@@ -601,16 +665,19 @@ class SearchEngineMetaView(PublicView):
                 stack.append(c.id)
         online_parents = {c.parent_id for c in below if c.is_online_active}
         leaves = sorted((c for c in below if c.is_online_active and c.id not in online_parents), key=lambda c: c.id)
+        seo_title, description = _category_seo(cat, leaves)
         return Response({
             "context": "https://schema.org/",
             "type": "ItemList",
-            "name": cat.title,
-            "description": " . ".join([cat.title] + [c.title for c in leaves]),
+            "name": catalog.display_name(cat.title),
+            "seoTitle": seo_title,  # for the <title> only; the page drops it before writing the JSON-LD
+            "description": description,
             "url": f"/products-category/{cat.slug}",
+            "canonical": f"/products-category/{cat.slug}",
             "numberOfItems": len(leaves),
             "itemListOrder": "https://schema.org/ItemListOrderAscending",
             "itemListElement": [
-                {"type": "ListItem", "position": i, "name": c.title, "url": f"/products-category/{c.slug}"}
+                {"type": "ListItem", "position": i, "name": catalog.display_name(c.title), "url": f"/products-category/{c.slug}"}
                 for i, c in enumerate(leaves, start=1)
             ],
         })
@@ -623,7 +690,7 @@ class SearchEngineBreadcrumbsView(PublicView):
             if not p:
                 return Response(None, status=404)
             items = catalog.breadcrumb_items(p.category_id)
-            items.append({"position": len(items) + 1, "name": p.title, "url": f"/products-item/{p.slug}"})
+            items.append({"position": len(items) + 1, "name": catalog.display_name(p.title), "url": f"/products-item/{p.slug}"})
         elif entity_type == "category":
             c = _category_by_slug(slug)
             if not c:

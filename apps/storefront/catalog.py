@@ -66,6 +66,18 @@ def norm(text: str | None) -> str:
     return (text or "").replace("ي", "ی").replace("ك", "ک").replace("‌", " ").strip().lower()
 
 
+_PERSIAN_LETTERS = str.maketrans({"ي": "ی", "ى": "ی", "ك": "ک"})
+
+
+def display_name(text: str | None) -> str:
+    """
+    A product or category name as customers see it: the sales software writes
+    Arabic ي/ك, which Persian keyboards and searches type as ی/ک. Only letters
+    change, so slugs and ERP matching (which use the stored title) are untouched.
+    """
+    return (text or "").translate(_PERSIAN_LETTERS)
+
+
 def absolute_url(url: str) -> str:
     if url.startswith("/"):
         return settings.PUBLIC_BASE_URL.rstrip("/") + url
@@ -165,7 +177,7 @@ def _build_category_tree() -> CategoryTree:
 def category_dict(cat: Category, *, children=None, media=None, tags=None) -> dict:
     return {
         "slug": cat.slug,
-        "title": cat.title,
+        "title": display_name(cat.title),
         "inMainPage": cat.in_main_page,
         "parentId": cat.parent_id,
         "displayPriority": cat.display_priority,
@@ -202,7 +214,7 @@ def breadcrumb_items(cat_id: int | None) -> list[dict]:
         if len(chain) > 1 and chain[0].parent_id is None:
             chain = chain[1:]
         for i, c in enumerate(chain, start=2):
-            items.append({"position": i, "name": c.title, "url": f"/products-category/{c.slug}"})
+            items.append({"position": i, "name": display_name(c.title), "url": f"/products-category/{c.slug}"})
     return items
 
 
@@ -409,7 +421,7 @@ class ProductBundle:
             "categoryId": p.category_id,
             "parentCategoryId": p.category.parent_id if p.category else None,
             "brandId": MONG_BRAND["id"],
-            "productName": p.title,
+            "productName": display_name(p.title),
             "aiTitle": (ai.title if ai and ai.title else ""),
             "longDescriptionHtml": none_if_blank(p.long_description_html),
             "shortDescriptionHtml": none_if_blank(p.short_description_html),
@@ -452,7 +464,7 @@ class ProductBundle:
         tags = tags_for(ProductTag, "product_id", [pid]).get(pid, [])
         ai = self.ai_profiles.get(pid)
 
-        product_name = p.title
+        product_name = display_name(p.title)
         ai_title = ai.title if ai and ai.title else ""
         description = ai.description if ai and ai.description else none_if_blank(p.description)
         short_desc = ai.meta_description if ai and ai.meta_description else none_if_blank(p.short_desc)
@@ -657,6 +669,47 @@ def color_families(color_ids) -> list[dict]:
         {"id": color_id, "hasColor": True, "name": family, "value": value, "parentId": 0}
         for family, (color_id, value) in families.items()
     ]
+
+
+def womens(name: str) -> str:
+    """"مانتو" -> "مانتو زنانه": every Mong product is women's, and searches say so."""
+    if name.strip() == "زنانه":  # the root category
+        return "پوشاک زنانه"
+    return name if "زنانه" in name else f"{name} زنانه"
+
+
+def category_guide(cat: Category) -> dict | None:
+    """
+    The closed "درباره ..." box under a category's products: a few facts about
+    what is on sale there now, written from the catalog so they stay true, and
+    links to its subcategories. The admin's long description, when set, comes first.
+    """
+    tree = category_tree()
+    inside = tree.descendants(cat.id)
+    rows = [r for r in listing_rows() if r.category_id in inside]
+    item = womens(display_name(cat.title))
+    paragraphs = []
+    if rows:
+        prices = sorted(r.price_after for r in rows)
+        low, high = prices[0] // 10, prices[-1] // 10
+        price = f"با قیمت {low:,} تومان" if low == high else f"با قیمت از {low:,} تا {high:,} تومان"
+        paragraphs.append(f"در حال حاضر {len(rows)} مدل {item} {price} در فروشگاه مانگ موجود است.")
+        colors = [display_name(c["name"]) for c in color_families(set().union(*(r.color_ids for r in rows)))][:8]
+        if len(colors) > 1:
+            paragraphs.append(f"رنگ‌های موجود: {'، '.join(colors)}.")
+        discounted = sum(1 for r in rows if r.reduction > 0)
+        if discounted:
+            paragraphs.append(f"{discounted} مدل از این دسته تخفیف دارد.")
+    listed = {r.category_id for r in listing_rows()}
+    links = [
+        {"title": display_name(tree.nodes[k].title), "url": f"/products-category/{tree.nodes[k].slug}"}
+        for k in tree.children.get(cat.id, [])
+        if tree.descendants(k) & listed
+    ]
+    html = none_if_blank(cat.long_description_html)
+    if not (paragraphs or links or html):
+        return None
+    return {"title": f"درباره {item}", "html": html, "paragraphs": paragraphs, "links": links}
 
 
 def expand_color_families(color_ids: set[int]) -> set[int]:

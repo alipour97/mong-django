@@ -300,6 +300,24 @@ class ProductAIProfile(models.Model):
         return f"{self.subcode}: {self.title or self.product.title}"
 
 
+class ProductSlugAlias(models.Model):
+    """A product's earlier address (/products-item/<slug>): it answers with a 301 to the current one."""
+
+    id = models.BigAutoField(primary_key=True)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="slug_aliases")
+    slug = models.CharField(_("اسلاگ قبلی"), max_length=512)
+    # slugs.slug_key(slug): one alias per address, however it is spelled
+    slug_key = models.CharField(max_length=512, unique=True, editable=False)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("آدرس قبلی محصول")
+        verbose_name_plural = _("آدرس‌های قبلی محصولات")
+
+    def __str__(self) -> str:
+        return f"{self.slug} → {self.product_id}"
+
+
 class MediaAttachment(LegacyMixin):
     """Image/video attached to any record (generic, as in the legacy schema)."""
 

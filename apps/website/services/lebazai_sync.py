@@ -18,6 +18,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from apps.website.models import Product, ProductAIProfile, ProductTag, Tag
+from apps.website.services.ai_slugs import apply_ai_slug
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,10 @@ def fill_product(product: Product, ai_data: dict) -> None:
         product.save(update_fields=["short_desc"])
 
     _update_product_tags(product, ai_data.get("search_keywords") or [])
+
+    # The address follows the AI title; the old one answers with a 301 (services/ai_slugs.py).
+    if ai_data.get("title"):
+        apply_ai_slug(product, ai_data["title"])
 
 
 def _save_ai_profile_item(item: dict) -> tuple[Optional[ProductAIProfile], bool, str]:
