@@ -33,7 +33,7 @@ from .connector import Connector, Held, Refused, SourceError
 from .dadehfa import DadehfaConnector
 from .samian import SamianConnector
 from .management.commands.import_dadehfa_orders import Command as ImportOrders
-from .models import ErpCoupon, ErpGiftCard, ErpWriteLog, LebazaiImage, ManualPhoto, SiteCoupon, SiteGiftCard, SyncState
+from .models import ErpCoupon, ErpGiftCard, ErpWriteLog, LebazaiImage, ManualPhoto, SiteCoupon, SiteGiftCard, SyncRun, SyncState
 
 
 def use_dadehfa(case: TestCase) -> None:
@@ -980,6 +980,52 @@ class PaidOrderTests(TestCase):
         self.assertFalse(outbox.waiting().exists())
 
 
+class WriterLoginTests(TestCase):
+    """The writing login is a pair: never one login's user with the other's password."""
+
+    def login(self, **env):
+        write.get_engine.cache_clear()
+        self.addCleanup(write.get_engine.cache_clear)
+        reader = {**settings.DADEHFA_DB, "HOST": "h", "PORT": "1433", "NAME": "db", "USER": "sa", "PASSWORD": "p@ss word+1"}
+        with override_settings(DADEHFA_DB=reader, DADEHFA_ALLOW_SYSADMIN=True, **env), \
+                mock.patch("apps.erp.dadehfa_write.create_engine") as engine, mock.patch("apps.erp.dadehfa_write.event"):
+            engine.return_value.connect.return_value = mock.MagicMock()
+            write.get_engine()
+        url = engine.call_args.args[0]
+        return url.username, url.password
+
+    def test_sa_for_both_takes_the_readers_password(self):
+        self.assertEqual(self.login(DADEHFA_WRITE_DB_USER="sa", DADEHFA_WRITE_DB_PASSWORD="old-writer"), ("sa", "p@ss word+1"))
+
+    def test_an_own_writer_keeps_its_password(self):
+        self.assertEqual(self.login(DADEHFA_WRITE_DB_USER="mong_writer", DADEHFA_WRITE_DB_PASSWORD="w"), ("mong_writer", "w"))
+
+
+class DeleteInvoiceTests(TestCase):
+    def test_lines_payments_and_hub_records_go_the_softwares_copy_is_named(self):
+        from apps.payhub.models import PayRecord
+        from apps.website.admin import delete_invoices
+
+        customer = Customer.objects.create(cellphone="09121234567")
+        invoice = order(customer, erp_invoice_id=555)
+        InvoicePayment.objects.create(invoice=invoice, gateway="zarinpal", amount=1, is_success=True)
+        PayRecord.objects.create(source=PayRecord.Source.SITE, transaction_id=str(invoice.pk), token="t", gateway="zarinpal", amount=1)
+        ErpWriteLog.objects.create(invoice_id=invoice.pk, software="dadehfa")
+        self.assertEqual(delete_invoices([invoice]), [555])
+        self.assertFalse(Invoice.objects.exists() or InvoiceLine.objects.exists() or InvoicePayment.objects.exists())
+        self.assertFalse(PayRecord.objects.exists())
+        self.assertTrue(ErpWriteLog.objects.exists())
+
+    def test_the_admin_deletes(self):
+        user = User.objects.create_superuser("a", "a@a.a", "p")
+        client = self.client
+        client.force_login(user)
+        invoice = order(Customer.objects.create(cellphone="09121234567"))
+        response = client.post(f"/django-admin/website/invoice/{invoice.pk}/delete/", {"post": "yes"})
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Invoice.objects.exists())
+
+
 class TestPaymentTests(TestCase):
     """Sandbox money still makes an invoice in the software, so the whole way can be tried; its Description says it is a test."""
 
@@ -1263,3 +1309,87 @@ class MediaPackTests(TestCase):
             with self.assertRaises(CommandError):
                 call_command("export_media", output=f"{folder}/pack.zip", stdout=io.StringIO())
 
+
+
+class SyncJobTests(TestCase):
+    """The jobs the admin panel shows and runs: each run is recorded with what it changed."""
+
+    def setUp(self):
+        Product.objects.create(id=1, title="پ", slug="p", on_sale=True, price=100, sale_price=100)
+        Product.objects.create(id=2, title="ن", slug="n", on_sale=True, price=50, sale_price=50)
+
+    def fake(self, **kw):
+        def sync(*, force=False, log):
+            Product.objects.filter(id=1).update(price=120, sale_price=120)
+            Product.objects.filter(id=2).update(on_sale=False)
+            return {"products": 1, "variants": 0, "stock": 0, "coupons": 3, "gift_cards": 0}
+        return mock.patch("apps.erp.connector.get_connector", return_value=SimpleNamespace(name="dadehfa", sync=sync, **kw))
+
+    def test_the_cron_run_is_recorded_with_what_changed(self):
+        from . import jobs
+        with self.fake():
+            call_command("sync_erp", stdout=io.StringIO())
+        run = SyncRun.objects.get()
+        self.assertEqual((run.job, run.trigger, run.ok), ("erp", "auto", True))
+        self.assertIsNotNone(run.finished_at)
+        self.assertIn("قیمت 1 کالا تغییر کرد", run.changes)
+        self.assertIn("0 کالا به فروش آمد، 1 کالا از فروش خارج شد", run.changes)
+        self.assertEqual(jobs.last("erp", "auto"), run)
+
+    def test_a_failure_is_recorded_and_the_command_fails(self):
+        def sync(*, force=False, log):
+            raise SourceError("در دسترس نیست")
+        with mock.patch("apps.erp.connector.get_connector", return_value=SimpleNamespace(name="dadehfa", sync=sync)):
+            with self.assertRaises(CommandError):
+                call_command("sync_erp", stdout=io.StringIO())
+        run = SyncRun.objects.get()
+        self.assertFalse(run.ok)
+        self.assertEqual(run.error, "در دسترس نیست")
+
+    def test_one_started_by_hand_is_not_started_twice(self):
+        from . import jobs
+        busy = SyncRun.objects.create(job="erp", trigger="manual")
+        self.assertEqual(jobs.start("erp", background=False), busy)
+        SyncRun.objects.filter(pk=busy.pk).update(started_at=timezone.now() - timedelta(hours=1))  # died with its process
+        with self.fake():
+            fresh = jobs.start("erp", by="a", background=False)
+        self.assertNotEqual(fresh, busy)
+        self.assertEqual((fresh.trigger, fresh.ok, fresh.by), ("manual", True, "a"))
+
+    def test_the_outbox_job_counts(self):
+        with mock.patch("apps.erp.outbox.run", return_value={"sent": 2, "failed": 1, "taken": 0}):
+            call_command("erp_outbox", stdout=io.StringIO())
+        self.assertEqual(SyncRun.objects.get().changes, ["2 فاکتور به نرم‌افزار فروش رفت", "1 فاکتور نرفت (علت در صفحهٔ فاکتور)"])
+
+
+class SyncPanelTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(AdminUser.objects.create(username="a", cellphone="09120000000"))
+        self.no_auth = mock.patch("apps.adminapi.views.auth.AdminView.authentication_classes", [])
+        self.no_auth.start()
+        self.addCleanup(self.no_auth.stop)
+
+    def test_status_shows_the_last_automatic_run_of_each_job(self):
+        SyncRun.objects.create(job="erp", trigger="auto", ok=True, finished_at=timezone.now(), changes=["x"])
+        SyncRun.objects.create(job="erp", trigger="manual", ok=False, finished_at=timezone.now(), error="e")
+        result = self.client.get("/api/admin/v1/Dashboard/SynchronizationStatus").json()["data"]["result"]
+        erp = next(i for i in result["incomingData"] if i["operationKey"] == "erp")
+        self.assertTrue(erp["operationDone"])
+        self.assertEqual(erp["lastAuto"]["changes"], ["x"])
+        self.assertFalse(erp["lastRun"]["ok"])
+        images = next(i for i in result["incomingData"] if i["operationKey"] == "images")
+        self.assertTrue(images["late"])  # never ran
+        self.assertEqual([i["operationKey"] for i in result["outgoingData"]], ["outbox"])
+
+    def test_running_one_by_hand(self):
+        with mock.patch("apps.erp.jobs.threading.Thread") as thread:
+            started = self.client.post("/api/admin/v1/Dashboard/SyncRun", {"job": "images"}, format="json").json()
+        thread.return_value.start.assert_called_once()
+        run = started["data"]["result"]
+        self.assertTrue(run["running"])
+        self.assertEqual(run["by"], "a")
+        SyncRun.objects.filter(pk=run["id"]).update(ok=True, finished_at=timezone.now(), changes=["y"])
+        done = self.client.get(f"/api/admin/v1/Dashboard/SyncRun?id={run['id']}").json()["data"]["result"]
+        self.assertEqual((done["running"], done["ok"], done["changes"]), (False, True, ["y"]))
+        self.assertEqual(self.client.post("/api/admin/v1/Dashboard/SyncRun", {"job": "nope"}, format="json").status_code, 404)

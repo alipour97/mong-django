@@ -156,6 +156,32 @@ class SyncState(models.Model):
         return self.name
 
 
+class SyncRun(models.Model):
+    """One run of a sync job (apps/erp/jobs.py), by cron or by hand from the admin panel."""
+
+    class Trigger(models.TextChoices):
+        AUTO = "auto", "خودکار"
+        MANUAL = "manual", "دستی"
+
+    job = models.CharField("کار", max_length=32, db_index=True)
+    trigger = models.CharField("اجرا", max_length=8, choices=Trigger.choices, default=Trigger.AUTO)
+    started_at = models.DateTimeField("شروع", auto_now_add=True, db_index=True)
+    finished_at = models.DateTimeField("پایان", null=True, blank=True)
+    ok = models.BooleanField("موفق", null=True)  # null while it runs
+    changes = models.JSONField("تغییرات", default=list, blank=True)  # Persian lines
+    error = models.TextField("خطا", blank=True, default="")
+    by = models.CharField("توسط", max_length=128, blank=True, default="")
+
+    class Meta:
+        verbose_name = "اجرای همگام‌سازی"
+        verbose_name_plural = "اجراهای همگام‌سازی"
+        ordering = ["-id"]
+        indexes = [models.Index(fields=["job", "trigger", "-started_at"], name="erp_syncrun_last")]
+
+    def __str__(self) -> str:
+        return f"{self.job} {self.started_at:%Y-%m-%d %H:%M}"
+
+
 class LebazaiImage(models.Model):
     """An approved LEBAZAI image of a color, built into the local image store, or one uploaded by hand (key up/...)."""
 

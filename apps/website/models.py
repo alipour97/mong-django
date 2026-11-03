@@ -1315,8 +1315,8 @@ class Invoice(models.Model):
     last_modified = models.DateTimeField(_("آخرین تغییر"), auto_now=True)
 
     class Meta:
-        verbose_name = _("سفارش سایت")
-        verbose_name_plural = _("سفارش‌های سایت")
+        verbose_name = _("فاکتور (سفارش سایت)")
+        verbose_name_plural = _("فاکتورها (سفارش‌های سایت)")
         ordering = ("-id",)
 
     def __str__(self) -> str:

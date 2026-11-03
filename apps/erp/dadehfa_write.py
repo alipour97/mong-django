@@ -21,7 +21,6 @@ import json
 import logging
 import re
 import secrets
-import urllib.parse
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 from functools import lru_cache
@@ -29,7 +28,7 @@ from functools import lru_cache
 from django.conf import settings
 from django.utils import timezone
 from sqlalchemy import create_engine, event, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import URL, Engine
 
 from apps.website.models import Invoice
 
@@ -69,14 +68,17 @@ def check(statement: str) -> None:
 @lru_cache(maxsize=1)
 def get_engine() -> Engine:
     cfg = settings.DADEHFA_DB
-    user = settings.DADEHFA_WRITE_DB_USER or cfg.get("USER", "")
-    password = settings.DADEHFA_WRITE_DB_PASSWORD or cfg.get("PASSWORD", "")
+    # User and password go together: the writing pair if it is set, else the reading one (sa on a machine that allows it).
+    # Mixing one's user with the other's password is what makes "Login failed".
+    if settings.DADEHFA_WRITE_DB_USER and settings.DADEHFA_WRITE_DB_USER != cfg.get("USER"):
+        user, password = settings.DADEHFA_WRITE_DB_USER, settings.DADEHFA_WRITE_DB_PASSWORD
+    else:
+        user, password = cfg.get("USER", ""), cfg.get("PASSWORD", "")
     if not user or not password:
         raise CannotSend("DADEHFA_WRITE_DB_USER / DADEHFA_WRITE_DB_PASSWORD are not set")
-    engine = create_engine(
-        f"mssql+pymssql://{user}:{urllib.parse.quote_plus(password)}@{cfg['HOST']}:{cfg['PORT']}/{cfg['NAME']}?charset=UTF8",
-        pool_pre_ping=True, pool_size=1, max_overflow=1,
-    )
+    url = URL.create("mssql+pymssql", username=user, password=password, host=cfg["HOST"], port=int(cfg["PORT"]),
+                     database=cfg["NAME"], query={"charset": "UTF8"})
+    engine = create_engine(url, pool_pre_ping=True, pool_size=1, max_overflow=1)
 
     @event.listens_for(engine, "before_cursor_execute")
     def _guard(conn, cursor, statement, parameters, context, executemany):

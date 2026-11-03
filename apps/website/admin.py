@@ -461,12 +461,30 @@ class InvoicePaymentInline(admin.TabularInline):
     fields = readonly_fields
 
 
+def delete_invoices(invoices) -> list[int]:
+    """
+    Removes orders from the site with their lines, payments and the hub's payment records. The software's copy
+    stays (this site never deletes there) and so does ErpWriteLog, the record of what was written to it.
+    Returns the software ids left behind.
+    """
+    from django.db import transaction
+
+    from apps.payhub.models import PayRecord
+
+    invoices = list(invoices)
+    left = [inv.erp_invoice_id for inv in invoices if inv.erp_invoice_id]
+    with transaction.atomic():
+        PayRecord.objects.filter(source=PayRecord.Source.SITE, transaction_id__in=[str(inv.pk) for inv in invoices]).delete()
+        m.Invoice.objects.filter(pk__in=[inv.pk for inv in invoices]).delete()
+    return left
+
+
 @admin.register(m.Invoice)
 class InvoiceAdmin(admin.ModelAdmin):
-    """Site orders; read only here (they change through checkout and, later, Samian)."""
+    """Site orders; read only here (they change through checkout and, later, Samian). Deleting takes their payments too."""
 
     list_display = ("id", "customer", "state", "payable_amount", "shipping_method", "paid_at", "samian_transaction_id", "created")
-    list_filter = ("state", "shipping_method")
+    list_filter = ("state", "is_test", "shipping_method")
     search_fields = ("id", "customer__cellphone", "customer__first_name", "customer__last_name")
     date_hierarchy = "created"
     inlines = [InvoiceLineInline, InvoicePaymentInline]
@@ -475,5 +493,13 @@ class InvoiceAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return False
 
-    def has_delete_permission(self, request, obj=None):
-        return False
+    def delete_model(self, request, obj):
+        self._deleted(request, delete_invoices([obj]))
+
+    def delete_queryset(self, request, queryset):
+        self._deleted(request, delete_invoices(queryset))
+
+    def _deleted(self, request, left: list[int]) -> None:
+        if left:
+            self.message_user(request, "فقط از سایت حذف شد. این فاکتورها در داده‌فا مانده‌اند و باید دستی باطل شوند: "
+                              + "، ".join(map(str, left)), level="warning")

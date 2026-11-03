@@ -46,7 +46,7 @@ def send_soon(invoice_id: int) -> None:
     threading.Thread(target=run, daemon=True).start()
 
 
-def run(log: Log) -> None:
+def run(log: Log) -> dict:
     connector = get_connector()
     sent = failed = 0
     for invoice in waiting():
@@ -54,5 +54,8 @@ def run(log: Log) -> None:
             sent += 1
         else:
             failed += 1
+    before = Invoice.objects.filter(erp_taken_at__isnull=False).count()
     connector.follow(log)
-    log(f"outbox: {sent} handed over, {failed} failed")
+    taken = Invoice.objects.filter(erp_taken_at__isnull=False).count() - before
+    log(f"outbox: {sent} handed over, {failed} failed, {taken} taken")
+    return {"sent": sent, "failed": failed, "taken": taken}

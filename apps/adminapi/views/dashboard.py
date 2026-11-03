@@ -6,6 +6,7 @@ Best sellers count every confirmed Mong sale from every branch (Lebaza's too),
 the same sales the site's best-seller sort uses.
 
     GET  Dashboard/Date | Dashboard/DashboardNotif | Dashboard/SynchronizationStatus | Dashboard/Search?query=
+    POST Dashboard/SyncRun {job}    GET Dashboard/SyncRun?id=   (a sync job by hand, then its result)
     POST Dashboard/GrowthRate?month=&year=&steps=           (Persian month and year)
     GET  Report/GetDashboardLablesReports
     GET  Invoice/DailyCounts?months=8,7&years=1405,1405 | Invoice/InvoiceCountByHour
@@ -21,6 +22,8 @@ from django.db.models import Q
 from django.http import QueryDict
 from django.utils import timezone
 
+from apps.erp import jobs
+from apps.erp.models import SyncRun
 from apps.samian.models import SamianProduct, SamianSalesRow, SamianSalesTransaction, SamianSyncLog
 from apps.storefront import catalog
 from apps.storefront.envelope import _g2j, jalali
@@ -29,7 +32,7 @@ from apps.website.models import (
 )
 
 from .. import products as index
-from ..envelope import ok
+from ..envelope import fail, ok
 from ..models import AdminUser
 from ..paging import int_list, to_int
 from .auth import AdminView
@@ -237,9 +240,9 @@ class TopSellingGroupsView(AdminView):
 
 
 # -----------------------------------------------------------------------------
-# Samian sync status (what used to be the Dadehfa sync)
+# Sync status: the jobs in apps/erp/jobs.py, their last automatic run, and running one by hand
 # -----------------------------------------------------------------------------
-SYNC_STEPS = {  # action -> (description, how often it runs)
+SYNC_STEPS = {  # Samian's own steps, shown too while the site runs on Samian: action -> (description, how often)
     SamianSyncLog.Action.SYNC_ALL: ("کالاها، قیمت و موجودی از سامیان", "00:15:00"),
     SamianSyncLog.Action.SYNC_SALES: ("فروش مانگ در همه‌ی شعب", "01:00:00"),
     SamianSyncLog.Action.SYNC_CUSTOMERS: ("مشتریان سایت در سامیان", "1.00:00:00"),
@@ -249,25 +252,80 @@ SYNC_STEPS = {  # action -> (description, how often it runs)
 }
 
 
+def sync_run(run) -> dict | None:
+    if run is None:
+        return None
+    return {
+        "id": run.id, "job": run.job, "trigger": run.trigger, "running": run.ok is None, "ok": run.ok,
+        "startedAt": run.started_at.isoformat(), "startedAtText": jalali(run.started_at),
+        "finishedAt": run.finished_at.isoformat() if run.finished_at else None,
+        "seconds": jobs.seconds(run), "changes": run.changes, "error": run.error, "by": run.by,
+    }
+
+
+def _job_status(job) -> dict:
+    auto = jobs.last(job.key, SyncRun.Trigger.AUTO)
+    latest = jobs.last(job.key)
+    late = auto is None or auto.started_at < timezone.now() - 2 * job.every - timedelta(minutes=5)
+    done = bool(auto and auto.ok and not late)
+    return {
+        "operationKey": job.key, "operationName": job.title, "operationDescription": job.period,
+        "status": "در حال اجرا" if latest and latest.ok is None else ("موفق" if done else "ناموفق یا عقب"),
+        "percentage": 100 if done else 0, "totalItems": 0,
+        "lastTransaction": (auto.finished_at or auto.started_at).isoformat() if auto else "",
+        "periodStep": job.period, "operationDone": done,
+        "canRun": True, "late": late, "lastAuto": sync_run(auto), "lastRun": sync_run(latest),
+    }
+
+
+def _samian_steps() -> list[dict]:
+    items = []
+    for action, (description, period) in SYNC_STEPS.items():
+        log = SamianSyncLog.objects.filter(action=action).order_by("-started_at").first()
+        if not log:
+            continue
+        done = log.status == SamianSyncLog.Status.SUCCESS
+        items.append({
+            "operationKey": action, "operationName": log.get_action_display(), "operationDescription": description,
+            "status": log.get_status_display(), "percentage": 100 if done else 0, "totalItems": log.records_read,
+            "lastTransaction": (log.finished_at or log.started_at).isoformat(), "periodStep": period, "operationDone": done,
+            "canRun": False, "late": False, "lastAuto": None, "lastRun": None,
+        })
+    return items
+
+
+def _average(items: list[dict]) -> int:
+    return round(sum(i["percentage"] for i in items) / len(items)) if items else 100
+
+
 class SyncStatusView(AdminView):
     def get(self, request):
-        items = []
-        for action, (description, period) in SYNC_STEPS.items():
-            log = SamianSyncLog.objects.filter(action=action).order_by("-started_at").first()
-            if not log:
-                continue
-            done = log.status == SamianSyncLog.Status.SUCCESS
-            items.append({
-                "operationKey": action, "operationName": log.get_action_display(), "operationDescription": description,
-                "status": log.get_status_display(), "percentage": 100 if done else 0, "totalItems": log.records_read,
-                "lastTransaction": (log.finished_at or log.started_at).isoformat(), "periodStep": period, "operationDone": done,
-            })
-        incoming = round(sum(i["percentage"] for i in items) / len(items)) if items else 0
+        incoming = [_job_status(j) for j in jobs.JOBS.values() if j.direction == "in"]
+        outgoing = [_job_status(j) for j in jobs.JOBS.values() if j.direction == "out"]
+        if settings.ERP_CONNECTOR == "samian":
+            incoming += _samian_steps()
         return ok({"result": {
-            "totalIncomingPercentage": incoming, "totalOutgoingPercentage": 100,
-            "incomingOperationDone": all(i["operationDone"] for i in items), "outgoingOperationDone": True,
-            "incomingData": items, "outgoingData": [],
+            "totalIncomingPercentage": _average(incoming), "totalOutgoingPercentage": _average(outgoing),
+            "incomingOperationDone": all(i["operationDone"] for i in incoming),
+            "outgoingOperationDone": all(i["operationDone"] for i in outgoing),
+            "incomingData": incoming, "outgoingData": outgoing,
         }})
+
+
+class SyncRunView(AdminView):
+    """POST {job}: runs a sync job now, in the background. GET ?id=: that run, to see when it is done."""
+
+    def post(self, request):
+        key = str(request.data.get("job") or "")
+        if key not in jobs.JOBS:
+            return fail("این همگام‌سازی وجود ندارد", 404)
+        return ok({"result": sync_run(jobs.start(key, by=request.user.username))})
+
+    def get(self, request):
+        run = SyncRun.objects.filter(pk=to_int(request.query_params.get("id"))).first()
+        if run is None:
+            return fail("پیدا نشد", 404)
+        return ok({"result": sync_run(run)})
 
 
 # -----------------------------------------------------------------------------

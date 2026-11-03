@@ -4,6 +4,7 @@ Django settings for mong_samian project.
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 import os
+import sys
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -159,9 +160,35 @@ WHITENOISE_USE_FINDERS = True
 MEDIA_URL = "/media/"
 MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", BASE_DIR / "media"))  # the persistent disk on Runflare
 
-# Logs directory
-LOGS_DIR = BASE_DIR / "logs"
+# Logs: one file a day next to the media, on the persistent disk (/app/public/logs on Runflare),
+# kept 30 days. Also on the console, which Runflare's log tab shows.
+LOGS_DIR = Path(os.getenv("LOGS_DIR") or MEDIA_ROOT.parent / "logs")
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "line": {"format": "%(asctime)s %(levelname)s [%(process)d] %(name)s: %(message)s"},
+    },
+    "handlers": {
+        "file": {"class": "config.logs.DailyFileHandler", "directory": str(LOGS_DIR), "formatter": "line"},
+        "console": {"class": "logging.StreamHandler", "formatter": "line"},
+    },
+    "root": {"handlers": ["file", "console"], "level": LOG_LEVEL},
+    "loggers": {
+        # Requests that failed (4xx as WARNING, 5xx with the traceback as ERROR).
+        "django": {"level": "INFO"},
+        "django.server": {"level": "WARNING"},
+        "django.utils.autoreload": {"level": "WARNING"},
+        "django.db.backends": {"level": "WARNING"},
+        "urllib3": {"level": "WARNING"},
+        "PIL": {"level": "WARNING"},
+    },
+}
+if sys.argv[1:2] == ["test"]:  # tests log their expected failures; keep them out of the files and the output
+    LOGGING["handlers"] = {"null": {"class": "logging.NullHandler"}}
+    LOGGING["root"]["handlers"] = ["null"]
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

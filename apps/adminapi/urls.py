@@ -26,6 +26,7 @@ urlpatterns = [
     path("Dashboard/DashboardNotif", dashboard.NotifView.as_view()),
     path("Dashboard/GrowthRate", dashboard.GrowthRateView.as_view()),
     path("Dashboard/SynchronizationStatus", dashboard.SyncStatusView.as_view()),
+    path("Dashboard/SyncRun", dashboard.SyncRunView.as_view()),
     path("Dashboard/Search", dashboard.SearchView.as_view()),
     path("Report/GetDashboardLablesReports", dashboard.LabelsView.as_view()),
     path("Invoice/DailyCounts", dashboard.DailyCountsView.as_view()),
