@@ -74,6 +74,7 @@ python manage.py sync_erp
 gdown <شناسهٔ فایل در گوگل درایو> -O /app/public/media_pack.zip
 python manage.py install_media /app/public/media_pack.zip
 python manage.py sync_lebazai_images
+python manage.py fix_sequences   # شمارنده‌ی id جدول‌ها را از ردیف‌های واردشده جلو می‌برد
 python manage.py createsuperuser
 python manage.py create_admin 09xxxxxxxxx --password
 ```
