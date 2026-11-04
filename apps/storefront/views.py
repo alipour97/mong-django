@@ -688,6 +688,9 @@ class SearchEngineMetaView(PublicView):
             "type": "ItemList",
             "name": catalog.display_name(cat.title),
             "seoTitle": seo_title,  # for the <title> only; the page drops it before writing the JSON-LD
+            # The page's H1: what people search ("مانتو زنانه", "پوشاک زنانه"), not the
+            # ERP's short name ("مانتو"). Also dropped before the JSON-LD.
+            "h1": _womens(catalog.display_name(cat.title)),
             "description": description,
             "url": f"/products-category/{cat.slug}",
             "canonical": f"/products-category/{cat.slug}",
