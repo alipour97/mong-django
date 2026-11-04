@@ -106,6 +106,7 @@ urlpatterns = [
     # SEO
     path("SearchEngine/SiteMaps", v.SearchEngineSiteMapsView.as_view()),
     path("SearchEngine/product-address/<int:product_id>", v.ProductAddressView.as_view()),
+    path("SearchEngine/home/guide", v.HomeGuideView.as_view()),
     re_path(r"^SearchEngine/(?P<entity_type>[^/]+)/(?P<slug>.+)/meta$", v.SearchEngineMetaView.as_view()),
     re_path(r"^SearchEngine/(?P<entity_type>[^/]+)/(?P<slug>.+)/breadcrumbs$", v.SearchEngineBreadcrumbsView.as_view()),
     re_path(r"^SearchEngine/(?P<entity_type>[^/]+)/(?P<slug>.+)/index$", v.SearchEngineIndexView.as_view()),

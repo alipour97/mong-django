@@ -584,6 +584,26 @@ class ProductAddressView(PublicView):
 _PUBLIC_AI_TAGS = {"نوع", "مناسبت", "سبک", "فصل", "طرح"}
 
 
+def _branch_names() -> list[str]:
+    """The shops on the branches page: the Branch table, else the admin's stored list."""
+    titles = list(Branch.objects.filter(show_on_site=True).order_by("display_order", "id").values_list("title", flat=True))
+    if titles:
+        return [t for t in titles if t.strip()]
+    pc = PrimaryConfig.objects.filter(key="businessDepartments", is_deleted=False).first()
+    try:
+        departments = (json.loads(pc.value) if pc and pc.value else {}).get("departmentList") or []
+    except (json.JSONDecodeError, AttributeError):
+        return []
+    return [d.get("depTitle", "").strip() for d in departments if isinstance(d, dict) and d.get("depTitle", "").strip()]
+
+
+class HomeGuideView(PublicView):
+    """GET SearchEngine/home/guide -> the home page's "درباره مانگ" box (catalog.home_guide), or null."""
+
+    def get(self, request):
+        return Response(catalog.home_guide(_branch_names()))
+
+
 class SearchEngineMetaView(PublicView):
     def get(self, request, entity_type: str, slug: str):
         if entity_type == "product":

@@ -22,6 +22,7 @@ Rules:
 from __future__ import annotations
 
 import math
+import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 
@@ -710,6 +711,53 @@ def category_guide(cat: Category) -> dict | None:
     if not (paragraphs or links or html):
         return None
     return {"title": f"درباره {item}", "html": html, "paragraphs": paragraphs, "links": links}
+
+
+def home_guide(branch_names: list[str]) -> dict | None:
+    """
+    The closed "درباره مانگ" box at the foot of the home page: what the shop
+    sells now, with links to its biggest categories, and where its shops are.
+    Written from the catalog and the branch list, so it stays true; the home
+    page otherwise has almost no text of its own for a search engine to read.
+    """
+    tree = category_tree()
+    rows = listing_rows()
+    if not rows:
+        return None
+    per_category = defaultdict(int)
+    for r in rows:
+        per_category[r.category_id] += 1
+
+    def count(cid: int) -> int:
+        return sum(per_category[k] for k in tree.descendants(cid))
+
+    # The categories a shopper picks from: those with products and no subcategory that has any.
+    kinds = [
+        cid for cid in tree.nodes
+        if count(cid) and not any(count(k) for k in tree.children.get(cid, []))
+    ]
+    kinds.sort(key=lambda cid: (-count(cid), cid))
+    kinds = kinds[:10]
+    names = [display_name(tree.nodes[cid].title) for cid in kinds]
+
+    paragraphs = [
+        f"مانگ (Mong) فروشگاه اینترنتی پوشاک زنانه است. در حال حاضر {len(rows)} مدل "
+        f"پوشاک زنانه در سایت مانگ موجود است، از جمله {'، '.join(names[:6])}."
+    ]
+    # Shops people can walk into: not the online sales desk or the head office.
+    shops = [
+        re.sub(r"^\s*شعبه\s+", "", display_name(b)).strip()
+        for b in branch_names
+        if not re.search(r"آنلاین|اینترنتی|دفتر", b)
+    ]
+    if shops:
+        paragraphs.append(f"فروشگاه‌های حضوری مانگ: {'، '.join(shops)}.")
+    links = [
+        {"title": womens(display_name(tree.nodes[cid].title)), "url": f"/products-category/{tree.nodes[cid].slug}"}
+        for cid in kinds
+    ]
+    links += [{"title": "شعب مانگ", "url": "/branches"}, {"title": "بلاگ مانگ", "url": "/blog"}]
+    return {"title": "درباره مانگ", "html": None, "paragraphs": paragraphs, "links": links}
 
 
 def expand_color_families(color_ids: set[int]) -> set[int]:
