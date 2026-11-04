@@ -211,6 +211,7 @@ urlpatterns = [
 
     path("SearchEngine/SiteMaps", storefront.SearchEngineSiteMapsView.as_view()),
     path("SearchEngine/product-address/<int:product_id>", storefront.ProductAddressView.as_view()),
+    path("SearchEngine/home/guide", storefront.HomeGuideView.as_view()),
     re_path(r"^SearchEngine/(?P<entity_type>[^/]+)/(?P<slug>.+)/meta$", storefront.SearchEngineMetaView.as_view()),
     re_path(r"^SearchEngine/(?P<entity_type>[^/]+)/(?P<slug>.+)/breadcrumbs$", storefront.SearchEngineBreadcrumbsView.as_view()),
     re_path(r"^SearchEngine/(?P<entity_type>[^/]+)/(?P<slug>.+)/index$", storefront.SearchEngineIndexView.as_view()),
