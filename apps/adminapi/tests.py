@@ -124,17 +124,26 @@ class ArticlePackageTests(TestCase):
         meta = self.client.get(f"/api/v1/SearchEngine/blog/{a.uniq_url}/meta").json()
         self.assertEqual((meta["type"], meta["canonical"]), ("BlogPosting", f"/blog/{a.uniq_url}"))
 
-    def test_the_same_address_needs_replace(self):
-        self.upload(package(product="0730000197"))
-        r = self.upload(package(product="0730000197"))
-        self.assertEqual(r.status_code, 409)
-        self.assertTrue(r.json()["data"]["slugTaken"])
-        r = self.upload(package(product=str(self.product.id)), replace="true", publish="false")
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(Article.objects.count(), 1)
-        self.assertFalse(Article.objects.get().show_on_page)
+    def test_the_same_address_updates_the_article(self):
+        first = self.upload(package(product="0730000197")).json()["data"]["result"]
+        Article.objects.filter(id=first["id"]).update(view_count=7)
+        r = self.upload(package(product=str(self.product.id)))
+        self.assertEqual(r.status_code, 200, r.content.decode())
+        result = r.json()["data"]["result"]
+        self.assertEqual((result["id"], result["created"]), (first["id"], False))
+        a = Article.objects.get()
+        self.assertEqual((a.view_count, a.show_on_page), (7, True))
         self.assertEqual(BlogCategory.objects.count(), 1)
         self.assertEqual(ArticleTag.objects.count(), 2)
+
+        self.upload(package(product=str(self.product.id)), publish="false")
+        self.assertFalse(Article.objects.get().show_on_page)
+
+        Article.objects.update(is_deleted=True)
+        r = self.upload(package(product=str(self.product.id)))
+        self.assertEqual(r.json()["data"]["result"]["id"], first["id"])
+        self.assertTrue(r.json()["data"]["result"]["warnings"])
+        self.assertFalse(Article.objects.get().is_deleted)
 
     def test_problems_are_listed_and_nothing_is_kept(self):
         r = self.upload(package(product="نیست", files={"images/cover.jpg": photo()}))

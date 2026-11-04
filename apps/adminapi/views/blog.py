@@ -10,7 +10,7 @@ as its MediaAttachment (table Articles), like the old API did.
     POST Article/<id> (same body)
     GET  Article/Categories | Article/Tags        POST Article/categories "title" | Article/tags "name"
     GET  Article/SoftDeleteCategory?categoryId= | Article/SoftDeleteTag?tagId=
-    POST Article/Import (multipart "file": an article package zip, "replace", "publish") -> {result: {id, ...}}
+    POST Article/Import (multipart "file": an article package zip, "publish") -> {result: {id, ...}}; the same address updates that article
     GET  Article/<id>/Preview                    the article as the site shows it, published or not
     GET  Article/Package/guide | Article/Package/sample   how to write a package, and a sample zip
 
@@ -236,15 +236,12 @@ class ImportView(AdminView):
             return fail("فایل زیپ مقاله ارسال نشده است", 400)
         if uploaded.size > blog_package.MAX_ZIP_BYTES:
             return fail("حجم زیپ بیش از ۶۰ مگابایت است", 400)
-        flag = lambda key: str(request.data.get(key, "")).lower() in ("1", "true", "yes")  # noqa: E731
-        publish = request.data.get("publish")
+        publish = str(request.data.get("publish", "")).lower()
         try:
             r = blog_package.import_package(
-                uploaded, author_id=request.user.id, domain=request.get_host(), replace=flag("replace"),
-                publish=None if publish in (None, "") else flag("publish"),
+                uploaded, author_id=request.user.id, domain=request.get_host(),
+                publish=None if publish == "" else publish in ("1", "true", "yes"),
             )
-        except blog_package.SlugTaken as exc:
-            return fail(str(exc), 409, {"slugTaken": True, "articleId": exc.article.id, "articleTitle": exc.article.title})
         except blog_package.PackageError as exc:
             return fail(str(exc), 400, {"problems": exc.problems})
         a = r.article
@@ -272,9 +269,13 @@ class PackageFileView(AdminView):
 
         from django.http import HttpResponse
 
+        from django.conf import settings
+
         docs = Path(__file__).resolve().parent.parent / "article_package"
         if kind == "guide":
-            response = HttpResponse((docs / "guide.md").read_bytes(), content_type="text/markdown; charset=utf-8")
+            # {site}: where the AI reads product pages, new.mong.ir now and mong.ir after the switch.
+            guide = (docs / "guide.md").read_text(encoding="utf-8").replace("{site}", settings.SITE_URL)
+            response = HttpResponse(guide.encode(), content_type="text/markdown; charset=utf-8")
             response["Content-Disposition"] = 'attachment; filename="mong-blog-article-guide.md"'
             return response
         if kind != "sample":

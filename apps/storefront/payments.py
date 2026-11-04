@@ -156,7 +156,7 @@ def snapp_order(inv: Invoice, lines=None) -> dict:
     amount = goods + inv.delivery_amount - discount - external
     return {
         "amount": amount, "discountAmount": discount, "externalSourceAmount": external, "mobile": inv.customer.cellphone,
-        "cartList": [{"cartId": inv.id, "cartItems": items, "isShipmentIncluded": False, "isTaxIncluded": True,
+        "cartList": [{"cartId": inv.id, "cartItems": items, "isShipmentIncluded": True, "isTaxIncluded": True,
                       "shippingAmount": inv.delivery_amount, "taxAmount": 0, "totalAmount": goods + inv.delivery_amount}],
     }
 

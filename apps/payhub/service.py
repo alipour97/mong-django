@@ -285,8 +285,9 @@ def _settle(record: PayRecord) -> str:
         return S.RETURNED
     again = snapppay.settle(token)
     note(record, "settle_again", reply=again.brief())
-    # Still VERIFY and SnappPay cannot answer: the error list says ignore it, they settle it themselves at night.
-    return S.CONSUMED if again.ok or again.no_answer or again.code == 1000 else S.RETURNED
+    # Still VERIFY and SnappPay answers 1000 again: the error list (settle, 1000) says ignore it, they settle it
+    # themselves at night. No answer at all is not that answer: reconcile asks again and refunds or hands it on.
+    return S.CONSUMED if again.ok or again.code == 1000 else S.RETURNED
 
 
 def _revert(record: PayRecord, reason: str) -> None:

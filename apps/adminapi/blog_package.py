@@ -15,7 +15,7 @@ article.html is an ordinary HTML page; its <head> carries the article's settings
     <meta name="cover-alt">       its alt text; else the title
     <meta name="categories">      names, comma separated; missing ones are created
     <meta name="tags">            the same
-    <meta name="status">          draft keeps it off the site; publish (default) shows it
+    <meta name="status">          draft keeps a new article off the site; publish (default) shows it
     <meta name="publish-date">    2026-11-10, 2026-11-10T09:00 or 1405/08/19; default now
 
 The <body> is the article. Photos are <img src="images/..."> paths in the zip:
@@ -65,12 +65,6 @@ class PackageError(ValueError):
     def __init__(self, message: str, problems: list[str] | None = None):
         super().__init__(message)
         self.problems = problems or []
-
-
-class SlugTaken(PackageError):
-    def __init__(self, article: Article):
-        super().__init__(f"مقاله‌ای با آدرس «{article.uniq_url}» از قبل هست: «{article.title}».")
-        self.article = article
 
 
 @dataclass
@@ -287,21 +281,19 @@ class Result:
     warnings: list[str]
 
 
-def import_package(data, *, author_id: int | None, domain: str, replace: bool = False, publish: bool | None = None) -> Result:
+def import_package(data, *, author_id: int | None, domain: str, publish: bool | None = None) -> Result:
     """
-    Store the package as an article. An article with the same address is updated
-    in place (keeping its views, likes and comments) only when replace is set;
-    otherwise SlugTaken. publish overrides the package's status.
+    Store the package as an article. An article with the same address, deleted or
+    not, is updated in place: its views, likes, comments and whether it is shown
+    stay. The package's status applies only to a new article; publish overrides both.
     """
     from .views.blog import _set_links, _set_thumbnail
 
     pkg = read(data)
     slug = _slug(pkg) if pkg.title or pkg.slug else ""
-    existing = Article.objects.filter(uniq_url__iexact=slug).first() if slug else None
+    existing = Article.objects.filter(uniq_url__iexact=slug).order_by("is_deleted", "-id").first() if slug else None
     if existing and existing.is_deleted:
-        raise PackageError(f"آدرس «{slug}» مال مقاله‌ی حذف‌شده‌ای است؛ slug دیگری بدهید.")
-    if existing and not replace and not pkg.problems:
-        raise SlugTaken(existing)
+        pkg.warnings.append("مقاله‌ای با همین آدرس حذف شده بود؛ همان برگردانده و به‌روز شد.")
     with transaction.atomic():
         photos = _Photos(pkg, domain)
         body, problems = _body(pkg, photos)
@@ -326,7 +318,10 @@ def import_package(data, *, author_id: int | None, domain: str, replace: bool = 
         now = timezone.now()
         a = existing or Article(created=now, view_count=0, author_id=author_id)
         a.title, a.uniq_url, a.description, a.content = pkg.title, slug, pkg.description, body
-        a.show_on_page = (not pkg.draft) if publish is None else publish
+        if publish is not None:
+            a.show_on_page = publish
+        elif existing is None or existing.is_deleted:
+            a.show_on_page = not pkg.draft
         a.publish_date = pkg.publish_date or (a.publish_date if existing else now)
         a.last_modified = now
         a.is_deleted = False

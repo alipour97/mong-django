@@ -329,6 +329,10 @@ class SnappFlowTests(HubCase):
     def test_settle_still_failing_on_verify_is_left_to_snapppay(self):
         self.settle_ends(bad(500, 1000), status=good(status="VERIFY"))
 
+    def test_settle_silent_twice_on_verify_waits_for_reconcile(self):
+        self.settle_ends(requests.Timeout(), status=good(status="VERIFY"), verdict="failed", state=S.RETURNED)
+        self.assertEqual(self.snapp.count("settle"), 2)
+
     def test_settle_1011_settled_is_final(self):
         self.settle_ends(bad(400, 1011, "settle"))
 
@@ -569,7 +573,7 @@ class SiteCheckoutTests(SiteCase):
         order = self.snapp.body("token")
         cart = order["cartList"][0]
         self.assertEqual((order["amount"], order["discountAmount"], order["externalSourceAmount"]), (1300000, 0, 0))
-        self.assertEqual((cart["totalAmount"], cart["shippingAmount"], cart["isShipmentIncluded"]), (1300000, 100000, False))
+        self.assertEqual((cart["totalAmount"], cart["shippingAmount"], cart["isShipmentIncluded"]), (1300000, 100000, True))
         self.assertEqual(cart["cartItems"][0], {"amount": 600000, "category": "پوشاک", "count": 2, "id": 11, "name": "پیراهن",
                                                 "commissionType": 100})
         record = self.record()
@@ -849,6 +853,7 @@ class PanelTests(SiteCase):
         self.assertTrue(reply["data"]["result"]["successful"])
         sent = self.snapp.body("update")
         self.assertEqual((sent["amount"], sent["paymentToken"], sent["cartList"][0]["cartItems"][0]["count"]), (700000, TOKEN, 1))
+        self.assertEqual((sent["cartList"][0]["isShipmentIncluded"], sent["cartList"][0]["isTaxIncluded"]), (True, True))
         self.invoice.refresh_from_db()
         self.assertEqual((self.invoice.payable_amount, self.invoice.amount), (700000, 650000))
         self.assertEqual(self.invoice.lines.get().qty, 1)
