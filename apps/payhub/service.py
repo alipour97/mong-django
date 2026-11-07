@@ -194,7 +194,7 @@ def start_snapp(record: PayRecord, transaction_id: str, pay_amount: int, order: 
     body = {
         "amount": record.amount, "discountAmount": order.get("discountAmount", 0),
         "externalSourceAmount": order.get("externalSourceAmount", 0), "mobile": mobile,
-        "returnURL": f"{settings.PAYHUB_PUBLIC_URL}/api/SnappPay/CallBack/{record.pk}/{record.token}",
+        "returnURL": f"{settings.PAYHUB_SNAPP_RETURN_URL}/api/SnappPay/CallBack/{record.pk}/{record.token}",
         "transactionId": record.gateway_transaction_id, "cartList": order.get("cartList") or [],
     }
     reply = snapppay.payment_token(body)

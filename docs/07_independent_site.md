@@ -121,6 +121,7 @@ python manage.py export_media
 | `DJANGO_ALLOWED_HOSTS` | `api.dadeh.mong.ir,payhub.mong.ir` |
 | `PUBLIC_BASE_URL`، `PUBLIC_MEDIA_BASE_URL` | `https://api.dadeh.mong.ir` |
 | `PAYHUB_PUBLIC_URL` | `https://payhub.mong.ir` |
+| `PAYHUB_SNAPP_RETURN_URL` | `https://mong.ir` (بازگشت اسنپ‌پی، از راه فرانت؛ فصل ۶) |
 | `SITE_ALIAS_HOSTS` | لازم نیست؛ دامنه‌های دیگری که سایت روی آن‌ها باز می‌شود، فقط هنگام سوییچ (بخش «سوییچ به `mong.ir`») |
 | `MEDIA_ROOT` | `/app/public/media` |
 | `LEGACY_CDN_ROOT` | `/app/public/media/cdn` |

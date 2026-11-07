@@ -83,6 +83,7 @@ class FakeSnapp:
 
 @override_settings(SNAPPAY_BASE_URL="https://snapp.test", SNAPPAY_CLIENT_ID="c", SNAPPAY_CLIENT_SECRET="s", SNAPPAY_USERNAME="u",
                    SNAPPAY_PASSWORD="p", SNAPPAY_TRANSACTION_ID_START=50000000, SNAPPAY_COMMISSION_TYPE=100, PAYHUB_PUBLIC_URL=HUB,
+                   PAYHUB_SNAPP_RETURN_URL="https://mong.ir",
                    PAYHUB_ACCEPT_KEY="hub-key", PAYHUB_ALLOWED_API_IPS=["10.0.0.5"], PAYHUB_ALLOWED_CALLBACK_HOSTS=["api.mong.ir"],
                    PAYHUB_OLD_HUB_URL="", ZARINPAL_SANDBOX=False, ZARINPAL_STARTPAY_BASE_URL="https://pay.mong.ir/pg/StartPay",
                    ZARINPAL_MERCHANT_ID=MERCHANT, SITE_URL="https://samian.mong.ir", PUBLIC_BASE_URL="https://samian.mong.ir")
@@ -164,7 +165,7 @@ class ContractTests(HubCase):
     def test_get_payment_token_sends_our_return_url_and_a_fresh_id(self):
         record = self.started()
         body = self.snapp.body("token")
-        self.assertEqual(body["returnURL"], f"{HUB}/api/SnappPay/CallBack/{record.pk}/{record.token}")
+        self.assertEqual(body["returnURL"], f"https://mong.ir/api/SnappPay/CallBack/{record.pk}/{record.token}")
         self.assertEqual(body["transactionId"], str(50000000 + record.pk))
         self.assertEqual(body["mobile"], "+989121234567")
         self.assertEqual(body["cartList"], [{"cartId": 7}])

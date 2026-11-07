@@ -66,7 +66,7 @@ def _base() -> str:
 
 
 def start_url(authority: str) -> str:
-    """The payment page; pay.mong.ir (a CNAME to Zarinpal) is the branded one, not on the sandbox."""
+    """The payment page: Zarinpal's own, or ZARINPAL_STARTPAY_BASE_URL when set (never on the sandbox)."""
     branded = settings.ZARINPAL_STARTPAY_BASE_URL
     return f"{branded if branded and not settings.ZARINPAL_SANDBOX else _base() + 'StartPay'}/{authority}"
 

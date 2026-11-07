@@ -76,6 +76,21 @@ def _enabled(key: str) -> bool:
     return snapppay.configured()
 
 
+# The product page's box, per SnappPay's PDP guideline: the page fills {amount}
+# (the selected variant's price divided by `installments`, in toman) and calls
+# no SnappPay service.
+SNAPP_PDP = {
+    "installments": 4,
+    "title": "هر قسط با اسنپ\u200cپی: {amount} تومان",
+    "description": "۴ قسط ماهانه. بدون سود، چک و ضامن.",
+}
+
+
+def snapp_pdp_box() -> dict | None:
+    """The PDP box's copy, or None while the SnappPay gateway is off or not configured."""
+    return dict(SNAPP_PDP) if _enabled(SNAPPPAY) else None
+
+
 def _icon_url(b64: str) -> str:
     if not b64:
         return ""

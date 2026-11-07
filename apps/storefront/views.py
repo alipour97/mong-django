@@ -386,7 +386,10 @@ class ProductGetByIdView(PublicView):
         p = bundle.products.get(product_id)
         if not p or p.is_deleted:
             return not_found(self.EMPTY)
-        return ok(bundle.full_detail(product_id))
+        from .payments import snapp_pdp_box  # payments imports this module
+
+        # Outside the bundle, which may be cached: the gateway can be switched off at any time.
+        return ok({**bundle.full_detail(product_id), "snappPay": snapp_pdp_box()})
 
 
 class ProductSuggestView(PublicView):

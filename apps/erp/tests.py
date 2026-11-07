@@ -801,6 +801,16 @@ class SoftwareAwayTests(TestCase):
         self.post("Product/SuggestProduct", {"categoryId": 1, "productId": 2})
         self.post("Product/Search", {"query": "پیراهن", "size": 10})
 
+    def test_the_snapppay_box_needs_no_snapppay_call(self):
+        with mock.patch("apps.payhub.snapppay._send", side_effect=AssertionError("called SnappPay")):
+            with mock.patch("apps.storefront.payments._enabled", return_value=True):
+                box = self.get("Product/GetById/1").json()["result"]["data"]["snappPay"]
+            self.assertEqual(box["installments"], 4)
+            self.assertIn("{amount}", box["title"])
+            self.assertIn("اسنپ\u200cپی", box["title"])
+            with mock.patch("apps.storefront.payments._enabled", return_value=False):
+                self.assertIsNone(self.get("Product/GetById/1").json()["result"]["data"]["snappPay"])
+
     def test_vouchers(self):
         self.assertTrue(self.get("Coupon/Validation?serial=OK").json()["result"]["data"]["valid"])
         self.assertEqual(self.get("GiftCard/GetAll").json()["result"]["data"][0]["gcNum"], "G1")

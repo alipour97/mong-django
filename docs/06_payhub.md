@@ -56,7 +56,8 @@
 
 | نام | توضیح |
 |---|---|
-| `PAYHUB_PUBLIC_URL` | آدرس بازگشت هر دو درگاه: `https://payhub.mong.ir` |
+| `PAYHUB_PUBLIC_URL` | آدرس هاب و بازگشت زرین‌پال: `https://payhub.mong.ir` |
+| `PAYHUB_SNAPP_RETURN_URL` | فقط `returnURL` اسنپ‌پی: `https://mong.ir` (دامنهٔ ثبت‌شده نزد اسنپ‌پی). خالی باشد همان `PAYHUB_PUBLIC_URL` است |
 | `PAYHUB_ACCEPT_KEY` | همان `SnappPayForward.Key` در Mong.Pay |
 | `PAYHUB_ALLOWED_API_IPS` | IP سرور سایت قدیم، با کاما |
 | `PAYHUB_ALLOWED_CALLBACK_HOSTS` | پیش‌فرض: `api.mong.ir,api.mongnew.ir` |
@@ -64,7 +65,7 @@
 | `SNAPPAY_BASE_URL` | آدرس پروداکشن؛ اگر خالی باشد `SNAPPAY_STAGE_URL` استفاده می‌شود |
 | `SNAPPAY_COMMISSION_TYPE` | پیش‌فرض ۱۰۰ |
 | `SNAPPAY_TRANSACTION_ID_START` | پیش‌فرض ۵۰۰۰۰۰۰۰ |
-| `ZARINPAL_STARTPAY_BASE_URL` | پیش‌فرض `https://pay.mong.ir/pg/StartPay` |
+| `ZARINPAL_STARTPAY_BASE_URL` | خالی بماند (صفحه‌ی خود زرین‌پال، `payment.zarinpal.com/pg/StartPay`). `pay.mong.ir` لینک شخصی زرین‌پال است، نه درگاه، و برای `/pg/StartPay/…` خطای ۴۰۴ می‌دهد |
 
 **gunicorn باید با `--timeout 120` اجرا شود.** پیش‌فرض ۳۰ ثانیه است و verify اسنپ‌پی ممکن است تا ۹۰ ثانیه طول بکشد؛ در این صورت worker وسط پرداخت کشته می‌شود.
 
@@ -73,7 +74,7 @@
 1. ابتدا `deploy/nginx/payhub.mong.ir.conf` نصب و SSL صادر می‌شود.
 2. سپس `manage.py migrate payhub` اجرا و gunicorn با `--timeout 120` دوباره راه‌اندازی می‌شود.
 3. کران `erp_outbox` از `crontab.txt` تعریف شده باشد (کران جدا برای `payhub_reconcile` لازم نیست).
-4. دامنهٔ ثبت‌شده نزد اسنپ‌پی باید `payhub.mong.ir` باشد.
+4. دامنهٔ ثبت‌شده نزد اسنپ‌پی `mong.ir` است. اسنپ‌پی مشتری را به `https://mong.ir/api/SnappPay/CallBack/{id}/{token}` برمی‌گرداند. این آدرس روی فرانت است و `front/src/app/api/SnappPay/CallBack/[id]/[token]/route.ts` آن را بی‌تغییر به همین مسیر روی بک‌اند (`API_ORIGIN`) می‌فرستد و جواب هاب را برمی‌گرداند. این کار با `rewrites` خود Next انجام نمی‌شود، چون پراکسی آن بعد از ۳۰ ثانیه قطع می‌شود و verify اسنپ‌پی تا ۹۰ ثانیه طول می‌کشد.
 
 ## انتقال سایت قدیم
 

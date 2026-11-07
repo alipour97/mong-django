@@ -322,8 +322,9 @@ SMSIR_INVOICE_PARAM = os.getenv("SMSIR_INVOICE_PARAM", "INVOICE")
 # (SITE_URL, defined at the top, is also the storefront the customer returns to after paying.)
 ZARINPAL_MERCHANT_ID = os.getenv("ZARINPAL_KEY", "")
 ZARINPAL_SANDBOX = os.getenv("ZARINPAL_SANDBOX", "false").lower() in ("1", "true", "yes")
-# The branded payment page (pay.mong.ir is a CNAME to Zarinpal). Empty: Zarinpal's own address.
-ZARINPAL_STARTPAY_BASE_URL = os.getenv("ZARINPAL_STARTPAY_BASE_URL", "https://pay.mong.ir/pg/StartPay").rstrip("/")
+# A branded StartPay address. Empty (the default): Zarinpal's own payment.zarinpal.com/pg/StartPay.
+# Not pay.mong.ir: that is a Zarinpal personal-link domain and answers 404 for /pg/StartPay/<authority>.
+ZARINPAL_STARTPAY_BASE_URL = os.getenv("ZARINPAL_STARTPAY_BASE_URL", "").rstrip("/")
 # SnappPay is offered only once its address is set: SNAPPAY_BASE_URL in production, SNAPPAY_STAGE_URL until then.
 SNAPPAY_BASE_URL = (os.getenv("SNAPPAY_BASE_URL") or os.getenv("SNAPPAY_STAGE_URL", "")).rstrip("/")
 SNAPPAY_IS_STAGE = not os.getenv("SNAPPAY_BASE_URL")
@@ -339,6 +340,10 @@ SNAPPAY_TRANSACTION_ID_START = int(os.getenv("SNAPPAY_TRANSACTION_ID_START", "50
 PAYHUB_PUBLIC_URL = os.getenv("PAYHUB_PUBLIC_URL", SITE_URL).rstrip("/")
 if (_hub_host := urlsplit(PAYHUB_PUBLIC_URL).hostname) and _hub_host not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(_hub_host)
+# SnappPay's returnURL alone may sit on another domain: the one registered with SnappPay (https://mong.ir), whose
+# frontend passes /api/SnappPay/CallBack/... on to this hub (front/src/app/api/SnappPay/CallBack). Zarinpal stays on
+# PAYHUB_PUBLIC_URL.
+PAYHUB_SNAPP_RETURN_URL = os.getenv("PAYHUB_SNAPP_RETURN_URL", PAYHUB_PUBLIC_URL).rstrip("/")
 PAYHUB_ALLOWED_API_IPS = [h.strip() for h in os.getenv("PAYHUB_ALLOWED_API_IPS", "").split(",") if h.strip()]
 PAYHUB_ACCEPT_KEY = os.getenv("PAYHUB_ACCEPT_KEY", "")  # SnappPayForward.Key on Mong.Pay
 PAYHUB_ALLOWED_CALLBACK_HOSTS = [h.strip().lower() for h in os.getenv("PAYHUB_ALLOWED_CALLBACK_HOSTS", "api.mong.ir,api.mongnew.ir").split(",") if h.strip()]
