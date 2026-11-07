@@ -9,7 +9,7 @@ A product comment is marked "buyer" when the customer has bought the product
     POST Comment/Reaction {commentId, liked}        liked null undoes the reaction            (customer)
     POST Article/AddComment {articleId, comment, title, isAnonymous, ...}                       (customer)
     POST Article/AddArticleLike/<articleId>/likes?liked=                                       (customer)
-    POST Cooperation/CooperationRequestSubmit  multipart: FirstName, LastName, CellPhone, Email, Address,
+    POST Cooperation/CooperationRequestSubmit  multipart: FirstName, LastName, CellPhone, OtpCode, Email, Address,
          JobPositionTitle, AdditionalInfo, ResumeFile (pdf/doc/docx)
     POST ThirdPartyLog/AddThirdPartyLog/AddThirdPartyLog {thirdPartyName, redirectUrl, productVariantId, utm*...}
 """
@@ -21,6 +21,7 @@ from pathlib import Path
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
+from rest_framework.exceptions import AuthenticationFailed
 
 from apps.samian.models import SamianSalesRow
 from apps.website.models import (
@@ -29,7 +30,7 @@ from apps.website.models import (
 )
 
 from . import blog
-from .account import CustomerView, _mobile, answer
+from .account import CustomerTokenAuthentication, CustomerView, _check_code, _mobile, answer
 from .views import PublicView
 
 RESUME_TYPES = {"pdf", "doc", "docx"}
@@ -136,6 +137,15 @@ def _save_resume(uploaded) -> str:
     return f"{settings.MEDIA_URL}{relative.as_posix()}"
 
 
+def _signed_in_mobile(request) -> str | None:
+    """The signed-in customer's mobile, or None (no token, or a bad one: the form works signed out too)."""
+    try:
+        found = CustomerTokenAuthentication().authenticate(request)
+    except AuthenticationFailed:
+        return None
+    return _mobile(found[0].cellphone) if found else None
+
+
 class CooperationSubmitView(PublicView):
     def post(self, request):
         d = request.data
@@ -143,6 +153,15 @@ class CooperationSubmitView(PublicView):
         mobile = _mobile(d.get("CellPhone"))
         if not first or not last or not mobile:
             return answer(None, 400, "نام، نام خانوادگی و موبایل معتبر الزامی است")
+        # The mobile is proven by the code sent to it (Authentication/SendOtp), unless the applicant is
+        # signed in with that same number. Applicants need not be customers, so this is checked here and
+        # not through CustomerAuthenticate, which refuses a number with no customer.
+        if _signed_in_mobile(request) != mobile:
+            code = _text(d, "OtpCode", 10)
+            if not code:
+                return answer(None, 403, "کد تایید شماره موبایل وارد نشده است")
+            if not _check_code(mobile, code):
+                return answer(None, 404, "کد تایید صحیح نیست یا منقضی شده است")
         resume = request.FILES.get("ResumeFile")
         if resume is not None:
             if Path(resume.name or "").suffix.lower().lstrip(".") not in RESUME_TYPES:

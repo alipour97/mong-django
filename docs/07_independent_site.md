@@ -121,6 +121,7 @@ python manage.py export_media
 | `DJANGO_ALLOWED_HOSTS` | `api.dadeh.mong.ir,payhub.mong.ir` |
 | `PUBLIC_BASE_URL`، `PUBLIC_MEDIA_BASE_URL` | `https://api.dadeh.mong.ir` |
 | `PAYHUB_PUBLIC_URL` | `https://payhub.mong.ir` |
+| `SITE_ALIAS_HOSTS` | لازم نیست؛ دامنه‌های دیگری که سایت روی آن‌ها باز می‌شود، فقط هنگام سوییچ (بخش «سوییچ به `mong.ir`») |
 | `MEDIA_ROOT` | `/app/public/media` |
 | `LEGACY_CDN_ROOT` | `/app/public/media/cdn` |
 | `LOGS_DIR`، `LOG_LEVEL` | لازم نیست: لاگ هر روز در `/app/public/logs/app-<تاریخ>.log` (کنار `MEDIA_ROOT`) نوشته و ۳۰ روز نگه داشته می‌شود؛ سطح پیش‌فرض `INFO` |
@@ -188,13 +189,30 @@ python manage.py timing_report
 
 ## سوییچ به `mong.ir`
 
-1. درست پیش از سوییچ `python manage.py import_dadehfa_orders` را دوباره اجرا کنید تا مشتری‌ها و سفارش‌های تازه هم بیایند.
-2. در `dadeh-front`: `SITE_URL=https://mong.ir` (و `SITE_NOINDEX` اگر هست حذف یا `false`)، سپس build دوباره. noindex روی `mong.ir` خودش برداشته می‌شود و `new.mong.ir` باید با 301 به `mong.ir` برود.
-3. در `dadeh`: `SITE_URL=https://mong.ir`.
-4. دامنهٔ `mong.ir` را از `shop` بردارید و به `dadeh-front` بدهید.
-5. `.NET` و جاب‌هایش را خاموش نکنید.
+ترتیب مهم است: بک‌اند فقط از دامنه‌هایی که می‌شناسد درخواست مرورگر را می‌پذیرد (CORS)، و فرانتی که برای `mong.ir` ساخته شده، `new.mong.ir` را به `mong.ir` می‌فرستد. پس اول دامنه جابه‌جا می‌شود، بعد آدرس‌ها.
 
-راه برگشت: دامنهٔ `mong.ir` را به `shop` برگردانید. سفارش‌های نوشته‌شده در `DadehfaOnlineShop` در پنل قدیم هستند.
+**پیش از روز سوییچ**
+
+1. «تست خرید واقعی» بالا انجام شده باشد: `ZARINPAL_SANDBOX=false`، اسنپ‌پی اصلی، `ERP_WRITES_ENABLED=true`، و `delete_test_orders` زده شده.
+2. آخرین `backend.zip` و `frontend.zip` آپلود و `migrate` زده شده باشد.
+
+**روز سوییچ (ساعت کم‌فروش)**
+
+1. در `dadeh`: `SITE_ALIAS_HOSTS=mong.ir,www.mong.ir` و ری‌استارت. `SITE_URL` هنوز همان `new.mong.ir` است.
+2. در رانفلر: دامنه‌های `mong.ir` و `www.mong.ir` را از سرویس `shop` بردارید و به `dadeh-front` بدهید و SSL را فعال کنید. از این لحظه `mong.ir` سایت جدید است.
+3. در ترمینال `dadeh`: `python manage.py import_dadehfa_orders --new` تا سفارش‌ها و مشتری‌های آخرین دقیقه‌های سایت قدیم هم بیایند.
+4. در `dadeh`: `SITE_URL=https://mong.ir` و `SITE_ALIAS_HOSTS=new.mong.ir,www.mong.ir`، ری‌استارت. بازگشت از درگاه از این به بعد به `mong.ir` است.
+5. در `dadeh-front`: `SITE_URL=https://mong.ir` (و `SITE_NOINDEX` اگر هست حذف شود)، سپس `frontend.zip` دوباره آپلود شود. حالا `new.mong.ir`، `dadeh.mong.ir` و `www.mong.ir` با 301 به همان صفحه در `mong.ir` می‌روند و noindex روی `mong.ir` نیست.
+6. `.NET` و جاب‌هایش و سرویس `shop` را خاموش نکنید.
+
+**بعد از سوییچ**
+
+- `curl -I https://mong.ir` بدون `X-Robots-Tag` و `curl -I https://new.mong.ir` با 301 به `mong.ir`.
+- `python manage.py check_redirects --base https://mong.ir`: آدرس‌های سایت قدیم به صفحهٔ جدید می‌روند.
+- یک خرید کم‌مبلغ واقعی با زرین‌پال و یکی با اسنپ‌پی؛ برگشت باید به `https://mong.ir/order-confirmation` باشد و فاکتور در داده‌فا ثبت شود.
+- در سرچ کنسول گوگل، `https://mong.ir/sitemap.xml` را ثبت کنید.
+
+راه برگشت: دامنه‌های `mong.ir` و `www.mong.ir` را به `shop` برگردانید و `SITE_URL` هر دو سرویس را به `https://new.mong.ir` برگردانید (فرانت با آپلود دوباره). سفارش‌های نوشته‌شده در `DadehfaOnlineShop` در پنل قدیم هستند.
 
 ## سوییچ به سامیان
 

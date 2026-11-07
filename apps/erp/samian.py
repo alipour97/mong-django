@@ -28,7 +28,7 @@ from apps.website import images as site_images
 from apps.storefront.catalog import COLOR_DETAIL_ID, SIZE_DETAIL_ID, norm
 from apps.website.models import FeatureValue, ProductSamianLink, ProductVariant
 
-from . import store
+from . import specs, store
 from .connector import Connector, Log
 
 
@@ -70,7 +70,9 @@ def _list_prices(sp_pks) -> dict[int, int]:
 def _product(pid: int, sp: SamianProduct, final, sold: float) -> dict:
     row = {
         "id": pid, "erp_id": sp.samian_id, "on_sale": True, "name_en": sp.name_en or "", "sold": sold,
-        "attributes": {"جنس": sp.material or "", "سبک": sp.style or "", "فصل": str(sp.season or "")},
+        "attributes": specs.clean({specs.MATERIAL: sp.material, specs.SEASON: specs.season(sp.season),
+                                   specs.FIT: specs.fit(sp.fit), specs.LENGTH: specs.length(sp.height),
+                                   specs.STYLE: specs.style(sp.style)}),
         "size_guide_key": site_images.samian_key(sp.samian_id, sp.size_help_path) if sp.size_help_path else "",
         "price": 0, "reduction": Decimal(0), "sale_price": 0,
     }

@@ -24,7 +24,7 @@ from apps.storefront.catalog import norm
 from apps.website import slugs
 from apps.website.models import Invoice, ProductVariant
 
-from . import dadehfa_write, store
+from . import dadehfa_write, specs, store
 from .connector import Connector, Log
 from .models import ErpCoupon, ErpGiftCard
 
@@ -73,7 +73,8 @@ def _categories() -> list[dict]:
 
 def _products(brand_ids: set[int], category_ids: set[int]) -> list[dict]:
     rows = fetch_all(f"""
-        SELECT p.Id, p.Title, p.Slug, p.HasManualSlug, p.CategoryId, p.BrandId, p.Barcode, p.Price, p.Reduction, p.VAT, p.Created
+        SELECT p.Id, p.Title, p.Slug, p.HasManualSlug, p.CategoryId, p.BrandId, p.Barcode, p.Price, p.Reduction, p.VAT, p.Created,
+               p.ShortDesc, p.ProductSeasonTitle, p.ProductStyleTitle
         {ON_SALE}""")
     products = []
     for p in rows:
@@ -85,6 +86,8 @@ def _products(brand_ids: set[int], category_ids: set[int]) -> list[dict]:
             "brand_id": p["BrandId"] if p["BrandId"] in brand_ids else None, "price": price,
             "reduction": Decimal(str(reduction)).quantize(Decimal("0.001")), "sale_price": after_discount(price, reduction),
             "vat": Decimal(str(p["VAT"] or 0)).quantize(Decimal("0.001")),
+            # The spec table (season, fit, length, style), from the old site's columns (erp/specs.py).
+            "attributes": specs.dadehfa(_text(p["ShortDesc"]), _text(p["ProductSeasonTitle"]), _text(p["ProductStyleTitle"])),
             "new": {"slug": slug, "slug_key": slugs.slug_key(slug), "has_manual_slug": bool(p["HasManualSlug"]), "created": _moment(p["Created"])},
         })
     return products

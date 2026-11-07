@@ -145,7 +145,8 @@ class ReadTests(TestCase):
             return [{"Id": 3, "ParentId": None, "Title": "جوراب", "Slug": "c", "HasManualSlug": False, "GroupLevel": 1, "Created": None}]
         if "Products p" in sql and "p.Barcode" in sql:
             return [{"Id": 5, "Barcode": "00500", "Price": Decimal("26800000"), "Reduction": Decimal("62.724"), "SalesCount": 3, "VAT": 0,
-                     "Title": " جوراب ", "Slug": "s", "HasManualSlug": False, "CategoryId": 3, "BrandId": 15, "Created": None}]
+                     "Title": " جوراب ", "Slug": "s", "HasManualSlug": False, "CategoryId": 3, "BrandId": 15, "Created": None,
+                     "ShortDesc": "%23گروه%0a%20basic", "ProductSeasonTitle": "4051", "ProductStyleTitle": None}]
         if "FROM Coupons" in sql:
             return [{"Id": 1, "CustomerId": None, "Serial": "S", "Reduction": 10, "ExpiredDate": None, "IsUsed": False, "UsedDate": None, "MinPrice": 0,
                      "MaxPrice": None, "IsActive": True, "BankPortalEndTime": None, "Created": None, "FirstName": None, "LastName": None},
@@ -171,6 +172,7 @@ class ReadTests(TestCase):
         product = read.products[0]
         self.assertEqual((product["price"], product["sale_price"], product["reduction"]), (26800000, 9990000, Decimal("62.724")))
         self.assertEqual((product["title"], product["category_id"], product["brand_id"]), ("جوراب", 3, 15))
+        self.assertEqual(product["attributes"], {"فصل کالا": "بهار و تابستان", "سبک": "بیسیک"})
         variant = read.variants[0]
         self.assertEqual((variant.erp_ref, variant.barcode, variant.color_family, variant.size_name), (901, "b", "مشکی", "38"))
         self.assertEqual(read.stock[0].qty, 4)
@@ -1503,3 +1505,219 @@ class ImportNewOrdersTests(TestCase):
         self.assertTrue(Invoice.objects.filter(id=2).exists())
         self.assertEqual(Customer.objects.get(id=5).first_name, "سایت")
         self.assertIn("'site:'", next(sql for sql in statements if "FROM Invoices" in sql))
+
+
+class ListingFixTests(TestCase):
+    """Bug list (Nov 2026): out-of-stock last, the size filter, related products, the card's photo."""
+
+    def setUp(self):
+        Category.objects.create(id=1, title="بالاتنه", slug="top", is_online_active=True)
+        Category.objects.create(id=2, title="کراپ", slug="crop", parent_id=1, is_online_active=True)
+        for pid, cat, qty in ((1, 2, 0), (2, 2, 3), (3, 1, 3), (4, 1, 3)):
+            Product.objects.create(id=pid, title=f"p{pid}", slug=f"p{pid}", category_id=cat, is_active=True)
+            goods(pid=pid, vid=10 + pid, qty=qty, ref=900 + pid)
+        ProductVariant.objects.filter(id=14).update(size_id=8, size_name="40")
+        # clear_caches only marks the listing stale (the next read still answers with the last one): drop it.
+        for drop in (catalog.clear_caches, lambda: warm.drop(catalog.LISTING_CACHE_KEY)):
+            drop()
+            self.addCleanup(drop)
+        self.client = APIClient()
+
+    def ids(self, payload):
+        return [r.id for r in catalog.filter_rows(payload)]
+
+    def test_out_of_stock_comes_last_whatever_the_sort(self):
+        for sort in (2, 4, 5):
+            self.assertEqual(self.ids({"sortCriteriaId": sort})[-1], 1, sort)
+        self.assertNotIn(1, self.ids({"isInStock": True}))
+
+    def test_search_reads_the_name_the_ai_title_and_the_slug_word_by_word(self):
+        from apps.website.models import ProductAIProfile
+
+        Product.objects.filter(id=2).update(title="كتي عروسكي اوديسه")
+        ProductAIProfile.objects.create(product_id=2, title="مانتو کتی زنانه مدل اودیسه با یقه انگلیسی")
+        Product.objects.filter(id=3).update(slug="شلوار-فوتر-جناقی-زنانه")
+        warm.drop(catalog.LISTING_CACHE_KEY)
+        self.assertEqual(self.ids({"search": "کتی عروسکی"}), [2])  # the name, typed with Persian letters
+        self.assertEqual(self.ids({"search": "مانتو  یقه انگلیسی"}), [2])  # the AI title, words apart
+        self.assertEqual(self.ids({"search": "فوتر جناقی"}), [3])  # the slug
+        self.assertEqual(self.ids({"search": "مانتو فوتر"}), [])
+
+    def test_the_two_dropped_sorts_are_not_offered(self):
+        offered = {s["id"] for s in catalog.SORT_CRITERIA}
+        self.assertFalse(offered & {6, 7})
+        self.assertIn(2, offered)
+
+    def test_size_filter_offers_and_matches_sizes_in_stock(self):
+        reply = self.client.get("/api/v1/Product/GetFilterByCategoryId?id=1").json()["result"]["data"]
+        sizes = {v["name"]: v["id"] for v in reply["filteredValues"] if not v["hasColor"]}
+        self.assertEqual(set(sizes), {"38", "40"})  # p1's 38 is out of stock, the others have it
+        self.assertEqual(sorted(self.ids({"filteredFeatureId": [sizes["40"]]})), [4])
+        self.assertEqual(sorted(self.ids({"filteredFeatureId": [sizes["38"], sizes["40"]]})), [2, 3, 4])
+        # with a color too: both must match
+        self.assertEqual(sorted(self.ids({"filteredFeatureId": [sizes["40"], 6]})), [4])
+
+    def suggest(self, body):
+        reply = self.client.post("/api/v1/Product/SuggestProduct", body, format="json")
+        return [p["id"] for p in reply.json()["result"]["data"]]
+
+    def test_related_leaves_out_the_basket_and_tops_up_from_the_parent(self):
+        # Category 2 has only p1 (out of stock) and p2: the rest comes from category 1.
+        self.assertEqual(self.suggest({"categoryId": 2, "productId": 2}), [3, 4])
+        self.assertEqual(self.suggest({"categoryId": 2, "excludeIds": [4], "excludeVariantIds": [13]}), [2])
+
+
+class CardPhotoTests(TestCase):
+    def setUp(self):
+        Category.objects.create(id=1, title="ک", slug="k", is_online_active=True)
+        Product.objects.create(id=1, title="پ", slug="p", category_id=1, is_active=True)
+        goods(qty=3)
+        ProductVariant.objects.create(id=12, product_id=1, barcode="b2", color_id=9, color_name="کرم", size_id=7, size_name="38")
+        catalog.clear_caches()
+        self.addCleanup(catalog.clear_caches)
+
+    def photos(self, color_id, *names):
+        for i, name in enumerate(names):
+            LebazaiImage.objects.create(product_id=1, color_id=color_id, key=f"{color_id}{name}",
+                                        source_url=f"http://x/Mong/1/{name}.png", position=i)
+
+    def cover(self):
+        bundle = catalog.ProductBundle.load([1])
+        first = bundle.main_images(1)[0]["id"]
+        return LebazaiImage.objects.get(id=first).source_url.rsplit("/", 1)[-1]
+
+    def test_a_model_from_the_front_in_any_color_before_a_back_or_ghost_photo(self):
+        self.photos(6, "back_temp1_1", "front_ghost_1")
+        self.photos(9, "back_temp1_2", "front_temp1_2")
+        self.assertEqual(self.cover(), "front_temp1_2.png")
+
+    def test_a_ghost_photo_when_no_color_has_a_model_from_the_front(self):
+        self.photos(6, "back_temp1_1", "front_ghost_1")
+        self.assertEqual(self.cover(), "front_ghost_1.png")
+
+    def test_each_color_opens_on_its_best_photo(self):
+        self.photos(6, "back_temp1_1", "front_temp1_1")
+        bundle = catalog.ProductBundle.load([1])
+        first = bundle.color_images(1, bundle.variants[1][0])[0]["id"]
+        self.assertTrue(LebazaiImage.objects.get(id=first).source_url.endswith("front_temp1_1.png"))
+
+    def test_the_admin_lists_a_color_without_photos_that_the_site_leaves_out(self):
+        from apps.adminapi.models import AdminUser
+        from apps.website.models import SiteSetting
+
+        SiteSetting.objects.create(min_qty=0, only_has_media_products=True)
+        self.photos(6, "front_temp1_1")  # کرم (9) has no photo
+        site = catalog.ProductBundle.load([1])
+        self.assertEqual([v.color_id for v in site.visible_variants(1)], [6])
+
+        client = APIClient()
+        client.force_authenticate(AdminUser.objects.create(username="a", cellphone="09000000000"))
+        reply = client.get("/api/admin/v1/Products/GetDetailProduct/1").json()["data"]["result"]
+        colors = {c["id"]: c["images"] for c in reply["details"][0]["items"]}
+        self.assertEqual(set(colors), {6, 9})
+        self.assertEqual(colors[9], [])
+
+
+class ProductSpecsTests(TestCase):
+    """The «مشخصات محصول» table (erp/specs.py, catalog.product_specs)."""
+
+    OLD = "%23سبک%0a%20regular%23فصل%0a%204052%23گروه%0a%20casual (روزمره)%23رده سني%0a%20جوان(بين 18 تا35)%23قواره%0a%20Short"
+
+    def test_the_old_sites_labels_are_read_for_what_they_hold(self):
+        from apps.erp import specs
+
+        self.assertEqual(specs.dadehfa(self.OLD, "4052", "regular"), {
+            "فصل کالا": "پاییز و زمستان", "قواره": "رگولار", "گروه قد": "کوتاه", "سبک": "کژوال (روزمره)"})
+
+    def test_the_season_code_names_the_collection(self):
+        from apps.erp import specs
+
+        self.assertEqual([specs.season(c) for c in ("4051", "9902", "4034", "983", "", "پاییز و زمستان")],
+                         ["بهار و تابستان", "پاییز و زمستان", "چهارفصل", "نوروز", "", "پاییز و زمستان"])
+
+    def test_the_sales_software_first_then_the_ai_profile(self):
+        from apps.website.models import ProductAIProfile
+
+        Category.objects.create(id=1, title="ک", slug="k", is_online_active=True)
+        p = Product.objects.create(id=1, title="پ", slug="p", category_id=1, is_active=True,
+                                   attributes={"جنس": "موهر", "قواره": "رگولار"}, product_season_title="")
+        ai = ProductAIProfile.objects.create(product=p, attributes={
+            "season_fa": "چهارفصل", "fit_fa": "آزاد", "length": "cropped", "styles_fa": ["کلاسیک", "مدرن / ترند"]})
+        self.assertEqual(catalog.product_specs(p, ai), [
+            {"label": "جنس", "value": "موهر"}, {"label": "فصل کالا", "value": "چهارفصل"},
+            {"label": "قواره", "value": "رگولار"}, {"label": "گروه قد", "value": "کراپ"},
+            {"label": "سبک", "value": "کلاسیک، مدرن / ترند"}])
+
+    def test_a_product_not_synced_yet_reads_the_imported_columns(self):
+        Category.objects.create(id=1, title="ک", slug="k", is_online_active=True)
+        p = Product.objects.create(id=1, title="پ", slug="p", category_id=1, is_active=True, short_desc=self.OLD,
+                                   product_season_title="4052", product_style_title="regular")
+        self.assertEqual([s["label"] for s in catalog.product_specs(p, None)], ["فصل کالا", "قواره", "گروه قد", "سبک"])
+
+
+class CooperationOtpTests(TestCase):
+    url = "/api/v1/Cooperation/CooperationRequestSubmit"
+    form = {"FirstName": "مریم", "LastName": "احمدی", "CellPhone": "09121112233", "JobPositionTitle": "فروشنده"}
+
+    def setUp(self):
+        from django.contrib.auth.hashers import make_password
+        from apps.website.models import CustomerOtp
+
+        CustomerOtp.objects.create(cellphone="09121112233", code_hash=make_password("1234"),
+                                   expires=timezone.now() + timedelta(minutes=5))
+        self.client = APIClient()
+
+    def send(self, **extra):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        with tempfile.TemporaryDirectory() as folder, override_settings(MEDIA_ROOT=folder):
+            resume = SimpleUploadedFile("cv.pdf", b"%PDF-1.4", content_type="application/pdf")
+            return self.client.post(self.url, {**self.form, "ResumeFile": resume, **extra}, format="multipart")
+
+    def test_an_applicant_who_is_not_a_customer_is_checked_by_the_code(self):
+        from apps.website.models import CooperationRequest
+
+        self.assertEqual(self.send().status_code, 403)
+        self.assertEqual(self.send(OtpCode="9999").status_code, 404)
+        reply = self.send(OtpCode="1234")
+        self.assertEqual(reply.status_code, 200)
+        self.assertTrue(reply.json()["result"]["data"]["resumeFileUploaded"])
+        self.assertEqual(CooperationRequest.objects.count(), 1)
+        self.assertEqual(self.send(OtpCode="1234").status_code, 404)  # a code works once
+
+    def test_a_customer_signed_in_with_that_number_needs_no_code(self):
+        from apps.storefront.account import issue_token
+
+        customer = Customer.objects.create(first_name="م", cellphone="09121112233")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {issue_token(customer)['token']}")
+        self.assertEqual(self.send().status_code, 200)
+        other = Customer.objects.create(first_name="ن", cellphone="09120000001")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {issue_token(other)['token']}")
+        self.assertEqual(self.send().status_code, 403)
+
+
+class ContactConfigMigrationTests(TestCase):
+    def run_it(self):
+        import importlib
+        from django.apps import apps as django_apps
+
+        importlib.import_module("apps.website.migrations.0030_contact_us_config_key").copy_forward(django_apps, None)
+
+    def test_what_the_admin_form_saved_moves_to_the_key_the_site_reads(self):
+        import json
+        from apps.website.models import PrimaryConfig
+
+        PrimaryConfig.objects.create(key="contactUsConfig2", value=json.dumps({"lat": "36.29", "address": "مشهد", "enabled": True}))
+        PrimaryConfig.objects.create(key="contactUsConfig", value=json.dumps({"lat": 35.7, "lng": 51.4, "address": "تهران"}))
+        self.run_it()
+        value = json.loads(PrimaryConfig.objects.get(key="contactUsConfig2").value)
+        self.assertEqual((value["lat"], value["address"], value["enabled"]), (35.7, "تهران", True))
+
+    def test_the_legacy_shape_is_left_alone(self):
+        import json
+        from apps.website.models import PrimaryConfig
+
+        PrimaryConfig.objects.create(key="contactUsConfig2", value=json.dumps({"lat": "36.29"}))
+        PrimaryConfig.objects.create(key="contactUsConfig", value=json.dumps({"location": "{'lat': 1}", "address": "x"}))
+        self.run_it()
+        self.assertEqual(json.loads(PrimaryConfig.objects.get(key="contactUsConfig2").value), {"lat": "36.29"})

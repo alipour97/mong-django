@@ -25,10 +25,12 @@ import math
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.db.models import Avg, Sum
 
+from apps.erp import specs as erp_specs
 from apps.erp.models import LebazaiImage
 from apps.erp.store import online_stock
 from apps.website import images as site_images
@@ -270,6 +272,30 @@ def _variant(row: ProductVariant) -> Variant:
     )
 
 
+# Photo kinds by LEBAZAI's file names (front_temp1_2.png, front_ghost_3.png, back_temp1_1.png), best first.
+MODEL_FRONT, GHOST, OTHER, BACK = range(4)
+
+
+def photo_kind(url: str) -> int:
+    name = urlparse(url or "").path.rsplit("/", 1)[-1].lower()
+    if "ghost" in name:
+        return GHOST
+    if name.startswith("front"):
+        return MODEL_FRONT
+    if name.startswith("back"):
+        return BACK
+    return OTHER
+
+
+def cover_first(images: list[dict], kinds: dict[int, int]) -> list[dict]:
+    """The best photo (model from the front, else ghost, never a back view if anything else exists) moved to the
+    front; the rest keep LEBAZAI's order. The first photo is the one a product card shows."""
+    if len(images) < 2:
+        return images
+    best = min(range(len(images)), key=lambda i: (kinds.get(images[i]["id"], OTHER), i))
+    return [images[best], *images[:best], *images[best + 1:]] if best else images
+
+
 def _image_dict(img: LebazaiImage, hidden: set[str], include_hidden: bool) -> dict:
     url = site_images.public_url(img.key) if img.key and site_images.is_built(img.key) else site_images.site_media_url(img.source_url)
     return {
@@ -293,6 +319,7 @@ class ProductBundle:
     only_media: bool = False  # SiteSetting.only_has_media_products: hide colors that have no images
     min_qty: float = 0.0  # SiteSetting.min_qty: safety stock per variant that is never offered online
     ai_profiles: dict[int, ProductAIProfile] = field(default_factory=dict)  # website product id -> ProductAIProfile
+    photo_kinds: dict[int, int] = field(default_factory=dict)  # image id -> photo_kind()
 
     @classmethod
     def load(cls, product_ids, *, with_images: bool = True, include_hidden: bool = False) -> "ProductBundle":
@@ -332,7 +359,13 @@ class ProductBundle:
         for img in LebazaiImage.objects.filter(product_id__in=ids):
             if img.key in hidden and not include_hidden:
                 continue
+            self.photo_kinds[img.id] = photo_kind(img.source_url)
             self.color_gallery.setdefault(img.product_id, {}).setdefault(img.color_id, []).append(_image_dict(img, hidden, include_hidden))
+        if include_hidden:
+            return  # the admin edits the photos in LEBAZAI's own order
+        for colors in self.color_gallery.values():
+            for color_id, imgs in colors.items():
+                colors[color_id] = cover_first(imgs, self.photo_kinds)
 
     # -- per product -------------------------------------------------------
     def pricing(self, pid: int) -> Pricing:
@@ -348,7 +381,15 @@ class ProductBundle:
         return bool(self.color_gallery.get(pid))
 
     def main_images(self, pid: int) -> list[dict]:
-        return [img for imgs in self.color_gallery.get(pid, {}).values() for img in imgs]
+        """Every photo, colors in their display order. The first, the card's photo, is a model from the front
+        in whichever color has one, else a ghost photo; a back view only when there is nothing else."""
+        gallery = self.color_gallery.get(pid, {})
+        rank = {}
+        for v in self.variants.get(pid, []):
+            if v.color and v.color.id not in rank:
+                rank[v.color.id] = (v.color.display_priority, len(rank))
+        order = sorted(gallery, key=lambda c: rank.get(c, (math.inf, math.inf)))
+        return cover_first([img for c in order for img in gallery[c]], self.photo_kinds)
 
     def color_images(self, pid: int, v: Variant) -> list[dict]:
         return self.color_gallery.get(pid, {}).get(v.color_id) or []
@@ -466,7 +507,9 @@ class ProductBundle:
         ai = self.ai_profiles.get(pid)
 
         product_name = display_name(p.title)
-        ai_title = ai.title if ai and ai.title else ""
+        # The admin's «عنوان هیبرید» and «توضیح تکمیلی» (adminapi DescriptionsView) replace LEBAZAI's copy.
+        ai_title = re.sub(r"<[^>]+>", " ", p.short_description_html or "").strip() or (ai.title if ai and ai.title else "")
+        ai_title = re.sub(r"\s+", " ", ai_title)
         description = ai.description if ai and ai.description else none_if_blank(p.description)
         short_desc = ai.meta_description if ai and ai.meta_description else none_if_blank(p.short_desc)
 
@@ -505,8 +548,31 @@ class ProductBundle:
             "stylistNote": ai.stylist_note if ai else "",
             "aiTags": ai.tags if ai else [],
             "aiAttributes": ai.attributes if ai else {},
+            # The «مشخصات محصول» table: [{label, value}] in erp_specs.ORDER.
+            "specs": product_specs(p, ai),
             "metaDescription": ai.meta_description if ai else "",
         }
+
+
+def product_specs(p: Product, ai) -> list[dict]:
+    """The spec table: what the sales software says (Product.attributes, written by the sync), then LEBAZAI's AI
+    profile for what it leaves out. Material comes only from the software."""
+    found = erp_specs.clean(p.attributes or {})
+    if not found:
+        # Not synced since the table was added: the columns brought over from the old site.
+        found = erp_specs.dadehfa(p.short_desc, p.product_season_title, p.product_style_title)
+    a = (ai.attributes if ai else None) or {}
+    length = a.get("length")
+    guess = {
+        erp_specs.SEASON: a.get("season_fa"),
+        erp_specs.FIT: a.get("fit_fa"),
+        erp_specs.LENGTH: erp_specs.length(length) if length and length != "not_applicable" else "",
+        erp_specs.STYLE: "، ".join(x for x in (a.get("styles_fa") or []) if x),
+    }
+    for label, value in guess.items():
+        if not found.get(label) and value:
+            found[label] = value
+    return [{"label": label, "value": value} for label, value in erp_specs.clean(found).items()]
 
 
 # -----------------------------------------------------------------------------
@@ -525,10 +591,22 @@ class ListingRow:
     sold: float          # recent sales, as the sales software counts them
     featured: float      # SelectedProduct.sorting_weight; inf when not selected
     buyer_score: float
+    size_names: frozenset = frozenset()  # sizes that can be bought now (the size filter)
+    search_text: str = ""  # the name, the AI title and the slug, normalized (the search box)
 
 
 def listing_rows() -> list[ListingRow]:
     return warm.get(LISTING_CACHE_KEY, LISTING_CACHE_TTL, _build_listing_rows)
+
+
+def search_text_of(text: str | None) -> str:
+    """norm(), with the slug's dashes and repeated spaces read as one space."""
+    return " ".join(norm((text or "").replace("-", " ").replace("ى", "ی")).split())
+
+
+def search_text(p: Product, ai) -> str:
+    parts = [p.title, ai.title if ai else "", p.slug]
+    return " | ".join(search_text_of(x) for x in parts if x)
 
 
 def _build_listing_rows() -> list[ListingRow]:
@@ -556,11 +634,15 @@ def _build_listing_rows() -> list[ListingRow]:
         if only_media and not bundle.has_images(pid):  # like the legacy site; also when every photo is hidden in the admin
             continue
         rows.append(ListingRow(
-            id=pid, title=norm(p.title), category_id=p.category_id,
+            id=pid, title=norm(p.title), category_id=p.category_id, search_text=search_text(p, bundle.ai_profiles.get(pid)),
             price_after=pr.after, reduction=pr.reduction, in_stock=bundle.in_stock(pid),
             color_ids=frozenset(v.color_id for v in bundle.visible_variants(pid)),
             created=p.created, sold=p.sold, featured=featured.get(pid, math.inf),
             buyer_score=float(scores.get(pid) or 0),
+            size_names=frozenset(
+                v.size.name for v in bundle.visible_variants(pid)
+                if v.size and v.size.name not in NO_SIZE and bundle.variant_stock(pid, v) > 0
+            ),
         ))
     return rows
 
@@ -581,11 +663,11 @@ SORT_KEYS = {
     8: lambda r: (-r.reduction, *_newest(r)),     # بیشترین تخفیف
     9: lambda r: (r.reduction, *_newest(r)),      # کمترین تخفیف
 }
+# The tabs the site offers. 6 and 7 still sort (old links keep working) but are no longer offered.
 SORT_CRITERIA = [
     {"id": 2, "sortKeyFa": "جدیدترین"},
     {"id": 3, "sortKeyFa": "پرفروش ترین"}, {"id": 4, "sortKeyFa": "ارزان ترین"},
-    {"id": 5, "sortKeyFa": "گران ترین"}, {"id": 6, "sortKeyFa": "پیشنهاد خریداران"},
-    {"id": 7, "sortKeyFa": "منتخب"}, {"id": 8, "sortKeyFa": "بیشترین تخفیف"},
+    {"id": 5, "sortKeyFa": "گران ترین"}, {"id": 8, "sortKeyFa": "بیشترین تخفیف"},
     {"id": 9, "sortKeyFa": "کمترین تخفیف"},
 ]
 
@@ -634,18 +716,30 @@ def filter_rows(payload: dict) -> list[ListingRow]:
     if payload.get("isInStock"):
         rows = [r for r in rows if r.in_stock]
 
+    # filteredFeatureId holds the picked colors and sizes together (the legacy API's feature values);
+    # their ids never overlap. Within each group any one matches; colors and sizes must both match.
     raw_feat = [_safe_int(f) for f in payload.get("filteredFeatureId") or []]
     feat_ids = {f for f in raw_feat if f is not None}
+    size_names = set(
+        ProductVariant.objects.filter(size_id__in=feat_ids).values_list("size_name", flat=True).distinct()
+    ) if feat_ids else set()
+    if size_names:
+        rows = [r for r in rows if r.size_names & size_names]
+        feat_ids -= set(ProductVariant.objects.filter(size_id__in=feat_ids).values_list("size_id", flat=True))
     feature_ids = expand_color_families(feat_ids)
     if feature_ids:
         rows = [r for r in rows if r.color_ids & feature_ids]
 
     if payload.get("search"):
-        q = norm(payload["search"])
-        rows = [r for r in rows if q in r.title]
+        # Every word of the query, anywhere in the name, the AI title or the slug: «مانتو کتی» finds
+        # «کتی عروسکی اودیسه» through its AI title «مانتو کتی زنانه مدل اودیسه …».
+        words = search_text_of(payload["search"]).split()
+        rows = [r for r in rows if all(w in r.search_text for w in words)]
 
     sort_id = _safe_int(payload.get("sortCriteriaId")) or 2
-    return sorted(rows, key=SORT_KEYS.get(sort_id, _newest))
+    by = SORT_KEYS.get(sort_id, _newest)
+    # Whatever the sort, products that cannot be bought now come last.
+    return sorted(rows, key=lambda r: (not r.in_stock, *by(r)))
 
 
 def page_of(rows: list, page_number, page_size) -> tuple[list, int]:
@@ -670,6 +764,35 @@ def color_families(color_ids) -> list[dict]:
         {"id": color_id, "hasColor": True, "name": family, "value": value, "parentId": 0}
         for family, (color_id, value) in families.items()
     ]
+
+
+NO_SIZE = {"", "NoSize"}  # one-size placeholders: nothing to filter by
+
+
+def size_options(names) -> list[dict]:
+    """The size filter: one entry per size name, id = its first size id, in the ERP's size order."""
+    found: dict[str, tuple[int, int, str]] = {}
+    rows = ProductVariant.objects.filter(size_name__in=set(names)).exclude(size_id=None)
+    for name, size_id, priority, value in rows.values_list("size_name", "size_id", "size_priority", "size_value"):
+        best = found.get(name)
+        if best is None or (priority, size_id) < best[:2]:
+            found[name] = (priority, size_id, value)
+    ordered = sorted(found.items(), key=lambda kv: (kv[1][0], _size_order(kv[0])))
+    return [
+        {"id": size_id, "hasColor": False, "name": name, "value": value or name, "parentId": 0}
+        for name, (_, size_id, value) in ordered
+    ]
+
+
+def _size_order(name: str):
+    """Numbers by value (36 before 140), then letters in garment order, then the rest."""
+    letters = ["XXS", "XS", "S", "S/M", "M", "M/L", "L", "XL", "2XL", "XXL", "3XL", "XXXL", "4XL", "FreeS", "OS"]
+    head = name.split()[0] if name.split() else name
+    if head.isdigit():
+        return (0, int(head), name)
+    if name in letters:
+        return (1, letters.index(name), name)
+    return (2, 0, name)
 
 
 def womens(name: str) -> str:

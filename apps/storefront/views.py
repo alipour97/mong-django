@@ -37,6 +37,7 @@ from apps.website.models import (
     ProductSlugAlias,
     ProductCommentLike,
     ProductTag,
+    ProductVariant,
     Province,
     SelectedProduct,
     SiteSetting,
@@ -389,21 +390,37 @@ class ProductGetByIdView(PublicView):
 
 
 class ProductSuggestView(PublicView):
-    """POST Product/SuggestProduct {"categoryId", "productId"} -> other listed products of that category."""
+    """
+    POST Product/SuggestProduct {"categoryId", "productId", "excludeIds", "excludeVariantIds"} -> in-stock products of that category,
+    newest first. A category with too few is topped up from its parent, then the parent's parent. productId and
+    excludeIds/excludeVariantIds (the basket page sends what is already in the basket) are left out.
+    """
 
     LIMIT = 12
 
     def post(self, request):
-        cat_id = request.data.get("categoryId")
-        product_id = request.data.get("productId")
+        d = request.data if isinstance(request.data, dict) else {}
+        cat_id = catalog._safe_int(d.get("categoryId"))
         if not cat_id:
             return ok([])
-        rows = [r for r in catalog.filter_rows({"filteredCategoryIds": [cat_id], "sortCriteriaId": 2}) if r.id != product_id]
-        return ok(catalog.render_list([r.id for r in rows[: self.LIMIT]]))
+        exclude = {i for i in (catalog._safe_int(x) for x in [d.get("productId"), *(d.get("excludeIds") or [])]) if i}
+        variant_ids = {i for i in (catalog._safe_int(x) for x in d.get("excludeVariantIds") or []) if i}
+        if variant_ids:  # basket rows saved before they carried productId
+            exclude |= set(ProductVariant.objects.filter(id__in=variant_ids).values_list("product_id", flat=True))
+        chain = [c.id for c in reversed(catalog.category_tree().ancestors(cat_id))] or [cat_id]
+        picked: list[int] = []
+        for cid in chain:
+            for r in catalog.filter_rows({"filteredCategoryIds": [cid], "isInStock": True, "sortCriteriaId": 2}):
+                if r.id not in exclude:
+                    exclude.add(r.id)
+                    picked.append(r.id)
+                    if len(picked) >= self.LIMIT:
+                        return ok(catalog.render_list(picked))
+        return ok(catalog.render_list(picked))
 
 
 class ProductGetFilterByCategoryView(PublicView):
-    """GET Product/GetFilterByCategoryId?id=<category> -> price range, colors, brands, tags."""
+    """GET Product/GetFilterByCategoryId?id=<category> -> price range, colors and sizes, brands, tags."""
 
     def get(self, request):
         cat_id = request.query_params.get("id")
@@ -411,12 +428,14 @@ class ProductGetFilterByCategoryView(PublicView):
         if not rows:
             return ok({"fromPrice": 0, "toPrice": 0, "filteredValues": [], "brands": [], "tags": []})
         color_ids = set().union(*(r.color_ids for r in rows))
+        size_names = set().union(*(r.size_names for r in rows))
         tag_ids = ProductTag.objects.filter(product_id__in=[r.id for r in rows], is_deleted=False).values("tag_id")
 
         return ok({
             "fromPrice": min(r.price_after for r in rows),
             "toPrice": max(r.price_after for r in rows),
-            "filteredValues": catalog.color_families(color_ids),
+            # Colors (hasColor) then sizes; the site splits them on hasColor.
+            "filteredValues": catalog.color_families(color_ids) + catalog.size_options(size_names),
             "brands": catalog.brands_of(rows),
             "tags": [
                 {"title": t.title, "parentId": t.parent_id, "parent": None, "tags": None, "id": t.id}
@@ -581,7 +600,7 @@ class ProductAddressView(PublicView):
 
 
 # AI style tags that read as product facts; the rest (age group, formality score…) stay internal.
-_PUBLIC_AI_TAGS = {"نوع", "مناسبت", "سبک", "فصل", "طرح"}
+_PUBLIC_AI_TAGS = {"نوع", "مناسبت", "طرح"}  # season and style are in the spec table
 
 
 def _branch_names() -> list[str]:
@@ -671,7 +690,9 @@ class SearchEngineMetaView(PublicView):
             data["color"] = "، ".join(colors)
         if sizes:
             data["size"] = sizes
-        facts = [
+        # The spec table, then the AI's facts it does not cover (type, occasion, pattern).
+        facts = [{"type": "PropertyValue", "name": f["label"], "value": f["value"]} for f in catalog.product_specs(p, ai)]
+        facts += [
             {"type": "PropertyValue", "name": t["label"], "value": t["value"]}
             for t in (ai.tags if ai and ai.tags else [])
             if t.get("label") in _PUBLIC_AI_TAGS and t.get("value")

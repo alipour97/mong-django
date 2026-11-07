@@ -140,7 +140,8 @@ for _url in (PUBLIC_BASE_URL, PUBLIC_MEDIA_BASE_URL):
 # so URLs saved under them are recognised (strip_hardcoded_domains, uploads, panel saves).
 OWN_HOSTS = {
     h.strip().lower() for h in [SITE_HOST, urlsplit(PUBLIC_MEDIA_BASE_URL).hostname or "",
-                                *os.getenv("OLD_SITE_HOSTS", "samian.mong.ir,us.mong.ir").split(",")]
+                                *os.getenv("OLD_SITE_HOSTS", "samian.mong.ir,us.mong.ir").split(","),
+                                *os.getenv("SITE_ALIAS_HOSTS", "").split(",")]
     if h.strip()
 }
 # URL path of the pre-built images. nginx serves /img/ statically (deploy/nginx/);
@@ -195,6 +196,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # CORS Configuration
 CORS_ALLOW_ALL_ORIGINS = DEBUG
+# Other addresses the storefront answers on, e.g. "mong.ir,www.mong.ir" while the domain moves to this site and
+# "new.mong.ir" after it (a page still open there keeps working until it redirects). Comma-separated hosts.
+SITE_ALIAS_HOSTS = [h.strip().lower() for h in os.getenv("SITE_ALIAS_HOSTS", "").split(",") if h.strip()]
 CORS_ALLOWED_ORIGINS = list(dict.fromkeys([
     "http://localhost:3000",
     "http://localhost:3300",
@@ -203,9 +207,11 @@ CORS_ALLOWED_ORIGINS = list(dict.fromkeys([
     SITE_URL,
     f"https://{SITE_HOST}",
     f"http://{SITE_HOST}",
+    *(f"https://{h}" for h in SITE_ALIAS_HOSTS),
 ]))
 CORS_ALLOW_CREDENTIALS = True
-CSRF_TRUSTED_ORIGINS = list(dict.fromkeys([SITE_URL, f"https://{SITE_HOST}", PUBLIC_BASE_URL]))
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys([SITE_URL, f"https://{SITE_HOST}", PUBLIC_BASE_URL,
+                                           *(f"https://{h}" for h in SITE_ALIAS_HOSTS)]))
 CORS_ALLOW_HEADERS = [
     "accept",
     "accept-encoding",

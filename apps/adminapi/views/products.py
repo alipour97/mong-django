@@ -177,6 +177,9 @@ class DetailView(AdminView):
     def get(self, request, product_id: int):
         # Hidden photos are included and marked (isHidden) so they can be shown again.
         bundle = catalog.ProductBundle.load([product_id], include_hidden=True)
+        # Every color of the sales software, also those the site leaves out for having no photo (the panel marks
+        # them), so the admin sees what is missing.
+        bundle.only_media = False
         p = bundle.products.get(product_id)
         if not p or p.is_deleted:
             return fail(NOT_FOUND, 404)
