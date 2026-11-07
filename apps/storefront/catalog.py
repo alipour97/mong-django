@@ -91,6 +91,42 @@ def none_if_blank(text: str | None):
     return text if text else None
 
 
+# Dadehfa keeps the product's attributes in its short description, URL-encoded
+# ("%23سبک%0a%20loose%23فصل%0a%204042..."); erp.specs reads them for the spec table.
+_ERP_CODED = re.compile(r"%[0-9A-Fa-f]{2}|#[^#\s]+\s*\n")
+
+
+def readable(text: str | None):
+    """The text when a customer can read it, None for the ERP's coded attributes."""
+    return text if text and not _ERP_CODED.search(text) else None
+
+
+def same_name_parent(cat: Category, tree: CategoryTree | None = None) -> Category | None:
+    """The parent when it has the same name ("کیف" under "کیف"): the two pages show the same products."""
+    tree = tree or category_tree()
+    parent = tree.nodes.get(cat.parent_id)
+    if parent and display_name(parent.title).strip() == display_name(cat.title).strip():
+        return parent
+    return None
+
+
+def category_label(cat: Category, tree: CategoryTree | None = None) -> str:
+    """
+    The name a category's title and H1 use: its own, or with its parent's in front when another shown
+    category has the same name ("بافت" under "روپوش" and under "بالاتنه" -> "روپوش بافت", "بالاتنه بافت").
+    """
+    tree = tree or category_tree()
+    name = display_name(cat.title).strip()
+    own_parent = same_name_parent(cat, tree)
+    twins = [c for c in tree.nodes.values()
+             if c.id != cat.id and display_name(c.title).strip() == name
+             and c is not own_parent and same_name_parent(c, tree) is not cat]
+    parent = tree.nodes.get(cat.parent_id)
+    if twins and parent and parent.parent_id is not None:
+        return f"{display_name(parent.title).strip()} {name}"
+    return name
+
+
 # -----------------------------------------------------------------------------
 # Media
 # -----------------------------------------------------------------------------
@@ -511,7 +547,7 @@ class ProductBundle:
         ai_title = re.sub(r"<[^>]+>", " ", p.short_description_html or "").strip() or (ai.title if ai and ai.title else "")
         ai_title = re.sub(r"\s+", " ", ai_title)
         description = ai.description if ai and ai.description else none_if_blank(p.description)
-        short_desc = ai.meta_description if ai and ai.meta_description else none_if_blank(p.short_desc)
+        short_desc = ai.meta_description if ai and ai.meta_description else readable(p.short_desc)
 
         return {
             "id": p.id,

@@ -546,19 +546,38 @@ SEO_TITLE_MAX = 54
 SEO_DESCRIPTION_MAX = 160
 
 
+# Words a cut title must not end on ("... فاق بلند با").
+_DANGLING = {"با", "و", "از", "در", "به", "برای", "که", "یا", "تا", "بر", "را", "های", "ها", "مدل", "طرح", "یقه"}
+
+
 def _clip(text: str, limit: int) -> str:
+    """Cut at a «،» when one is far enough in, else at a word, never on a word that leaves the phrase open."""
     text = " ".join((text or "").split())
     if len(text) <= limit:
         return text
-    cut = text[:limit].rsplit(" ", 1)[0]
-    return cut.rstrip(" ،,.-|:؛")
+    cut = text[:limit + 1]
+    comma = max(cut.rfind("،"), cut.rfind(","))
+    if comma >= limit * 0.6:
+        cut = cut[:comma]
+    else:
+        cut = cut.rsplit(" ", 1)[0]
+    words = cut.rstrip(" ،,.-|:؛").split(" ")
+    while len(words) > 1 and words[-1] in _DANGLING:
+        words.pop()
+    # "... با پاچه" of "با پاچه های گشاد": a phrase the cut opened but did not finish goes whole.
+    opened = max((i for i, w in enumerate(words) if w in ("با", "و", "از", "در", "برای")), default=-1)
+    if opened > 2 and len(words) - opened <= 2:
+        words = words[:opened]
+    while len(words) > 1 and words[-1] in _DANGLING:
+        words.pop()
+    return " ".join(words).rstrip(" ،,.-|:؛")
 
 
 _womens = catalog.womens
 
 
 def _category_seo(cat: Category, leaves: list[Category]) -> tuple[str, str]:
-    item = _womens(catalog.display_name(cat.title))
+    item = _womens(catalog.category_label(cat))
     title = _clip(f"خرید {item} | جدیدترین مدل‌ها و قیمت روز", SEO_TITLE_MAX)
     description = f"خرید آنلاین {item} با جدیدترین مدل‌ها، رنگ‌ها و سایزهای مختلف و قیمت روز در فروشگاه اینترنتی مانگ."
     kinds = [catalog.display_name(c.title) for c in leaves if c.id != cat.id][:3]
@@ -579,6 +598,17 @@ def _product_seo_title(name: str, ai_title: str, category: str) -> str:
     else:
         title = f"خرید {name} | {_womens(category)}" if category else f"خرید {name}"
     return _clip(title, SEO_TITLE_MAX)
+
+
+def _product_description(name: str, ai_title: str, category: str, price: int, colors: list, sizes: list) -> str:
+    """For a product without LEBAZAI's meta description: what it is, its price, colors and sizes."""
+    what = catalog.display_name(ai_title) if ai_title else (f"{_womens(category)} {name}" if category else name)
+    text = f"خرید آنلاین {what} از مانگ با قیمت {_toman(price)} تومان."
+    if colors:
+        text += f" رنگ‌ها: {'، '.join(colors[:4])}."
+    if sizes:
+        text += f" سایزها: {'، '.join(sizes[:6])}."
+    return _clip(text, SEO_DESCRIPTION_MAX)
 
 
 class SearchEngineIndexView(PublicView):
@@ -650,8 +680,7 @@ class SearchEngineMetaView(PublicView):
         ai = getattr(p, "ai_profile", None)
         product_name = catalog.display_name(p.title)
         ai_title = ai.title if ai and ai.title else ""
-        meta_desc = ai.meta_description if ai and ai.meta_description else p.short_desc
-        parts = [category, product_name, ai_title, meta_desc, f"قیمت {_toman(pr.after)} تومان"]
+        meta_desc = ai.meta_description if ai and ai.meta_description else catalog.readable(p.short_desc)
         reviews = ProductComment.objects.filter(product=p, is_deleted=False, status=1).count()
         url = f"/products-item/{p.slug}"
 
@@ -673,7 +702,7 @@ class SearchEngineMetaView(PublicView):
             "seoTitle": _product_seo_title(product_name, ai_title, category),
             "image": [i["mediaUrl"] for i in images if not i["isVideo"]],
             "video": [i["mediaUrl"] for i in images if i["isVideo"]],
-            "description": meta_desc or " . ".join(x for x in parts if x),
+            "description": None,  # below, once the colors and sizes are known
             "keywords": keywords_str,
             "canonical": url,
             "brand": {"type": "Brand", "name": catalog.MONG_BRAND["title"]},
@@ -696,6 +725,7 @@ class SearchEngineMetaView(PublicView):
             data["color"] = "، ".join(colors)
         if sizes:
             data["size"] = sizes
+        data["description"] = meta_desc or _product_description(product_name, ai_title, category, pr.after, colors, sizes)
         # The spec table, then the AI's facts it does not cover (type, occasion, pattern).
         facts = [{"type": "PropertyValue", "name": f["label"], "value": f["value"]} for f in catalog.product_specs(p, ai)]
         facts += [
@@ -730,6 +760,8 @@ class SearchEngineMetaView(PublicView):
         online_parents = {c.parent_id for c in below if c.is_online_active}
         leaves = sorted((c for c in below if c.is_online_active and c.id not in online_parents), key=lambda c: c.id)
         seo_title, description = _category_seo(cat, leaves)
+        # "کیف" under "کیف" lists what its parent lists: the parent's address is the one to index.
+        home = catalog.same_name_parent(cat) or cat
         return Response({
             "context": "https://schema.org/",
             "type": "ItemList",
@@ -737,10 +769,10 @@ class SearchEngineMetaView(PublicView):
             "seoTitle": seo_title,  # for the <title> only; the page drops it before writing the JSON-LD
             # The page's H1: what people search ("مانتو زنانه", "پوشاک زنانه"), not the
             # ERP's short name ("مانتو"). Also dropped before the JSON-LD.
-            "h1": _womens(catalog.display_name(cat.title)),
+            "h1": _womens(catalog.category_label(cat)),
             "description": description,
             "url": f"/products-category/{cat.slug}",
-            "canonical": f"/products-category/{cat.slug}",
+            "canonical": f"/products-category/{home.slug}",
             "numberOfItems": len(leaves),
             "itemListOrder": "https://schema.org/ItemListOrderAscending",
             "itemListElement": [
@@ -797,7 +829,8 @@ class SearchEngineSiteMapsView(PublicView):
             "product": {"entityType": "product", "lastCacheTime": now,
                         "items": [item(slug, lm or cr) for slug, lm, cr in listed if slug]},
             "category": {"entityType": "category", "lastCacheTime": now,
-                         "items": [item(c.slug, None) for c in tree.nodes.values() if c.parent_id and c.slug]},
+                         "items": [item(c.slug, None) for c in tree.nodes.values()
+                                   if c.parent_id and c.slug and not catalog.same_name_parent(c, tree)]},
         }
         if entity_type in data:
             data = {entity_type: data[entity_type]}

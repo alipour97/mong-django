@@ -1677,6 +1677,46 @@ class ProductSpecsTests(TestCase):
         self.assertEqual(meta["keywords"], "مانتو کتی, مانتو اداری, یقه انگلیسی شیک")
 
 
+class SearchSnippetTests(TestCase):
+    def meta(self, kind, slug):
+        from django.core.cache import cache
+
+        cache.clear()
+        reply = APIClient().get(f"/api/v1/SearchEngine/{kind}/{slug}/meta").json()
+        return reply.get("result", {}).get("data", reply) if isinstance(reply, dict) else reply
+
+    def test_a_cut_title_ends_on_a_whole_phrase(self):
+        from apps.storefront.views import _clip
+
+        self.assertEqual(_clip("شلوار زنانه بگ استایل مخمل کبریتی فاق بلند با پاچه های گشاد و جیب دار", 54),
+                         "شلوار زنانه بگ استایل مخمل کبریتی فاق بلند")
+        self.assertEqual(_clip("کت کوتاه زنانه مزونی ژاکارد با طرح هندسی ظریف، یقه گرد آستین بلند", 54),
+                         "کت کوتاه زنانه مزونی ژاکارد با طرح هندسی ظریف")
+
+    def test_the_erp_attribute_code_is_never_a_description(self):
+        Category.objects.create(id=1, title="شلوار", slug="k", is_online_active=True)
+        Product.objects.create(id=1, title="بگ 12", slug="p", category_id=1, is_active=True,
+                               short_desc="%23سبک%0a%20baggy%23فصل%0a%204042")
+        goods(qty=3)
+        description = self.meta("product", "p")["description"]
+        self.assertNotIn("%", description)
+        self.assertTrue(description.startswith("خرید آنلاین شلوار زنانه بگ 12 از مانگ با قیمت"), description)
+
+    def test_categories_with_one_name_are_told_apart_and_a_same_name_child_points_to_its_parent(self):
+        Category.objects.create(id=1, title="زنانه", slug="root", is_online_active=True)
+        for cid, title, slug, parent in [(2, "روپوش", "coat", 1), (3, "بالاتنه", "top", 1), (4, "بافت", "coat-knit", 2),
+                                          (5, "بافت", "top-knit", 3), (6, "کیف", "bags", 1), (7, "کیف", "bag", 6)]:
+            Category.objects.create(id=cid, title=title, slug=slug, parent_id=parent, is_online_active=True)
+        self.assertEqual(self.meta("category", "coat-knit")["h1"], "روپوش بافت زنانه")
+        self.assertEqual(self.meta("category", "top-knit")["h1"], "بالاتنه بافت زنانه")
+        bag = self.meta("category", "bag")
+        self.assertEqual((bag["h1"], bag["canonical"]), ("کیف زنانه", "/products-category/bags"))
+        self.assertEqual(self.meta("category", "bags")["canonical"], "/products-category/bags")
+        sitemap = APIClient().get("/api/v1/SearchEngine/SiteMaps?entityType=category").json()
+        sitemap = sitemap.get("result", {}).get("data", sitemap)
+        self.assertNotIn("bag", [i["urlLocation"] for i in sitemap["category"]["items"]])
+
+
 class CooperationOtpTests(TestCase):
     url = "/api/v1/Cooperation/CooperationRequestSubmit"
     form = {"FirstName": "مریم", "LastName": "احمدی", "CellPhone": "09121112233", "JobPositionTitle": "فروشنده"}
