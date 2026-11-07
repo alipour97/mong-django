@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import shutil
+from urllib.parse import urlparse
 
 import requests
 import urllib3
@@ -146,10 +147,16 @@ def add_originals(*, departments: list[str], count: int, subcodes: list[str] = (
     return {"products": len(chosen), "images": images_added, "built": built, "failed": failed, "missing": missing}
 
 
+def _is_front(url: str) -> bool:
+    """LEBAZAI names each photo by its angle: .../front_temp1_2.png, .../back_temp1_1.png."""
+    return urlparse(url).path.rsplit("/", 1)[-1].lower().startswith("front")
+
+
 def sync_images(log: Log = logger.info) -> dict:
     """
     Makes the approved photos match LEBAZAI: its order is the site's (the first of a color is its preview).
-    Only a photo not in the local store is downloaded and only a row that differs is written.
+    Only a photo not in the local store is downloaded and only a row that differs is written. A color whose
+    photos are all back views is left out, and the photos it already had are removed.
     """
     gallery = lebazai_images()
     if not gallery:
@@ -158,6 +165,10 @@ def sync_images(log: Log = logger.info) -> dict:
     for barcode, product_id, color_id in store.barcodes():
         for position, url in enumerate(gallery.get(barcode, [])):
             wanted.setdefault((product_id, color_id, _key(url)), (url, position))
+    # A color with only a back photo (no front_… file) gets no photos at all: its card would show the back.
+    with_front = {(p, c) for (p, c, _), (url, _) in wanted.items() if _is_front(url)}
+    skipped = {(p, c) for (p, c, _) in wanted} - with_front
+    wanted = {k: v for k, v in wanted.items() if k[:2] in with_front}
 
     held = {(i.product_id, i.color_id, i.key): i for i in LebazaiImage.objects.filter(key__startswith="lz/")}
     built = failed = 0
@@ -185,8 +196,10 @@ def sync_images(log: Log = logger.info) -> dict:
         image.delete()
         if not LebazaiImage.objects.filter(key=image.key).exists():
             shutil.rmtree(images.img_root() / image.key, ignore_errors=True)
-    log(f"images: {built} built, {failed} failed, {len(added)} added, {len(moved)} reordered, {len(held)} removed")
-    return {"built": built, "failed": failed, "added": len(added), "moved": len(moved), "removed": len(held)}
+    log(f"images: {built} built, {failed} failed, {len(added)} added, {len(moved)} reordered, {len(held)} removed, "
+        f"{len(skipped)} colors left out for having no front photo")
+    return {"built": built, "failed": failed, "added": len(added), "moved": len(moved), "removed": len(held),
+            "no_front": len(skipped)}
 
 
 def sync_profiles(log: Log = logger.info) -> dict:

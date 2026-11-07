@@ -1271,6 +1271,16 @@ class MediaPackTests(TestCase):
             self.assertEqual(self.order(), [self.url_b, self.url_a])
             self.assertEqual(self.sync([self.url_b, self.url_a, "http://x/new.png"])[1], 1)
 
+    def test_a_color_with_only_a_back_photo_gets_no_photos(self):
+        with tempfile.TemporaryDirectory() as folder, override_settings(MEDIA_ROOT=folder):
+            self.sync([self.url_a, self.url_b])
+            key = LebazaiImage.objects.get(source_url=self.url_b).key
+            result, downloads = self.sync([self.url_b])  # LEBAZAI dropped the front photo
+            self.assertEqual((downloads, result["no_front"], result["removed"]), (0, 1, 2))
+            self.assertEqual(self.order(), [])
+            self.assertFalse((images.img_root() / key).exists())
+            self.assertEqual(self.sync(["http://x/Mong/0310/back_temp1_1.png"])[1], 0)
+
     def test_a_pack_gives_a_new_server_everything_without_a_download(self):
         Product.objects.create(id=5, title="t", barcode="P5", slug="t")
         Product.objects.create(id=6, title="u", barcode="P6", slug="u")
