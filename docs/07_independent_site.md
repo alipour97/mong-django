@@ -118,10 +118,10 @@ python manage.py export_media
 | `ERP_CONNECTOR` | `dadehfa` |
 | `ERP_WRITES_ENABLED` | `false` تا مرحلهٔ خرید واقعی |
 | `SITE_URL` | `https://dadeh.mong.ir` |
-| `DJANGO_ALLOWED_HOSTS` | `api.dadeh.mong.ir,payhub.mong.ir` |
+| `DJANGO_ALLOWED_HOSTS` | `api.dadeh.mong.ir,payhub.mong.ir,pay.mong.ir` |
 | `PUBLIC_BASE_URL`، `PUBLIC_MEDIA_BASE_URL` | `https://api.dadeh.mong.ir` |
 | `PAYHUB_PUBLIC_URL` | `https://payhub.mong.ir` |
-| `PAYHUB_SNAPP_RETURN_URL` | `https://mong.ir` (بازگشت اسنپ‌پی، از راه فرانت؛ فصل ۶) |
+| `PAYHUB_SNAPP_RETURN_URL` | `https://pay.mong.ir` (بازگشت اسنپ‌پی؛ فصل ۶) |
 | `SITE_ALIAS_HOSTS` | لازم نیست؛ دامنه‌های دیگری که سایت روی آن‌ها باز می‌شود، فقط هنگام سوییچ (بخش «سوییچ به `mong.ir`») |
 | `MEDIA_ROOT` | `/app/public/media` |
 | `LEGACY_CDN_ROOT` | `/app/public/media/cdn` |
@@ -163,12 +163,12 @@ python manage.py timing_report
 - **کوپن سایت و کارت هدیهٔ سایت:** در `/django-admin/` ساخته می‌شوند و در خود سایت می‌مانند. کوپن‌های داده‌فا همچنان در پنل ادمین سایت دیده می‌شوند.
 - **عکس دستی:** برای کالایی که LEBAZAI عکسش را ندارد، با بارکد یکی از سایزهای آن رنگ عکس بگذارید. سینک شبانه به این عکس‌ها دست نمی‌زند و کالا با همان عکس در سایت می‌آید.
 
-## دامنهٔ `payhub.mong.ir`
+## دامنه‌های `payhub.mong.ir` و `pay.mong.ir`
 
-بازگشت زرین‌پال و اسنپ‌پی به این دامنه می‌آید و در همین سرویس `dadeh` پاسخ داده می‌شود.
+بازگشت زرین‌پال به این دامنه و بازگشت اسنپ‌پی به `pay.mong.ir` (دامنهٔ ثبت‌شده نزد اسنپ‌پی) می‌آید و هر دو در همین سرویس `dadeh` پاسخ داده می‌شوند. هر دو زیردامنه را با همین مراحل وصل کنید.
 
-1. در رانفلر: پروژه ← تنظیم دامنه ← `mong.ir` ← مدیریت زیر دامنه‌ها: `payhub` را اضافه و به سرویس `dadeh` وصل کنید.
-2. رکورد A دامنهٔ `payhub.mong.ir` را در پنل DNS به همان IP دامنهٔ `dadeh.mong.ir` تغییر دهید و SSL را فعال کنید.
+1. در رانفلر: پروژه ← تنظیم دامنه ← `mong.ir` ← مدیریت زیر دامنه‌ها: `payhub` و `pay` را اضافه و به سرویس `dadeh` وصل کنید.
+2. رکورد A دامنه‌های `payhub.mong.ir` و `pay.mong.ir` را در پنل DNS به همان IP دامنهٔ `dadeh.mong.ir` تغییر دهید و SSL را فعال کنید.
 3. در کانفیگ‌مپ `dadeh` فایل `default`: مقدار `proxy_read_timeout` را حداقل `120s` بگذارید. تأیید اسنپ‌پی ممکن است طول بکشد.
 4. `https://payhub.mong.ir/__health` باید `sandbox=True snapppay=set` نشان بدهد.
 

@@ -323,7 +323,7 @@ SMSIR_INVOICE_PARAM = os.getenv("SMSIR_INVOICE_PARAM", "INVOICE")
 ZARINPAL_MERCHANT_ID = os.getenv("ZARINPAL_KEY", "")
 ZARINPAL_SANDBOX = os.getenv("ZARINPAL_SANDBOX", "false").lower() in ("1", "true", "yes")
 # A branded StartPay address. Empty (the default): Zarinpal's own payment.zarinpal.com/pg/StartPay.
-# Not pay.mong.ir: that is a Zarinpal personal-link domain and answers 404 for /pg/StartPay/<authority>.
+# Not checkout.mong.ir: that is a Zarinpal personal-link domain and answers 404 for /pg/StartPay/<authority>.
 ZARINPAL_STARTPAY_BASE_URL = os.getenv("ZARINPAL_STARTPAY_BASE_URL", "").rstrip("/")
 # SnappPay is offered only once its address is set: SNAPPAY_BASE_URL in production, SNAPPAY_STAGE_URL until then.
 SNAPPAY_BASE_URL = (os.getenv("SNAPPAY_BASE_URL") or os.getenv("SNAPPAY_STAGE_URL", "")).rstrip("/")
@@ -340,10 +340,12 @@ SNAPPAY_TRANSACTION_ID_START = int(os.getenv("SNAPPAY_TRANSACTION_ID_START", "50
 PAYHUB_PUBLIC_URL = os.getenv("PAYHUB_PUBLIC_URL", SITE_URL).rstrip("/")
 if (_hub_host := urlsplit(PAYHUB_PUBLIC_URL).hostname) and _hub_host not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(_hub_host)
-# SnappPay's returnURL alone may sit on another domain: the one registered with SnappPay (https://mong.ir), whose
-# frontend passes /api/SnappPay/CallBack/... on to this hub (front/src/app/api/SnappPay/CallBack). Zarinpal stays on
-# PAYHUB_PUBLIC_URL.
+# SnappPay's returnURL alone may sit on another domain: the one registered with SnappPay (https://pay.mong.ir),
+# pointed at this service like payhub.mong.ir (or at the frontend, which passes /api/SnappPay/CallBack/... on to
+# this hub: front/src/app/api/SnappPay/CallBack). Zarinpal stays on PAYHUB_PUBLIC_URL.
 PAYHUB_SNAPP_RETURN_URL = os.getenv("PAYHUB_SNAPP_RETURN_URL", PAYHUB_PUBLIC_URL).rstrip("/")
+if (_snapp_host := urlsplit(PAYHUB_SNAPP_RETURN_URL).hostname) and _snapp_host not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_snapp_host)
 PAYHUB_ALLOWED_API_IPS = [h.strip() for h in os.getenv("PAYHUB_ALLOWED_API_IPS", "").split(",") if h.strip()]
 PAYHUB_ACCEPT_KEY = os.getenv("PAYHUB_ACCEPT_KEY", "")  # SnappPayForward.Key on Mong.Pay
 PAYHUB_ALLOWED_CALLBACK_HOSTS = [h.strip().lower() for h in os.getenv("PAYHUB_ALLOWED_CALLBACK_HOSTS", "api.mong.ir,api.mongnew.ir").split(",") if h.strip()]

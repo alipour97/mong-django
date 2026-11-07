@@ -83,9 +83,9 @@ class FakeSnapp:
 
 @override_settings(SNAPPAY_BASE_URL="https://snapp.test", SNAPPAY_CLIENT_ID="c", SNAPPAY_CLIENT_SECRET="s", SNAPPAY_USERNAME="u",
                    SNAPPAY_PASSWORD="p", SNAPPAY_TRANSACTION_ID_START=50000000, SNAPPAY_COMMISSION_TYPE=100, PAYHUB_PUBLIC_URL=HUB,
-                   PAYHUB_SNAPP_RETURN_URL="https://mong.ir",
+                   PAYHUB_SNAPP_RETURN_URL="https://pay.mong.ir",
                    PAYHUB_ACCEPT_KEY="hub-key", PAYHUB_ALLOWED_API_IPS=["10.0.0.5"], PAYHUB_ALLOWED_CALLBACK_HOSTS=["api.mong.ir"],
-                   PAYHUB_OLD_HUB_URL="", ZARINPAL_SANDBOX=False, ZARINPAL_STARTPAY_BASE_URL="https://pay.mong.ir/pg/StartPay",
+                   PAYHUB_OLD_HUB_URL="", ZARINPAL_SANDBOX=False, ZARINPAL_STARTPAY_BASE_URL="https://checkout.mong.ir/pg/StartPay",
                    ZARINPAL_MERCHANT_ID=MERCHANT, SITE_URL="https://samian.mong.ir", PUBLIC_BASE_URL="https://samian.mong.ir")
 class HubCase(TestCase):
     def setUp(self):
@@ -165,7 +165,7 @@ class ContractTests(HubCase):
     def test_get_payment_token_sends_our_return_url_and_a_fresh_id(self):
         record = self.started()
         body = self.snapp.body("token")
-        self.assertEqual(body["returnURL"], f"https://mong.ir/api/SnappPay/CallBack/{record.pk}/{record.token}")
+        self.assertEqual(body["returnURL"], f"https://pay.mong.ir/api/SnappPay/CallBack/{record.pk}/{record.token}")
         self.assertEqual(body["transactionId"], str(50000000 + record.pk))
         self.assertEqual(body["mobile"], "+989121234567")
         self.assertEqual(body["cartList"], [{"cartId": 7}])
@@ -457,7 +457,7 @@ class ZarinpalTests(HubCase):
         token = self.generate("zarinpal", gatewayCode=MERCHANT + "   ")["token"]
         self.set_zarinpal(Resp(200, {"data": {"code": 100, "authority": "A0001"}, "errors": []}))
         reply = self.client.get(f"/GoToPayPage/{token}/7/1000000")
-        self.assertEqual((reply.status_code, reply["Location"]), (302, "https://pay.mong.ir/pg/StartPay/A0001"))
+        self.assertEqual((reply.status_code, reply["Location"]), (302, "https://checkout.mong.ir/pg/StartPay/A0001"))
         return PayRecord.objects.get(token=token)
 
     def back(self, record: PayRecord, status="OK"):
@@ -642,7 +642,7 @@ class SiteCheckoutTests(SiteCase):
     def test_zarinpal_purchase(self):
         self.zarin.side_effect = [Resp(200, {"data": {"code": 100, "authority": "A0002"}, "errors": []}),
                                   Resp(200, {"data": {"code": 100, "ref_id": 777, "card_pan": "5022"}, "errors": []})]
-        self.assertEqual(self.pay(self.zarin_gateway)["result"]["data"], "https://pay.mong.ir/pg/StartPay/A0002")
+        self.assertEqual(self.pay(self.zarin_gateway)["result"]["data"], "https://checkout.mong.ir/pg/StartPay/A0002")
         self.assertEqual(self.zarin.call_args.kwargs["json"]["amount"], 1300000)
         back = self.client.get(f"/zarinpal/callback/{self.record().token}?Authority=A0002&Status=OK")["Location"]
         confirmation = self.finish_at_site(back)

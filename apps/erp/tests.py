@@ -1664,6 +1664,18 @@ class ProductSpecsTests(TestCase):
                                    product_season_title="4052", product_style_title="regular")
         self.assertEqual([s["label"] for s in catalog.product_specs(p, None)], ["فصل کالا", "قواره", "گروه قد", "سبک"])
 
+    def test_the_selling_points_go_to_the_keywords_not_the_page(self):
+        from apps.website.models import ProductAIProfile
+
+        Category.objects.create(id=1, title="ک", slug="k", is_online_active=True)
+        Product.objects.create(id=1, title="پ", slug="p", category_id=1, is_active=True)
+        goods(qty=3)
+        ProductAIProfile.objects.create(product_id=1, search_keywords=["مانتو کتی", "مانتو اداری"],
+                                        summary_bullets=["یقه انگلیسی شیک", "مانتو کتی"])
+        reply = APIClient().get("/api/v1/SearchEngine/product/p/meta").json()
+        meta = reply.get("result", {}).get("data", reply) if isinstance(reply, dict) else reply
+        self.assertEqual(meta["keywords"], "مانتو کتی, مانتو اداری, یقه انگلیسی شیک")
+
 
 class CooperationOtpTests(TestCase):
     url = "/api/v1/Cooperation/CooperationRequestSubmit"

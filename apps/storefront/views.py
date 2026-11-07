@@ -655,10 +655,13 @@ class SearchEngineMetaView(PublicView):
         reviews = ProductComment.objects.filter(product=p, is_deleted=False, status=1).count()
         url = f"/products-item/{p.slug}"
 
-        # Only the search phrases: the AI's style tags are internal labels ("4 — نیمه‌رسمی", "میانسال، مسن").
-        keywords = list(dict.fromkeys(ai.search_keywords)) if ai and ai.search_keywords else []
+        # The search phrases, then LEBAZAI's short selling points, which the page keeps out of sight. The AI's style
+        # tags stay out: they are internal labels ("4 — نیمه‌رسمی", "میانسال، مسن").
+        keywords = list(ai.search_keywords) if ai and ai.search_keywords else []
         if not keywords:
             keywords = [t["title"] for t in catalog.tags_for(ProductTag, "product_id", [p.id]).get(p.id, [])]
+        keywords += [b.strip() for b in (ai.summary_bullets if ai and ai.summary_bullets else []) if isinstance(b, str)]
+        keywords = list(dict.fromkeys(k for k in keywords if k))
         keywords_str = ", ".join(keywords) if keywords else ""
 
         data = {
