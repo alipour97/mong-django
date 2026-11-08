@@ -365,6 +365,7 @@ class BranchAdmin(admin.ModelAdmin):
     search_fields = ("title", "address", "phones")
     fieldsets = (
         (None, {"fields": ("title", "address", "phones", ("latitude", "longitude"))}),
+        ("ساعت کاری", {"fields": (("opens", "closes"), ("friday_opens", "friday_closes"))}),
         ("سایت و موجودی", {"fields": ("show_on_site", "display_order", "warehouse", "sells_online")}),
     )
 

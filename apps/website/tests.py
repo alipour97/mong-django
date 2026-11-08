@@ -57,3 +57,17 @@ class SeoCleanupTests(TestCase):
         self.assertEqual(Category.objects.get(id=2).short_description_html, "مانتو تست‌شده با پارچه‌ی کرپ")
         self.assertEqual(list(Tag.objects.filter(is_deleted=False).values_list("id", flat=True)), [3])
         self.assertEqual(MediaAttachment.objects.get().alternative, "زنانه")
+
+
+class BranchHoursTests(TestCase):
+    def test_hours_text_and_schema(self):
+        import datetime as dt
+        from apps.website.models import Branch
+
+        b = Branch(title="شعبه", opens=dt.time(10), closes=dt.time(22, 30))
+        self.assertEqual(b.hours_text(), "شنبه تا پنج‌شنبه ۱۰ تا ۲۲:۳۰، جمعه تعطیل")
+        self.assertEqual(len(b.opening_hours()), 1)
+        b.friday_opens, b.friday_closes = dt.time(16), dt.time(22)
+        self.assertTrue(b.hours_text().endswith("جمعه ۱۶ تا ۲۲"))
+        self.assertEqual(b.opening_hours()[1], {"days": ["Friday"], "opens": "16:00", "closes": "22:00"})
+        self.assertEqual(Branch(title="x").as_department()["hours"], "")

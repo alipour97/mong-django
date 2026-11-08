@@ -928,6 +928,11 @@ class Branch(models.Model):
         help_text=_("موجودی انبار این شعبه در سایت قابل خرید است"),
     )
     display_order = models.PositiveIntegerField(_("ترتیب نمایش"), default=0)
+    opens = models.TimeField(_("باز شدن (شنبه تا پنج‌شنبه)"), null=True, blank=True,
+                             help_text=_("خالی: ساعت کاری نشان داده نمی‌شود"))
+    closes = models.TimeField(_("بسته شدن (شنبه تا پنج‌شنبه)"), null=True, blank=True)
+    friday_opens = models.TimeField(_("باز شدن جمعه"), null=True, blank=True, help_text=_("خالی: جمعه تعطیل"))
+    friday_closes = models.TimeField(_("بسته شدن جمعه"), null=True, blank=True)
     front_id = models.BigIntegerField(_("شناسه در فرانت"), null=True, blank=True, unique=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -951,7 +956,34 @@ class Branch(models.Model):
             "location": {"lat": self.latitude, "lng": self.longitude},
             "phoneNumbers": [{"phoneNumber": p} for p in self.phone_list()],
             "id": self.front_id or self.id,
+            "hours": self.hours_text(),
+            "openingHours": self.opening_hours(),
         }
+
+    WEEKDAYS = ("Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday")
+
+    def opening_hours(self) -> list[dict]:
+        """schema.org OpeningHoursSpecification items; empty when no hours are set."""
+        if not (self.opens and self.closes):
+            return []
+        rows = [{"days": list(self.WEEKDAYS), "opens": self.opens.strftime("%H:%M"), "closes": self.closes.strftime("%H:%M")}]
+        if self.friday_opens and self.friday_closes:
+            rows.append({"days": ["Friday"], "opens": self.friday_opens.strftime("%H:%M"),
+                         "closes": self.friday_closes.strftime("%H:%M")})
+        return rows
+
+    def hours_text(self) -> str:
+        """«شنبه تا پنج‌شنبه ۱۰ تا ۲۲، جمعه ۱۶ تا ۲۲» (or «جمعه تعطیل»); empty when no hours are set."""
+        if not (self.opens and self.closes):
+            return ""
+
+        def t(v):
+            s = str(v.hour) if not v.minute else f"{v.hour}:{v.minute:02d}"
+            return s.translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+
+        friday = (f"جمعه {t(self.friday_opens)} تا {t(self.friday_closes)}"
+                  if self.friday_opens and self.friday_closes else "جمعه تعطیل")
+        return f"شنبه تا پنج‌شنبه {t(self.opens)} تا {t(self.closes)}، {friday}"
 
 
 def online_warehouse_ids() -> list[int]:
