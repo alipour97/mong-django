@@ -5,6 +5,8 @@ the database part of seo-plan/IMPLEMENTATION-ROADMAP.md 0.11:
   - category texts left over from testing (the root «زنانه» category's
     «چند نکته درباره انتخاب مونولوگ برای تست بازیگری sssss…»): emptied, so the
     page shows the guide written from the catalog instead;
+  - test tags («تگ تست ۲», «تست 2»): marked deleted; photo alt texts that say
+    «تست»: replaced with the photo's tooltip title (the category's name);
   - test articles («تست مطلب», «FileMediatest», testmatla-hj…) and the old
     «لباس ترک عمده از کجا بخرم» (advice to shops on buying Turkish clothes
     wholesale, not for Mong's customers): marked deleted, as the admin's
@@ -25,10 +27,12 @@ from django.db import transaction
 from django.utils.html import strip_tags
 
 from apps.storefront.catalog import clear_caches
-from apps.website.models import Article, Category
+from apps.website.models import Article, Category, MediaAttachment, Tag
 
 # What the test texts look like: keyboard runs, the acting-audition sample text, lorem ipsum.
-TEST_TEXT = re.compile(r"s{6,}|a{6,}|مونولوگ|تست بازیگری|lorem ipsum", re.IGNORECASE)
+TEST_TEXT = re.compile(r"s{6,}|a{6,}|مونولوگ|تست بازیگری|lorem ipsum|^\s*(تست|test)(\s|$)", re.IGNORECASE)
+# A tag or an alt text that is only a test word, maybe with a number: «تگ تست ۲», «تست 2», «test».
+TEST_LABEL = re.compile(r"^\s*(تگ\s+)?(تست|test)\s*[\d۰-۹]*\s*$", re.IGNORECASE)
 
 TEST_ARTICLE_TITLE = re.compile(r"^\s*(تست|test)|filemediatest", re.IGNORECASE)
 TEST_ARTICLE_URLS = {"testmatlab", "testmatla-hj", "test-for-validations", "adasda", "asdasd"}
@@ -44,6 +48,7 @@ class Command(BaseCommand):
     def handle(self, *args, apply=False, **options):
         with transaction.atomic():
             categories = self._categories(apply)
+            categories += self._labels(apply)
             articles = self._articles(apply)
         if apply and categories:
             clear_caches()
@@ -66,6 +71,25 @@ class Command(BaseCommand):
                 setattr(cat, f, "")
             if apply:
                 cat.save(update_fields=fields)
+        return changed
+
+    def _labels(self, apply: bool) -> int:
+        changed = 0
+        for tag in Tag.objects.filter(is_deleted=False).order_by("id"):
+            if TEST_LABEL.match(tag.title or ""):
+                changed += 1
+                self.stdout.write(f"tag {tag.id} «{tag.title}» -> deleted")
+                if apply:
+                    tag.is_deleted = True
+                    tag.save(update_fields=["is_deleted"])
+        for media in MediaAttachment.objects.filter(is_deleted=False).exclude(alternative="").order_by("id"):
+            if TEST_LABEL.match(media.alternative):
+                changed += 1
+                alt = "" if TEST_LABEL.match(media.tooltip_title or "") else media.tooltip_title
+                self.stdout.write(f"photo {media.id} alt «{media.alternative}» -> «{alt}»")
+                if apply:
+                    media.alternative = alt
+                    media.save(update_fields=["alternative"])
         return changed
 
     def _articles(self, apply: bool) -> int:

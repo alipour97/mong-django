@@ -36,3 +36,24 @@ class AiSlugTests(TestCase):
     def test_title_punctuation_is_a_word_break(self):
         base = slugs.ai_slug_base("شومیز زنانه یقه مردانه، آستین بلند؛ دو جیب")
         self.assertEqual(base, "شومیز-زنانه-یقه-مردانه-آستین-بلند-دو-جیب")
+
+
+class SeoCleanupTests(TestCase):
+    def test_test_texts_tags_and_alts_go_and_real_ones_stay(self):
+        import io
+
+        from django.core.management import call_command
+
+        from apps.website.models import Category, MediaAttachment, Tag
+
+        Category.objects.create(id=1, title="شلوار", slug="s", short_description_html="تست شلوار")
+        Category.objects.create(id=2, title="مانتو", slug="m", short_description_html="مانتو تست‌شده با پارچه‌ی کرپ")
+        Tag.objects.create(id=1, title="تگ تست ۲")
+        Tag.objects.create(id=2, title="تست 2")
+        Tag.objects.create(id=3, title="مانتو اداری")
+        MediaAttachment.objects.create(table=MediaAttachment.Table.CATEGORIES, record_id=1, alternative="تست", tooltip_title="زنانه")
+        call_command("seo_cleanup", apply=True, stdout=io.StringIO())
+        self.assertEqual(Category.objects.get(id=1).short_description_html, "")
+        self.assertEqual(Category.objects.get(id=2).short_description_html, "مانتو تست‌شده با پارچه‌ی کرپ")
+        self.assertEqual(list(Tag.objects.filter(is_deleted=False).values_list("id", flat=True)), [3])
+        self.assertEqual(MediaAttachment.objects.get().alternative, "زنانه")
