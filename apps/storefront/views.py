@@ -715,12 +715,16 @@ class SearchEngineMetaView(PublicView):
                 "url": url,
                 "priceCurrency": "IRR",
                 "price": int(pr.after),  # schema.org wants a bare number; "69,800,000" is invalid
-                "priceValidUntil": timezone.localdate().isoformat(),
                 "availability": "https://schema.org/InStock" if bundle.in_stock(p.id) else "https://schema.org/OutOfStock",
                 "itemCondition": "https://schema.org/NewCondition",
+                "shippingDetails": catalog.SHIPPING_DETAILS,
+                "hasMerchantReturnPolicy": catalog.RETURN_POLICY,
             },
-            "category": category,
         }
+        # A product without a photo is not a listing Google accepts ("image" is required): the page
+        # leaves its Product schema out and asks not to be indexed until LEBAZAI brings photos.
+        if not data["image"]:
+            data["noindex"] = True
         variants = bundle.visible_variants(p.id)
         colors = list(dict.fromkeys(v.color.name for v in variants if v.color))
         sizes = list(dict.fromkeys(v.size.name for v in variants if v.size))
@@ -792,7 +796,8 @@ class SearchEngineBreadcrumbsView(PublicView):
             if not p:
                 return Response(None, status=404)
             items = catalog.breadcrumb_items(p.category_id)
-            items.append({"position": len(items) + 1, "name": catalog.display_name(p.title), "url": f"/products-item/{p.slug}"})
+            url = f"/products-item/{p.slug}"
+            items.append({"position": len(items) + 1, "name": catalog.display_name(p.title), "url": url, "item": url})
         elif entity_type == "category":
             c = _category_by_slug(slug)
             if not c:

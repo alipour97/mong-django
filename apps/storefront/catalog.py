@@ -245,15 +245,41 @@ def category_tree_dicts() -> list[dict]:
     return [build(cid) for cid in tree.children.get(None, [])]
 
 
+# What every product offer promises (schema.org Offer): Pishtaz post across Iran for a flat
+# 200,000 toman, delivered in 1–5 working days, and 7 days to exchange after delivery.
+SHIPPING_COST_IRR = 2_000_000
+SHIPPING_DETAILS = {
+    "type": "OfferShippingDetails",
+    "shippingLabel": "پست پیشتاز",
+    "shippingRate": {"type": "MonetaryAmount", "value": SHIPPING_COST_IRR, "currency": "IRR"},
+    "shippingDestination": {"type": "DefinedRegion", "addressCountry": "IR"},
+    "deliveryTime": {
+        "type": "ShippingDeliveryTime",
+        "handlingTime": {"type": "QuantitativeValue", "minValue": 0, "maxValue": 1, "unitCode": "DAY"},
+        "transitTime": {"type": "QuantitativeValue", "minValue": 1, "maxValue": 5, "unitCode": "DAY"},
+    },
+}
+RETURN_POLICY = {
+    "type": "MerchantReturnPolicy",
+    "applicableCountry": "IR",
+    "returnPolicyCategory": "https://schema.org/MerchantReturnFiniteReturnWindow",
+    "merchantReturnDays": 7,
+    "returnMethod": "https://schema.org/ReturnByMail",
+    "refundType": "https://schema.org/ExchangeRefund",
+    "merchantReturnLink": "/faq",
+}
+
+
 def breadcrumb_items(cat_id: int | None) -> list[dict]:
     """Home, then the category path without its root: Samian level 1 (زنانه) is the same for every Mong product."""
-    items = [{"position": 1, "name": "خانه", "url": "/"}]
+    items = [{"position": 1, "name": "خانه", "url": "/", "item": "/"}]
     if cat_id:
         chain = category_tree().ancestors(cat_id)
         if len(chain) > 1 and chain[0].parent_id is None:
             chain = chain[1:]
         for i, c in enumerate(chain, start=2):
-            items.append({"position": i, "name": display_name(c.title), "url": f"/products-category/{c.slug}"})
+            url = f"/products-category/{c.slug}"
+            items.append({"position": i, "name": display_name(c.title), "url": url, "item": url})
     return items
 
 

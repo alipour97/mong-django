@@ -1783,3 +1783,34 @@ class ContactConfigMigrationTests(TestCase):
         PrimaryConfig.objects.create(key="contactUsConfig", value=json.dumps({"location": "{'lat': 1}", "address": "x"}))
         self.run_it()
         self.assertEqual(json.loads(PrimaryConfig.objects.get(key="contactUsConfig2").value), {"lat": "36.29"})
+
+
+class MerchantListingSchemaTests(TestCase):
+    """What Search Console asked for: crumbs with "item", shipping and returns, no photo-less listing."""
+
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        Category.objects.create(id=1, title="شلوار", slug="k", is_online_active=True)
+        Product.objects.create(id=1, title="بگ 12", slug="p", category_id=1, is_active=True)
+        goods(qty=3)
+
+    def get(self, path):
+        reply = APIClient().get(f"/api/v1/SearchEngine/product/p/{path}").json()
+        return reply.get("result", {}).get("data", reply) if isinstance(reply, dict) else reply
+
+    def test_every_crumb_has_an_item(self):
+        crumbs = self.get("breadcrumbs")["itemListElement"]
+        self.assertEqual([c["item"] for c in crumbs], ["/", "/products-category/k", "/products-item/p"])
+
+    def test_the_offer_says_how_it_ships_and_returns(self):
+        meta = self.get("meta")
+        offer = meta["offers"]
+        self.assertEqual(offer["shippingDetails"]["shippingRate"]["value"], 2_000_000)
+        self.assertEqual(offer["hasMerchantReturnPolicy"]["merchantReturnDays"], 7)
+        self.assertNotIn("priceValidUntil", offer)
+        self.assertNotIn("category", meta)
+
+    def test_a_product_without_a_photo_is_not_indexed(self):
+        self.assertTrue(self.get("meta")["noindex"])

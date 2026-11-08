@@ -421,7 +421,9 @@ def seo_meta(a: Article) -> dict:
 
 
 def breadcrumbs(a: Article | None) -> list[dict]:
-    items = [{"position": 1, "name": "خانه", "url": "/"}, {"position": 2, "name": "بلاگ", "url": "/blog"}]
+    # Google reads a crumb's address from "item"; "url" is what the page's own breadcrumb uses.
+    items = [{"position": 1, "name": "خانه", "url": "/", "item": "/"}, {"position": 2, "name": "بلاگ", "url": "/blog", "item": "/blog"}]
     if a:
-        items.append({"position": 3, "name": a.title, "url": f"/blog/{a.uniq_url}"})
+        url = f"/blog/{a.uniq_url}"
+        items.append({"position": 3, "name": a.title, "url": url, "item": url})
     return items
