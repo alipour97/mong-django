@@ -20,7 +20,14 @@ from ..envelope import fail, ok
 from ..models import AdminRole, AdminUser
 from ..passwords import problems
 from ..paging import to_bool, to_int
-from .auth import AdminView
+from .auth import AdminView, author_photo
+
+
+def _author_fields(user: AdminUser, d) -> None:
+    """The blog author's job title, bio and photo (a URL from Cdn/upload), when sent."""
+    for field, key in (("job_title", "jobTitle"), ("bio", "bio"), ("photo", "photo")):
+        if d.get(key) is not None:
+            setattr(user, field, str(d[key]).strip())
 
 NOT_FOUND = "کاربر یافت نشد."
 SELF = "نمی‌توانید حساب خودتان را غیرفعال یا حذف کنید."
@@ -40,6 +47,8 @@ def _role(role_id) -> AdminRole | None:
 
 
 class ListView(AdminView):
+    writer_ok = True  # the blog's author filter
+
     def get(self, request):
         return ok({"result": [
             {"id": u.id, "fullName": f"{u.first_name} {u.last_name}", "isActive": u.is_active} for u in _users()
@@ -53,6 +62,8 @@ class DashboardUsersView(AdminView):
                 "id": u.id, "firstName": u.first_name, "lastName": u.last_name, "cellPhone": u.cellphone,
                 "userName": u.username, "email": u.email, "isActive": u.is_active, "sendInvoiceSms": u.send_invoice_sms,
                 "roleId": u.role_id, "roleTitle": u.role.title if u.role else None,
+                "roleType": u.role.role_type if u.role else None,
+                "jobTitle": u.job_title, "bio": u.bio, "photo": author_photo(u),
             }
             for u in _users()
         ]})
@@ -82,6 +93,7 @@ class AddView(AdminView):
             user.email = (d.get("email") or "").strip()
             user.first_name, user.last_name = (d.get("firstName") or "").strip(), (d.get("lastName") or "").strip()
             user.role = _role(d.get("roleId"))
+            _author_fields(user, d)
             user.set_password(password)
             user.refresh_token_hash = ""
             user.save()
@@ -119,6 +131,7 @@ class UpdateView(AdminView):
             user.refresh_token_hash = ""  # signs the account out elsewhere
         if (role := _role(d.get("roleId"))) is not None:
             user.role = role
+        _author_fields(user, d)
         user.save()
         return ok({"result": True})
 

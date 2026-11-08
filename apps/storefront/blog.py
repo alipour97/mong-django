@@ -26,6 +26,8 @@ from apps.website import images as site_images
 from apps.website.models import Article, ArticleComment, BlogCategory, Customer, MediaAttachment, Product, ProductVariant
 
 from . import catalog
+from rest_framework.response import Response
+
 from .envelope import MSG_FETCHED_ONE, jalali, not_found, ok
 from .views import PublicView, _product_by_slug
 
@@ -64,6 +66,31 @@ def _find_article(qs, uniq: str) -> Article | None:
 def _authors(articles) -> dict[int, str]:
     ids = {a.author_id for a in articles if a.author_id}
     return {u.id: f"{u.first_name} {u.last_name}".strip() for u in AdminUser.objects.filter(id__in=ids)}
+
+
+def author_profile(user: AdminUser | None) -> dict | None:
+    """The person shown as a post's author, with their own page; None without a name."""
+    if not user or not user.full_name:
+        return None
+    from apps.adminapi.views.auth import author_photo
+
+    return {
+        "id": user.id, "name": user.full_name, "jobTitle": user.job_title, "bio": user.bio,
+        "photo": author_photo(user), "url": f"/blog/author/{user.id}",
+    }
+
+
+def author_person(profile: dict) -> dict:
+    """schema.org Person for a post's author (E-E-A-T: a real writer with a page)."""
+    person = {"type": "Person", "name": profile["name"], "url": profile["url"]}
+    if profile["jobTitle"]:
+        person["jobTitle"] = profile["jobTitle"]
+    if profile["photo"]:
+        person["image"] = profile["photo"]
+    if profile["bio"]:
+        person["description"] = _clip(profile["bio"], 300)
+    person["worksFor"] = {"type": "Organization", "name": catalog.MONG_BRAND["title"], "url": "/"}
+    return person
 
 
 def _summary(a: Article, authors: dict | None = None) -> dict:
@@ -182,6 +209,7 @@ def page_data(a: Article) -> dict:
     body = prepared(a)
     return {
         **_summary(a, authors),
+        "author": author_profile(AdminUser.objects.filter(id=a.author_id).first()) if a.author_id else None,
         "articleContent": body.html,
         "toc": body.toc,
         "faq": body.faq,
@@ -317,7 +345,34 @@ class CommentsView(PublicView):
 
 
 def sitemap_items(item) -> list[dict]:
-    return [item(a.uniq_url, a.last_modified or a.publish_date) for a in visible().order_by("-publish_date")]
+    articles = list(visible().order_by("-publish_date"))
+    items = [item(a.uniq_url, a.last_modified or a.publish_date) for a in articles]
+    latest: dict[int, object] = {}
+    for a in articles:  # newest first: the first one seen is the author's latest
+        if a.author_id and a.author_id not in latest:
+            latest[a.author_id] = a.last_modified or a.publish_date
+    shown = AdminUser.objects.filter(id__in=latest, is_deleted=False).exclude(first_name="", last_name="")
+    items += [item(f"author/{u.id}", latest[u.id]) for u in shown if u.full_name]
+    return items
+
+
+class AuthorView(PublicView):
+    """Article/Author/<id>: a blog author's page, their bio and their posts. 404 without a visible post."""
+
+    def get(self, request, author_id: int):
+        user = AdminUser.objects.filter(id=author_id, is_deleted=False).first()
+        profile = author_profile(user)
+        articles = list(visible().filter(author_id=author_id).order_by("-publish_date")) if profile else []
+        if not articles:
+            return Response(None, status=404)
+        authors = {user.id: profile["name"]}
+        return ok({
+            **profile,
+            "seoTitle": _clip(f"{profile['name']}، نویسنده‌ی بلاگ مانگ", SEO_TITLE_MAX),
+            "description": _clip(profile["bio"] or f"مقاله‌های {profile['name']} در بلاگ مانگ", SEO_DESCRIPTION_MAX),
+            "person": {"context": "https://schema.org", **author_person(profile)},
+            "articles": [_summary(a, authors) for a in articles],
+        })
 
 
 # -----------------------------------------------------------------------------
@@ -344,7 +399,7 @@ def seo_meta(a: Article) -> dict:
     tags = [t.name for t in a.tags.filter(is_deleted=False, article_links__is_deleted=False).distinct()]
     category = a.categories.filter(is_deleted=False, article_links__is_deleted=False).first()
     modified = a.last_modified or a.publish_date
-    author = _authors([a]).get(a.author_id) or ""
+    profile = author_profile(AdminUser.objects.filter(id=a.author_id).first()) if a.author_id else None
     return {
         "context": "https://schema.org",
         "type": "BlogPosting",
@@ -356,7 +411,7 @@ def seo_meta(a: Article) -> dict:
         "image": _media(a.thumbnail) or None,
         "datePublished": a.publish_date.isoformat() if a.publish_date else None,
         "dateModified": modified.isoformat() if modified else None,
-        "author": {"type": "Person", "name": author} if author else {"type": "Organization", "name": catalog.MONG_BRAND["title"], "url": "/"},
+        "author": author_person(profile) if profile else {"type": "Organization", "name": catalog.MONG_BRAND["title"], "url": "/"},
         "publisher": {"type": "Organization", "name": catalog.MONG_BRAND["title"], "url": "/"},
         "inLanguage": "fa-IR",
         "keywords": ", ".join(tags),

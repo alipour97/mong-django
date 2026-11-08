@@ -137,6 +137,8 @@ class RefreshView(PublicView):
 
 
 class ProfileView(AdminView):
+    writer_ok = True
+
     def post(self, request):
         user = _find(request.query_params.get("Username")) or request.user
         if user.pk != request.user.pk and not (request.user.role and request.user.role.role_type == 1):
@@ -145,6 +147,8 @@ class ProfileView(AdminView):
 
 
 class ChangePasswordView(AdminView):
+    writer_ok = True
+
     def post(self, request):
         user = request.user
         current = request.data.get("currentPassword") or ""
@@ -174,4 +178,17 @@ def profile(user: AdminUser) -> dict:
         "created": user.created.isoformat() if user.created else None,
         "roleTitle": user.role.title if user.role else None,
         "roleType": user.role.role_type if user.role else None,
+        "isWriter": user.is_writer,
+        "jobTitle": user.job_title,
+        "bio": user.bio,
+        "photo": author_photo(user),
     }
+
+
+def author_photo(user: AdminUser) -> str:
+    if not user.photo:
+        return ""
+    from apps.storefront import catalog
+    from apps.website import images as site_images
+
+    return catalog.absolute_url(site_images.site_media_url(user.photo))

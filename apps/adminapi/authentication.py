@@ -25,5 +25,12 @@ class AdminTokenAuthentication(BaseAuthentication):
 
 
 class IsAdmin(BasePermission):
+    """Any panel account; a blog writer only on views marked writer_ok (the blog and their own account)."""
+
+    message = "شما به این بخش دسترسی ندارید."
+
     def has_permission(self, request, view):
-        return isinstance(request.user, AdminUser)
+        user = request.user
+        if not isinstance(user, AdminUser):
+            return False
+        return not user.is_writer or getattr(view, "writer_ok", False)

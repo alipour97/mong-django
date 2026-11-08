@@ -281,6 +281,8 @@ class UpdateCompanyInfoView(AdminView):
 # Cdn/upload: a file for a config (images in about us, shipping icons, ...)
 # -----------------------------------------------------------------------------
 class UploadView(AdminView):
+    writer_ok = True  # the blog editor's images and an author's photo
+
     def post(self, request):
         f = request.FILES.get("file")
         if not f or not f.size:

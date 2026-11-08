@@ -49,18 +49,26 @@ def jalali_time(dt) -> str | None:
     return f"{jalali(local, with_time=False)} - {local:%H:%M:%S}"
 
 
-def _articles():
-    return Article.objects.filter(is_deleted=False)
+def _articles(request=None):
+    """Live articles; a blog writer sees and changes only their own."""
+    qs = Article.objects.filter(is_deleted=False)
+    if request is not None and request.user.is_writer:
+        qs = qs.filter(author_id=request.user.id)
+    return qs
+
+
+class BlogView(AdminView):
+    writer_ok = True
 
 
 def _authors(ids) -> dict[int, str]:
     return {u.id: f"{u.first_name} {u.last_name}" for u in AdminUser.objects.filter(id__in=[i for i in ids if i])}
 
 
-class ListView(AdminView):
+class ListView(BlogView):
     def get(self, request):
         q = request.query_params
-        qs = _articles()
+        qs = _articles(request)
         if begin := _date(q.get("CreateDateFrom")):
             qs = qs.filter(created__gte=begin)
         if end := _date(q.get("CreateDateTo"), end=True):
@@ -88,16 +96,16 @@ class ListView(AdminView):
         return ok({"result": paginated(rows, to_int(q.get("pageNumber"), 1), to_int(q.get("pageSize"), 10), item)})
 
 
-class DetailView(AdminView):
+class DetailView(BlogView):
     def get(self, request, article_id: int):
-        a = _articles().filter(id=article_id).first()
+        a = _articles(request).filter(id=article_id).first()
         if not a:
             return fail(NOT_FOUND, 404)
         att = MediaAttachment.objects.filter(table=TABLE, record_id=a.id, is_deleted=False).order_by("-id").first()
         return ok({"result": {
             "id": a.id, "title": a.title, "articleUniqUrl": a.uniq_url, "content": a.content,
             "publishDate": jalali_time(a.publish_date), "viewCount": a.view_count,
-            "authorName": _authors([a.author_id]).get(a.author_id, " "),
+            "authorName": _authors([a.author_id]).get(a.author_id, " "), "authorId": a.author_id,
             "tags": [{"id": t.id, "name": t.name} for t in a.tags.filter(is_deleted=False, article_links__is_deleted=False).distinct()],
             "categories": [
                 {"id": c.id, "title": c.title}
@@ -109,7 +117,7 @@ class DetailView(AdminView):
         }})
 
     def post(self, request, article_id: int):
-        a = _articles().filter(id=article_id).first()
+        a = _articles(request).filter(id=article_id).first()
         if not a:
             return fail(NOT_FOUND, 404)
         result = _save(request, a)
@@ -135,6 +143,11 @@ def _set_thumbnail(a: Article, file_media: FileMedia) -> None:
         FileMedia.objects.filter(id=file_media.id).update(used=True)
 
 
+def _author(value) -> int | None:
+    uid = to_int(value)
+    return uid if uid and AdminUser.objects.filter(id=uid, is_deleted=False).exists() else None
+
+
 def _save(request, a: Article | None):
     d = request.data if isinstance(request.data, dict) else {}
     art = d.get("article") or {}
@@ -151,7 +164,10 @@ def _save(request, a: Article | None):
     tag_ids = list(ArticleTag.objects.filter(id__in=int_list(d.get("tagIds")), is_deleted=False).values_list("id", flat=True))
     with transaction.atomic():
         is_new = a is None
-        a = a or Article(created=timezone.now(), view_count=0, author_id=to_int(art.get("authorId")) or request.user.id)
+        a = a or Article(created=timezone.now(), view_count=0, author_id=request.user.id)
+        # An admin may name another author (a writer's article posted for them); a writer always writes as themself.
+        if not request.user.is_writer and (author := _author(art.get("authorId"))):
+            a.author_id = author
         a.title, a.uniq_url = title, uniq
         a.content, a.description = article_html.clean(art.get("content") or ""), art.get("articleDescription") or ""
         a.show_on_page = bool(art.get("showOnPage"))
@@ -166,18 +182,18 @@ def _save(request, a: Article | None):
     return ok({"result": a.title})
 
 
-class CreateView(AdminView):
+class CreateView(BlogView):
     def post(self, request):
         return _save(request, None)
 
 
-class DeleteView(AdminView):
+class DeleteView(BlogView):
     def get(self, request, article_id: int):
-        n = _articles().filter(id=article_id).update(is_deleted=True, last_modified=timezone.now())
+        n = _articles(request).filter(id=article_id).update(is_deleted=True, last_modified=timezone.now())
         return ok({"result": True}) if n else fail("article not found.", 404)
 
 
-class CheckUrlView(AdminView):
+class CheckUrlView(BlogView):
     def get(self, request):
         uniq = (request.query_params.get("uniqUrl") or "").strip().strip("/")
         return ok({"result": bool(uniq) and not Article.objects.filter(uniq_url__iexact=uniq).exists()})
@@ -188,7 +204,7 @@ def _text(request) -> str:
     return (data if isinstance(data, str) else "").strip()
 
 
-class CategoriesView(AdminView):
+class CategoriesView(BlogView):
     def get(self, request):
         return ok({"result": [
             {"id": c.id, "title": c.title, "inMainPage": c.in_main_page} for c in BlogCategory.objects.filter(is_deleted=False)
@@ -202,7 +218,7 @@ class CategoriesView(AdminView):
         return ok({"result": {"id": c.id, "title": c.title, "inMainPage": c.in_main_page, "parentId": c.parent_id}})
 
 
-class TagsView(AdminView):
+class TagsView(BlogView):
     def get(self, request):
         return ok({"result": [{"id": t.id, "name": t.name} for t in ArticleTag.objects.filter(is_deleted=False)]})
 
@@ -227,7 +243,7 @@ class DeleteTagView(AdminView):
         return ok({"res": True}) if n else fail("tag not found.", 404)
 
 
-class ImportView(AdminView):
+class ImportView(BlogView):
     def post(self, request):
         from .. import blog_package
 
@@ -240,6 +256,7 @@ class ImportView(AdminView):
         try:
             r = blog_package.import_package(
                 uploaded, author_id=request.user.id, domain=request.get_host(),
+                only_author=request.user.id if request.user.is_writer else None,
                 publish=None if publish == "" else publish in ("1", "true", "yes"),
             )
         except blog_package.PackageError as exc:
@@ -251,15 +268,15 @@ class ImportView(AdminView):
         }})
 
 
-class PreviewView(AdminView):
+class PreviewView(BlogView):
     def get(self, request, article_id: int):
-        a = _articles().filter(id=article_id).first()
+        a = _articles(request).filter(id=article_id).first()
         if not a:
             return fail(NOT_FOUND, 404)
         return ok({"result": site_blog.page_data(a)})
 
 
-class PackageFileView(AdminView):
+class PackageFileView(BlogView):
     """The guide to give an AI (or a writer) and a sample package (adminapi/article_package/)."""
 
     def get(self, request, kind: str):

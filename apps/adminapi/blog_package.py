@@ -281,7 +281,8 @@ class Result:
     warnings: list[str]
 
 
-def import_package(data, *, author_id: int | None, domain: str, publish: bool | None = None) -> Result:
+def import_package(data, *, author_id: int | None, domain: str, publish: bool | None = None,
+                   only_author: int | None = None) -> Result:
     """
     Store the package as an article. An article with the same address, deleted or
     not, is updated in place: its views, likes, comments and whether it is shown
@@ -292,6 +293,8 @@ def import_package(data, *, author_id: int | None, domain: str, publish: bool | 
     pkg = read(data)
     slug = _slug(pkg) if pkg.title or pkg.slug else ""
     existing = Article.objects.filter(uniq_url__iexact=slug).order_by("is_deleted", "-id").first() if slug else None
+    if existing and only_author is not None and existing.author_id != only_author:
+        raise PackageError("مقاله‌ای با همین آدرس از نویسنده‌ی دیگری هست.", ["آدرس (slug) مقاله را عوض کنید."])
     if existing and existing.is_deleted:
         pkg.warnings.append("مقاله‌ای با همین آدرس حذف شده بود؛ همان برگردانده و به‌روز شد.")
     with transaction.atomic():

@@ -252,3 +252,62 @@ class ChangeOwnPasswordTests(TestCase):
             self.assertEqual((r.status_code, r.json()["message"]), (400, message))
         self.admin.refresh_from_db()
         self.assertFalse(self.admin.has_password)
+
+
+class BlogWriterTests(TestCase):
+    """A «نویسنده بلاگ» account reaches the blog only, and only their own articles (SEO roadmap 1.4)."""
+
+    def setUp(self):
+        from django.utils import timezone
+
+        from apps.adminapi import tokens
+        from apps.adminapi.models import AdminRole
+
+        writer_role = AdminRole.objects.get(role_type=AdminRole.Type.WRITER)  # made by migration 0004
+        self.writer = AdminUser.objects.create(
+            username="sara", cellphone="09122222222", first_name="سارا", last_name="محمدی", role=writer_role,
+            job_title="کارشناس استایل", bio="ده سال در طراحی لباس زنانه.",
+        )
+        self.admin = AdminUser.objects.create(username="ali", cellphone="09121111111")
+        now = timezone.now()
+        self.own = Article.objects.create(title="مال سارا", uniq_url="own", author_id=self.writer.id, publish_date=now)
+        self.other = Article.objects.create(title="مال علی", uniq_url="other", author_id=self.admin.id, publish_date=now)
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION="Bearer " + tokens.issue(self.writer)["token"])
+        self.admin_client = APIClient()
+        self.admin_client.credentials(HTTP_AUTHORIZATION="Bearer " + tokens.issue(self.admin)["token"])
+
+    def test_writer_reaches_only_the_blog(self):
+        self.assertEqual(self.client.get("/api/admin/v1/User/GetDashboardUsers").status_code, 403)
+        self.assertEqual(self.client.get("/api/admin/v1/Invoice/GetFilteredInvoices").status_code, 403)
+        self.assertEqual(self.client.get("/api/admin/v1/Article/SoftDeleteTag?tagId=1").status_code, 403)
+        self.assertEqual(self.client.get("/api/admin/v1/Article/Categories").status_code, 200)
+        profile = self.client.post("/api/admin/v1/Auth/GetProfile?Username=sara").json()["data"]["result"]
+        self.assertTrue(profile["isWriter"])
+        self.assertEqual(profile["roleType"], 3)
+        # An admin still reaches everything.
+        self.assertEqual(self.admin_client.get("/api/admin/v1/User/GetDashboardUsers").status_code, 200)
+
+    def test_writer_sees_and_changes_only_own_articles(self):
+        rows = self.client.get("/api/admin/v1/Article/All").json()["data"]["result"]
+        items = rows.get("items") or rows.get("data") or rows.get("list") or []
+        ids = {r["id"] for r in items} if items else None
+        if ids is not None:
+            self.assertEqual(ids, {self.own.id})
+        self.assertEqual(self.client.get(f"/api/admin/v1/Article/{self.other.id}").status_code, 404)
+        self.assertEqual(self.client.get(f"/api/admin/v1/Article/SoftDelete/{self.other.id}").status_code, 404)
+        self.other.refresh_from_db()
+        self.assertFalse(self.other.is_deleted)
+        self.assertEqual(self.client.get(f"/api/admin/v1/Article/{self.own.id}").status_code, 200)
+
+    def test_author_page_and_schema(self):
+        meta = blog.seo_meta(self.own)
+        self.assertEqual(meta["author"]["type"], "Person")
+        self.assertEqual(meta["author"]["url"], f"/blog/author/{self.writer.id}")
+        self.assertEqual(meta["author"]["jobTitle"], "کارشناس استایل")
+        r = APIClient().get(f"/api/v1/Article/Author/{self.writer.id}")
+        data = r.json()["result"]["data"] if r.status_code == 200 else None
+        self.assertIsNotNone(data, r.status_code)
+        self.assertEqual([a["id"] for a in data["articles"]], [self.own.id])
+        items = blog.sitemap_items(lambda loc, m: loc)
+        self.assertIn(f"author/{self.writer.id}", items)

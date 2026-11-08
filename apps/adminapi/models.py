@@ -21,6 +21,8 @@ class AdminRole(models.Model):
     class Type(models.IntegerChoices):
         ADMIN = 1, _("ادمین")
         USER = 2, _("کاربر")
+        # Signs in to the same panel but reaches only the blog, and only their own articles.
+        WRITER = 3, _("نویسنده‌ی بلاگ")
 
     id = models.IntegerField(primary_key=True)
     title = models.CharField(_("عنوان"), max_length=128)
@@ -46,6 +48,12 @@ class AdminUser(models.Model):
     is_deleted = models.BooleanField(_("حذف شده"), default=False)
     send_invoice_sms = models.BooleanField(_("پیامک فاکتورها"), default=False)
 
+    # The author shown on blog posts (SEO roadmap 1.4): a real person with a page, photo and bio.
+    job_title = models.CharField(_("سمت"), max_length=150, blank=True, default="",
+                                 help_text=_("زیر نام نویسنده در بلاگ، مثلا «کارشناس مد و استایل مانگ»"))
+    bio = models.TextField(_("معرفی نویسنده"), blank=True, default="")
+    photo = models.CharField(_("عکس نویسنده"), max_length=1024, blank=True, default="")
+
     password = models.CharField(_("رمز عبور"), max_length=256, blank=True, default="", editable=False)
     # Dadehfa's Argon2 hash and its two keys; cleared once the admin signs in here.
     legacy_password = models.CharField(max_length=512, blank=True, default="", editable=False)
@@ -66,6 +74,14 @@ class AdminUser(models.Model):
 
     # Lets DRF's IsAuthenticated accept an AdminUser as request.user.
     is_authenticated = True
+
+    @property
+    def is_writer(self) -> bool:
+        return bool(self.role and self.role.role_type == AdminRole.Type.WRITER)
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.first_name} {self.last_name}".strip()
 
     @property
     def has_password(self) -> bool:

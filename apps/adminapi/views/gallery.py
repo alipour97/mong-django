@@ -91,6 +91,8 @@ def _changed() -> None:
 
 
 class UploadView(AdminView):
+    writer_ok = True
+
     def post(self, request):
         uploaded = request.FILES.get("file") or request.FILES.get("File")
         if not uploaded:
@@ -103,6 +105,8 @@ class UploadView(AdminView):
 
 
 class FilteredView(AdminView):
+    writer_ok = True
+
     def post(self, request):
         d = request.data if isinstance(request.data, dict) else {}
         qs = FileMedia.objects.filter(is_deleted=False)
@@ -138,6 +142,8 @@ class FilteredView(AdminView):
 
 
 class ByIdView(AdminView):
+    writer_ok = True
+
     def get(self, request, file_id: int):
         f = FileMedia.objects.filter(id=file_id, is_deleted=False).first()
         if not f:
@@ -150,6 +156,8 @@ class ByIdView(AdminView):
 
 
 class TagsView(AdminView):
+    writer_ok = True
+
     def get(self, request):
         qs = FileTag.objects.filter(is_deleted=False)
         search = (request.query_params.get("search") or "").strip().lower()
@@ -159,6 +167,8 @@ class TagsView(AdminView):
 
 
 class AddTagView(AdminView):
+    writer_ok = True
+
     def post(self, request):
         title = (request.data.get("title") or "").strip().lower()
         if not title:
@@ -182,6 +192,8 @@ def _set_file_tags(file_id: int, tag_ids: list[int]) -> None:
 
 
 class TagsToFileView(AdminView):
+    writer_ok = True
+
     def post(self, request):
         try:
             with transaction.atomic():
@@ -192,6 +204,8 @@ class TagsToFileView(AdminView):
 
 
 class TagsToFilesView(AdminView):
+    writer_ok = True
+
     def post(self, request):
         files = request.data.get("files") or []
         if len({f.get("fileMediaId") for f in files}) != len(files):
@@ -208,6 +222,8 @@ class TagsToFilesView(AdminView):
 class AddToEntityView(AdminView):
     """Attach gallery files to a record. ProductGuides/CategoryGuides attach a size guide."""
 
+    writer_ok = True
+
     def post(self, request):
         key = request.data.get("entityKey") or ""
         entity_ids = [int(i) for i in request.data.get("entityIds") or []]
@@ -220,6 +236,8 @@ class AddToEntityView(AdminView):
         table = ENTITY_TABLES.get(GUIDE_KEYS.get(key, key))
         if table is None:
             return fail("کلید ارسالی اشتباه است", 404)
+        if request.user.is_writer and (is_guide or table != MediaAttachment.Table.ARTICLES):
+            return fail(WRITER_ONLY_ARTICLES, 403)
         if len(entity_ids) != 1:
             return fail("تعداد شناسه های ارسالی با کلید انتخابی همخوانی ندارد.", 400)
         files = list(FileMedia.objects.filter(id__in=file_ids, is_deleted=False))
@@ -273,6 +291,16 @@ class RemoveFilesView(AdminView):
         return ok({"result": {"removeFilesResults": results, "hasProblems": problems > 0, "problemsCount": problems}})
 
 
+WRITER_ONLY_ARTICLES = "نویسنده‌ی بلاگ فقط عکس‌های مقاله‌ها را تغییر می‌دهد."
+
+
+def _writer_blocked(request, media_ids) -> bool:
+    """A blog writer may change only what is attached to articles, not products or banners."""
+    if not getattr(request.user, "is_writer", False):
+        return False
+    return MediaAttachment.objects.filter(id__in=media_ids).exclude(table=MediaAttachment.Table.ARTICLES).exists()
+
+
 def _detach(media_ids: list[int]) -> tuple[list[int], str]:
     atts = list(MediaAttachment.objects.filter(id__in=media_ids, is_deleted=False))
     missing = sorted(set(media_ids) - {a.id for a in atts})
@@ -291,7 +319,11 @@ def _detach(media_ids: list[int]) -> tuple[list[int], str]:
 
 
 class DetachView(AdminView):
+    writer_ok = True
+
     def post(self, request, media_id: int):
+        if _writer_blocked(request, [media_id]):
+            return fail(WRITER_ONLY_ARTICLES, 403)
         failed, message = _detach([media_id])
         if failed:
             return fail(message, 404)
@@ -299,10 +331,14 @@ class DetachView(AdminView):
 
 
 class DetachManyView(AdminView):
+    writer_ok = True
+
     def post(self, request):
         ids = list(dict.fromkeys(int(i) for i in request.data.get("mediaIds") or []))
         if not ids:
             return fail("لیست درخواستی نمی‌تواند خالی باشد", 400)
+        if _writer_blocked(request, ids):
+            return fail(WRITER_ONLY_ARTICLES, 403)
         failed, message = _detach(ids)
         return ok({"result": {"faildMediaIds": failed, "resultStatus": message}})
 
@@ -324,6 +360,8 @@ def _attrs(items: list[dict], id_key: str, model) -> int:
 class AttributesView(AdminView):
     """UpdateAttributesToFile(s) and UpdateAttributesToMedia(s): alt text and tooltip."""
 
+    writer_ok = True
+
     many: bool = False
     media: bool = False
 
@@ -332,6 +370,8 @@ class AttributesView(AdminView):
         items = (d.get("medias") or d.get("files") or []) if self.many else [d]
         if not items:
             return fail("وجود حداقل یک شناسه الزامی است", 400)
+        if self.media and _writer_blocked(request, [x.get("mediaId") for x in items if isinstance(x, dict)]):
+            return fail(WRITER_ONLY_ARTICLES, 403)
         try:
             _attrs(items, "mediaId" if self.media else "fileMediaId", MediaAttachment if self.media else FileMedia)
         except (ValueError, KeyError, TypeError) as exc:
@@ -345,6 +385,8 @@ class AttributesView(AdminView):
 
 class FormatsView(AdminView):
     """GetAllFormats -> {type: [extensions]}; GetAllFormatTypes / GetAllFormatExtensions -> lists."""
+
+    writer_ok = True
 
     what: str = "all"
 
