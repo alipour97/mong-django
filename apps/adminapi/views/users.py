@@ -18,6 +18,7 @@ from apps.smsir import normalize_mobile
 
 from ..envelope import fail, ok
 from ..models import AdminRole, AdminUser
+from ..passwords import problems
 from ..paging import to_bool, to_int
 from .auth import AdminView
 
@@ -65,8 +66,8 @@ class AddView(AdminView):
         password = d.get("password") or ""
         if not username or not mobile:
             return fail("نام کاربری و موبایل معتبر الزامی است", 400)
-        if len(password) < 6:
-            return fail("رمز عبور باید حداقل ۶ کاراکتر باشد", 400)
+        if bad := problems(password, AdminUser(username=username, cellphone=mobile or "")):
+            return fail(bad[0], 400)
         matches = list(AdminUser.objects.filter(Q(username__iexact=username) | Q(cellphone=mobile)))
         taken = matches[0] if matches else None
         if len(matches) > 1 or (taken and not taken.is_deleted):  # two rows: one's username, the other's mobile
@@ -112,8 +113,8 @@ class UpdateView(AdminView):
         if active is not None and user.id != request.user.id:
             user.is_active = active
         if d.get("password"):
-            if len(d["password"]) < 6:
-                return fail("رمز عبور باید حداقل ۶ کاراکتر باشد", 400)
+            if bad := problems(d["password"], user):
+                return fail(bad[0], 400)
             user.set_password(d["password"])
             user.refresh_token_hash = ""  # signs the account out elsewhere
         if (role := _role(d.get("roleId"))) is not None:

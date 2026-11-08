@@ -21,6 +21,7 @@ urlpatterns = [
     path("Auth/otp", auth.OtpView.as_view()),
     path("Auth/refresh", auth.RefreshView.as_view()),
     path("Auth/GetProfile", auth.ProfileView.as_view()),
+    path("Auth/ChangePassword", auth.ChangePasswordView.as_view()),
 
     path("Dashboard/Date", dashboard.DateView.as_view()),
     path("Dashboard/DashboardNotif", dashboard.NotifView.as_view()),

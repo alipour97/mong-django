@@ -1,6 +1,6 @@
 # فصل ۳: مشخصات فنی API پنل مدیریت (`adminapi.mong.ir`)
 
-این سند راهنمای کامل اندپوینت‌های مورد استفاده در بخش پنل مدیریت پروژه فرانت‌اند (`mong_front/src/app/(admin)/admin/`) است.
+این سند راهنمای کامل اندپوینت‌های مورد استفاده در بخش پنل مدیریت پروژه فرانت‌اند (`mong_front/src/app/(admin)/admin-panel-mong/`، آدرس `/admin-panel-mong`) است.
 
 * **Base URL در فرانت‌اند:** `process.env.NEXT_PUBLIC_ADMIN_PO_MONG` (مثال: `https://adminapi.mong.ir/api/v1`)
 * **مکانیزم احراز هویت:** JWT با ارسال هدر `Authorization: Bearer <adminToken>`. سیستم فرانت‌اند دارای اینترسپتور خودکار است که در صورت انقضای توکن، متد رفرش را صدا می‌زند.

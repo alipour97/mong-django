@@ -45,3 +45,26 @@ def legacy_hash(password: str, public_key: str, secret_key: str) -> str:
     if rc != lib.ARGON2_OK:
         raise ValueError(f"argon2 error {rc}")
     return base64.b64encode(bytes(ffi.buffer(out, OUT_LEN))).decode()
+
+
+# Django's password rules (AUTH_PASSWORD_VALIDATORS), with Persian messages for the panel.
+RULES = {
+    "password_too_short": "رمز عبور باید حداقل ۸ کاراکتر باشد.",
+    "password_too_common": "این رمز عبور خیلی رایج است.",
+    "password_entirely_numeric": "رمز عبور نباید فقط عدد باشد.",
+    "password_too_similar": "رمز عبور به نام یا شماره‌ی کاربر خیلی شبیه است.",
+}
+
+
+def problems(raw: str, user=None) -> list[str]:
+    """Why a new admin password is not accepted; empty when it is fine."""
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+
+    if not raw:
+        return ["رمز عبور الزامی است."]
+    try:
+        validate_password(raw, user)
+    except ValidationError as e:
+        return [RULES.get(err.code, " ".join(err.messages)) for err in e.error_list]
+    return []

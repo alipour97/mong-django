@@ -797,20 +797,20 @@ class PanelTests(SiteCase):
     def test_add_user_with_the_mobile_of_another_and_a_deleted_username(self):
         AdminUser.objects.create(username="old", cellphone="09000000001", is_deleted=True)
         AdminUser.objects.create(username="live", cellphone="09000000002")
-        reply = self.post("/api/admin/v1/User/Add", {"username": "old", "cellPhone": "09000000002", "password": "secret1"})
+        reply = self.post("/api/admin/v1/User/Add", {"username": "old", "cellPhone": "09000000002", "password": "Mong-Panel-2026!"})
         self.assertEqual(reply.status_code, 400)
 
     def test_a_customer_mobile_is_free_for_an_admin(self):
         mobile = self.invoice.customer.cellphone
         free = self.client.get("/api/admin/v1/User/ValidationUserName", {"userName": mobile}).json()
         self.assertTrue(free["data"]["result"])
-        reply = self.post("/api/admin/v1/User/Add", {"username": mobile, "cellPhone": mobile, "password": "secret1"})
+        reply = self.post("/api/admin/v1/User/Add", {"username": mobile, "cellPhone": mobile, "password": "Mong-Panel-2026!"})
         self.assertEqual(reply.status_code, 200)
         taken = self.client.get("/api/admin/v1/User/ValidationUserName", {"userName": mobile}).json()
         self.assertFalse(taken["data"]["result"])
 
     def test_add_user(self):
-        reply = self.post("/api/admin/v1/User/Add", {"username": "new", "cellPhone": "09000000003", "password": "secret1"})
+        reply = self.post("/api/admin/v1/User/Add", {"username": "new", "cellPhone": "09000000003", "password": "Mong-Panel-2026!"})
         self.assertEqual(reply.status_code, 200)
         self.assertTrue(AdminUser.objects.filter(username="new").exists())
 

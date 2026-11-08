@@ -5,6 +5,12 @@ Auth/* — admin sign-in, as the old AdminApi's AuthController.
     GET  Auth/otp?cellPhone=                                  -> sends a 4-digit code by SMS
     POST Auth/refresh      "<refresh token>" (+ Bearer token) -> new token payload
     POST Auth/GetProfile?Username=                            -> {"result": profile}
+    POST Auth/ChangePassword {"currentPassword", "newPassword"} -> {"result": true}
+
+ChangePassword is the signed-in admin's own password. The current one is asked
+for unless the admin has none yet (signs in by SMS code). Afterwards every
+refresh token is void, so other devices are signed out when their access token
+expires; the panel signs the admin out and asks for the new password.
 
 username is the admin's mobile number (or username). OTP codes last 5 minutes,
 allow 5 tries, and a new one can be requested once a minute.
@@ -26,6 +32,7 @@ from .. import tokens
 from ..authentication import AdminTokenAuthentication, IsAdmin
 from ..envelope import fail, ok, unauthorized
 from ..models import AdminOtp, AdminUser
+from ..passwords import problems
 
 WRONG_CREDENTIALS = "نام کاربری یا رمز عبور اشتباه است."
 BLOCKED = "دسترسی شما مسدود شده است"
@@ -137,6 +144,22 @@ class ProfileView(AdminView):
         return ok({"result": profile(user)})
 
 
+class ChangePasswordView(AdminView):
+    def post(self, request):
+        user = request.user
+        current = request.data.get("currentPassword") or ""
+        new = request.data.get("newPassword") or ""
+        if user.has_password and not user.check_password(current):
+            return fail("رمز عبور فعلی اشتباه است.", 400)
+        if bad := problems(new, user):
+            return fail(bad[0], 400)
+        user.set_password(new)
+        user.refresh_token_hash = ""
+        user.save(update_fields=["password", "legacy_password", "legacy_public_key", "legacy_secret_key",
+                                 "refresh_token_hash"])
+        return ok({"result": True})
+
+
 def profile(user: AdminUser) -> dict:
     return {
         "username": user.username,
@@ -145,6 +168,7 @@ def profile(user: AdminUser) -> dict:
         "firstName": user.first_name,
         "lastName": user.last_name,
         "isActive": user.is_active,
+        "hasPassword": user.has_password,
         "roleId": user.role_id,
         "id": user.id,
         "created": user.created.isoformat() if user.created else None,

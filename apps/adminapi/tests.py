@@ -160,3 +160,95 @@ class ArticlePackageTests(TestCase):
         self.assertIn(f'data-product="{self.product.id}"', a.content)
         r = self.client.get(f"/api/admin/v1/Article/{a.id}/Preview")
         self.assertIn("blog-product", r.json()["data"]["result"]["articleContent"])
+
+
+class AdminUserPasswordTests(TestCase):
+    """A new password for a site admin, set from /django-admin/."""
+
+    def setUp(self):
+        from django.contrib.auth.models import User
+
+        self.client.force_login(User.objects.create_superuser("root", password="x"))
+        self.admin = AdminUser.objects.create(username="ali", cellphone="09121111111", first_name="علی",
+                                              legacy_password="old", refresh_token_hash="abc")
+        self.url = f"/django-admin/adminapi/adminuser/{self.admin.pk}/change/"
+
+    def post(self, p1, p2):
+        a = self.admin
+        return self.client.post(self.url, {
+            "username": a.username, "cellphone": a.cellphone, "email": "", "first_name": a.first_name,
+            "last_name": "", "role": "", "is_active": "on", "created_0": "1404-01-01", "created_1": "10:00:00",
+            "new_password1": p1, "new_password2": p2,
+        })
+
+    def test_page_opens(self):
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'name="new_password1"')
+        self.assertEqual(self.client.get("/django-admin/adminapi/adminuser/").status_code, 200)
+
+    def test_sets_password_and_clears_sessions(self):
+        r = self.post("Mong-Panel-2026!", "Mong-Panel-2026!")
+        self.assertEqual(r.status_code, 302, getattr(r, "context", None) and r.context["adminform"].form.errors)
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.check_password("Mong-Panel-2026!"))
+        self.assertEqual((self.admin.legacy_password, self.admin.refresh_token_hash), ("", ""))
+
+    def test_blank_keeps_password(self):
+        self.admin.set_password("Mong-Panel-2026!")
+        self.admin.save()
+        self.assertEqual(self.post("", "").status_code, 302)
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.check_password("Mong-Panel-2026!"))
+
+    def test_mismatch_and_weak_rejected(self):
+        for p1, p2 in (("Mong-Panel-2026!", "other-Panel-2026!"), ("123", "123")):
+            r = self.post(p1, p2)
+            self.assertEqual(r.status_code, 200)
+            self.assertTrue(r.context["adminform"].form.errors)
+        self.admin.refresh_from_db()
+        self.assertEqual(self.admin.password, "")
+
+
+class ChangeOwnPasswordTests(TestCase):
+    """Auth/ChangePassword: the signed-in admin's own password, from the panel."""
+
+    url = "/api/admin/v1/Auth/ChangePassword"
+
+    def setUp(self):
+        from apps.adminapi import tokens
+
+        self.admin = AdminUser.objects.create(username="ali", cellphone="09121111111", refresh_token_hash="abc")
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION="Bearer " + tokens.issue(self.admin)["token"])
+
+    def change(self, current, new):
+        return self.client.post(self.url, {"currentPassword": current, "newPassword": new}, format="json")
+
+    def test_needs_sign_in(self):
+        self.assertEqual(APIClient().post(self.url, {"newPassword": "Mong-Panel-2026!"}, format="json").status_code, 401)
+
+    def test_first_password_without_current(self):
+        self.assertFalse(self.client.post("/api/admin/v1/Auth/GetProfile").json()["data"]["result"]["hasPassword"])
+        r = self.change("", "Mong-Panel-2026!")
+        self.assertEqual(r.status_code, 200, r.json())
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.check_password("Mong-Panel-2026!"))
+        self.assertEqual(self.admin.refresh_token_hash, "")
+
+    def test_current_password_required(self):
+        self.admin.set_password("Old-Panel-2025!")
+        self.admin.save()
+        r = self.change("wrong", "Mong-Panel-2026!")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["message"], "رمز عبور فعلی اشتباه است.")
+        self.assertEqual(self.change("Old-Panel-2025!", "Mong-Panel-2026!").status_code, 200)
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.check_password("Mong-Panel-2026!"))
+
+    def test_weak_password_rejected(self):
+        for weak, message in (("38194726", "رمز عبور نباید فقط عدد باشد."), ("abc", "رمز عبور باید حداقل ۸ کاراکتر باشد.")):
+            r = self.change("", weak)
+            self.assertEqual((r.status_code, r.json()["message"]), (400, message))
+        self.admin.refresh_from_db()
+        self.assertFalse(self.admin.has_password)
