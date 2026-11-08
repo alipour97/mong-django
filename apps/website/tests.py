@@ -71,3 +71,38 @@ class BranchHoursTests(TestCase):
         self.assertTrue(b.hours_text().endswith("جمعه ۱۶ تا ۲۲"))
         self.assertEqual(b.opening_hours()[1], {"days": ["Friday"], "opens": "16:00", "closes": "22:00"})
         self.assertEqual(Branch(title="x").as_department()["hours"], "")
+
+
+class CategoryCopyTests(TestCase):
+    def test_command_writes_copy_and_keeps_admin_edits(self):
+        from django.core.management import call_command
+        from apps.storefront import catalog
+        from apps.storefront.views import _category_seo
+        from apps.website.models import Category
+
+        cat = Category.objects.create(title="مانتو", slug="مانتو", is_online_active=True)
+        call_command("write_category_copy", stdout=open("/dev/null", "w"))
+        cat.refresh_from_db()
+        self.assertEqual(cat.seo_title, "")  # dry run
+        call_command("write_category_copy", "--apply", stdout=open("/dev/null", "w"))
+        cat.refresh_from_db()
+        self.assertIn("{year}", cat.seo_title)
+        self.assertIn("<h3>", cat.long_description_html)
+        title, description = _category_seo(cat, [])
+        self.assertIn(catalog.jalali_year(), title)
+        self.assertNotIn("{year}", title)
+        self.assertTrue(description.startswith("مانتو زنانه"))
+
+        cat.seo_title = "عنوان ادمین"
+        cat.save()
+        call_command("write_category_copy", "--apply", stdout=open("/dev/null", "w"))
+        cat.refresh_from_db()
+        self.assertEqual(cat.seo_title, "عنوان ادمین")
+
+    def test_jalali_year(self):
+        import datetime as dt
+        from apps.storefront.catalog import jalali_year
+
+        self.assertEqual(jalali_year(dt.date(2026, 11, 8)), "۱۴۰۵")
+        self.assertEqual(jalali_year(dt.date(2026, 3, 20)), "۱۴۰۴")
+        self.assertEqual(jalali_year(dt.date(2026, 3, 21)), "۱۴۰۵")

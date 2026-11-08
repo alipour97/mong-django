@@ -838,6 +838,20 @@ def womens(name: str) -> str:
     return name if "زنانه" in name else f"{name} زنانه"
 
 
+def jalali_year(today=None) -> str:
+    """The current Iranian year in Persian digits ("۱۴۰۵"); the year turns at Nowruz (21 March)."""
+    import datetime as dt
+
+    today = today or dt.date.today()
+    year = today.year - (621 if (today.month, today.day) >= (3, 21) else 622)
+    return str(year).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+
+
+def with_year(text: str) -> str:
+    """Admin-written SEO copy may say {year}, so a title stays current without editing."""
+    return text.replace("{year}", jalali_year())
+
+
 def category_guide(cat: Category) -> dict | None:
     """
     The closed "درباره ..." box under a category's products: a few facts about

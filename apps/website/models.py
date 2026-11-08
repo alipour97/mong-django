@@ -82,6 +82,14 @@ class Category(SlugKeyMixin, LegacyMixin):
     discount = models.DecimalField(max_digits=18, decimal_places=3, default=0)
     short_description_html = models.TextField(blank=True, default="")
     long_description_html = models.TextField(blank=True, default="")
+    seo_title = models.CharField(
+        _("عنوان سئو"), max_length=120, blank=True, default="",
+        help_text=_("عنوان صفحه در گوگل، بدون «| مانگ». {year} سال جاری شمسی می‌شود. خالی: خودکار"),
+    )
+    seo_description = models.CharField(
+        _("توضیح متا"), max_length=300, blank=True, default="",
+        help_text=_("زیر عنوان در نتایج گوگل، حداکثر ۱۶۰ حرف. {year} سال جاری شمسی می‌شود. خالی: خودکار"),
+    )
     base_category_type_id = models.IntegerField(null=True, blank=True)
     base_category_type_title = models.CharField(max_length=255, blank=True, default="")
     # ERP department code; PTC/Samian department this online category maps to

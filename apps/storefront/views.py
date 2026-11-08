@@ -577,13 +577,16 @@ _womens = catalog.womens
 
 
 def _category_seo(cat: Category, leaves: list[Category]) -> tuple[str, str]:
+    """The admin's title and description when written (Category.seo_title, seo_description), else made from the name."""
     item = _womens(catalog.category_label(cat))
-    title = _clip(f"خرید {item} | جدیدترین مدل‌ها و قیمت روز", SEO_TITLE_MAX)
-    description = f"خرید آنلاین {item} با جدیدترین مدل‌ها، رنگ‌ها و سایزهای مختلف و قیمت روز در فروشگاه اینترنتی مانگ."
-    kinds = [catalog.display_name(c.title) for c in leaves if c.id != cat.id][:3]
-    if kinds:
-        description += " شامل " + "، ".join(kinds) + "."
-    return title, _clip(description, SEO_DESCRIPTION_MAX)
+    title = catalog.with_year(cat.seo_title.strip()) or f"خرید {item} | مدل‌های جدید {catalog.jalali_year()} و قیمت روز"
+    description = catalog.with_year(cat.seo_description.strip())
+    if not description:
+        description = f"خرید آنلاین {item} با جدیدترین مدل‌ها، رنگ‌ها و سایزهای مختلف و قیمت روز در فروشگاه اینترنتی مانگ."
+        kinds = [catalog.display_name(c.title) for c in leaves if c.id != cat.id][:3]
+        if kinds:
+            description += " شامل " + "، ".join(kinds) + "."
+    return _clip(title, SEO_TITLE_MAX), _clip(description, SEO_DESCRIPTION_MAX)
 
 
 def _product_seo_title(name: str, ai_title: str, category: str) -> str:
