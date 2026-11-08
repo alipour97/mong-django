@@ -83,6 +83,8 @@ def _in_month(qs, jy: int, jm: int):
 class DateView(AdminView):
     """GET Dashboard/Date -> {"date"}: the server's local time; the panel's date pickers start from it."""
 
+    writer_ok = True  # the date in the panel's header
+
     def get(self, request):
         return ok({"date": timezone.localtime().replace(tzinfo=None).isoformat()})
 
