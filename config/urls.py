@@ -2,6 +2,7 @@
 URL Configuration for mong_samian.
 """
 from django.contrib import admin
+from apps.storefront.searchwise_feed import SearchwiseFeedView
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
@@ -29,6 +30,8 @@ urlpatterns = [
     # SnappPay Crawler Feed & API (Legacy and Modern endpoints, handles both snappay and SnappPay)
     re_path(r"^api/[Ss]napp[Pp]?ay/", include("apps.storefront.snappay_urls")),
     re_path(r"^api/v1/[Ss]napp[Pp]?ay/", include("apps.storefront.snappay_urls")),
+    # SnappPay search, in the SearchWise WooCommerce plugin's shape (apps/storefront/searchwise_feed.py)
+    re_path(r"^(?:api/)?wp-json/v1/product/feed/?$", SearchwiseFeedView.as_view(), name="searchwise-feed"),
     re_path(r"^(?:api/)?img/(?P<key>.+)$", image_variant),
     re_path(r"^(?:api/)?cdn/(?P<path>.+)$", cdn_file),
 ]

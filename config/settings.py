@@ -334,6 +334,12 @@ SNAPPAY_USERNAME = os.getenv("SNAPPAY_USERNAME", "")
 SNAPPAY_PASSWORD = os.getenv("SNAPPAY_PASSWORD", "")
 SNAPPAY_COMMISSION_TYPE = int(os.getenv("SNAPPAY_COMMISSION_TYPE", "100"))  # the document's default, one category
 SNAPPAY_TRANSACTION_ID_START = int(os.getenv("SNAPPAY_TRANSACTION_ID_START", "50000000"))  # 5-10 digits, unique
+# The product search feed (/wp-json/v1/product/feed) is open unless SNAPPAY_FEED_REQUIRE_KEY=true. Then the
+# x-api-key header must equal SNAPPAY_FEED_API_KEY; with no key set it is checked with SearchWise's server for
+# SNAPPAY_MERCHANT_DOMAIN (default: SITE_URL's host).
+SNAPPAY_FEED_REQUIRE_KEY = os.getenv("SNAPPAY_FEED_REQUIRE_KEY", "false").strip().lower() in ("1", "true", "yes", "on")
+SNAPPAY_FEED_API_KEY = os.getenv("SNAPPAY_FEED_API_KEY", "")
+SNAPPAY_MERCHANT_DOMAIN = os.getenv("SNAPPAY_MERCHANT_DOMAIN", "")
 
 # The payment hub (apps.payhub): one service for both sites. PAYHUB_PUBLIC_URL is the address both gateways
 # send the customer back to, so its domain must be the one registered with SnappPay and Zarinpal.

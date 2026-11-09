@@ -37,7 +37,7 @@ SNAPPAY_DEFAULT_IPS = {
     "188.121.106.231",
 }
 
-SNAPPAY_FEED_CACHE_KEY = "snappay:products:feed:v1"
+SNAPPAY_FEED_CACHE_KEY = "snappay:products:feed:v2"
 SNAPPAY_FEED_CACHE_TTL = 300  # 5 minutes
 
 
@@ -239,15 +239,15 @@ def build_snappay_product(
     - link: Full canonical website URL (/products-item/<slug>)
     - image_link: Array of absolute image URLs (cover image first)
     - availability: "in stock" | "out of stock"
-    - regular_price: Regular price in Rials (integer)
-    - sale_price: Discounted sale price in Rials (integer)
+    - regular_price: Regular price in tomans (integer)
+    - sale_price: Discounted sale price in tomans (integer)
     - category: Full category hierarchy (e.g. "مد و پوشاک > زنانه > روپوش > مانتو")
     - description: Rich key-value object (attributes, fabric, style, season, bullets, stylist note, keywords)
     - brand: Brand name ("مانگ")
     - GTIN / gtin: Barcode / GTIN
     - color: Available colors
     - size: Available sizes
-    - shipping_cost: 0 (free shipping)
+    - shipping_cost: flat Pishtaz post, in tomans
     - delivery_time: Shipping days
     - search_keywords: List of SEO keywords from LEBAZAI
     - summary_bullets: Bullet points from LEBAZAI
@@ -325,22 +325,24 @@ def build_snappay_product(
         if ai.fab:
             desc_dict["مزایا و کاربرد"] = ai.fab
     else:
-        desc_dict.update(parse_description(p, erp.attributes if erp else None))
+        desc_dict.update(parse_description(p))
 
     # Add general description if not already in dictionary
     if p.description and p.description.strip() and "توضیحات تکمیلی" not in desc_dict:
         desc_dict["توضیحات تکمیلی"] = p.description.strip()
 
-    # 5. Image links (Full-resolution WebP URLs rebased to base_url from .env)
+    # 5. Image links
+    # Photos stay on the media host (PUBLIC_MEDIA_BASE_URL): the shop's own host does not serve /img.
+    media_base = getattr(settings, "PUBLIC_MEDIA_BASE_URL", "") or base_url
     image_links = [
-        normalize_url(img["mediaUrl"], base_url)
+        f"{media_base}{img['mediaUrl']}" if str(img["mediaUrl"]).startswith("/") else str(img["mediaUrl"])
         for img in imgs
         if img.get("mediaUrl")
     ]
 
-    # 6. Pricing in Rials (integers)
-    regular_price = pr.base
-    sale_price = int(pr.after)
+    # 6. Pricing in tomans, as SnappPay asks (the site stores rials)
+    regular_price = int(pr.base) // 10
+    sale_price = int(pr.after) // 10
     if regular_price <= 0 and sale_price > 0:
         regular_price = sale_price
     elif regular_price < sale_price:
@@ -374,8 +376,8 @@ def build_snappay_product(
     if sizes:
         item["size"] = ", ".join(sizes)
 
-    item["shipping_cost"] = 0
-    item["delivery_time"] = p.shipping_time or 3
+    item["shipping_cost"] = catalog.SHIPPING_COST_IRR // 10
+    item["delivery_time"] = p.shipping_time or 5
 
     # Additional SEO fields from AI profile
     if ai:
