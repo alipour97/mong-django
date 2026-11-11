@@ -265,7 +265,8 @@ RETURN_POLICY = {
     "returnPolicyCategory": "https://schema.org/MerchantReturnFiniteReturnWindow",
     "merchantReturnDays": 7,
     "returnMethod": "https://schema.org/ReturnByMail",
-    "refundType": "https://schema.org/ExchangeRefund",
+    "returnFees": "https://schema.org/FreeReturn",
+    "refundType": "https://schema.org/StoreCreditRefund",
     "merchantReturnLink": "/faq",
 }
 

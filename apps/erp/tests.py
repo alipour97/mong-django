@@ -1809,6 +1809,8 @@ class MerchantListingSchemaTests(TestCase):
         offer = meta["offers"]
         self.assertEqual(offer["shippingDetails"]["shippingRate"]["value"], 2_000_000)
         self.assertEqual(offer["hasMerchantReturnPolicy"]["merchantReturnDays"], 7)
+        self.assertEqual(offer["hasMerchantReturnPolicy"]["returnFees"], "https://schema.org/FreeReturn")
+        self.assertEqual(offer["hasMerchantReturnPolicy"]["refundType"], "https://schema.org/StoreCreditRefund")
         self.assertNotIn("priceValidUntil", offer)
         self.assertNotIn("category", meta)
 
