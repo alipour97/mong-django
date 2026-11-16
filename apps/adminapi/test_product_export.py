@@ -57,9 +57,9 @@ class ProductExportTests(TestCase):
         self.assertTrue(sheet.auto_filter.ref.endswith("3"))
 
     def test_export_crosses_batch_boundary(self):
-        Product.objects.bulk_create([Product(title=f"Product {i}", barcode=f"00{i}") for i in range(251)])
+        Product.objects.bulk_create([Product(title=f"Product {i}", barcode=f"00{i}") for i in range(1001)])
         wb = load_workbook(product_workbook(), read_only=True)
-        self.assertEqual(sum(1 for _ in wb["Products"].values), 253)
+        self.assertEqual(sum(1 for _ in wb["Products"].values), 1003)
         wb.close()
 
     def test_requires_admin_authentication(self):

@@ -30,17 +30,28 @@ def _value(value):
     return value
 
 
+_HEADER_FONT = Font(bold=True, color="FFFFFF")
+_HEADER_FILL = PatternFill("solid", fgColor="214B8A")
+_HEADER_ALIGNMENT = Alignment(vertical="top", wrap_text=True)
+
+
 def _append(sheet, values, *, header=False):
     cells = []
     for value in values:
-        cell = WriteOnlyCell(sheet, value=_value(value))
+        value = _value(value)
+        # Numeric/empty cells can use openpyxl's fast path. Only strings need
+        # explicit typing to preserve codes and prevent formula interpretation.
+        if not header and not isinstance(value, str):
+            cells.append(value)
+            continue
+        cell = WriteOnlyCell(sheet, value=value)
         # Names, barcodes and descriptions are data, never Excel formulas.
         if isinstance(cell.value, str):
             cell.data_type = "s"
         if header:
-            cell.font = Font(bold=True, color="FFFFFF")
-            cell.fill = PatternFill("solid", fgColor="214B8A")
-        cell.alignment = Alignment(vertical="top", wrap_text=True)
+            cell.font = _HEADER_FONT
+            cell.fill = _HEADER_FILL
+            cell.alignment = _HEADER_ALIGNMENT
         cells.append(cell)
     sheet.append(cells)
     sheet.export_row_count = getattr(sheet, "export_row_count", 0) + 1
@@ -75,8 +86,8 @@ def product_workbook():
     hidden = set(HiddenImage.objects.values_list("key", flat=True))
     # Include inactive/out-of-stock products too. Deleted products are excluded.
     ids = list(Product.objects.filter(is_deleted=False).order_by("id").values_list("id", flat=True))
-    for start in range(0, len(ids), 250):
-        batch = ids[start:start + 250]
+    for start in range(0, len(ids), 1000):
+        batch = ids[start:start + 1000]
         products = Product.objects.filter(id__in=batch).select_related("category", "brand").order_by("id")
         variants = list(ProductVariant.objects.filter(product_id__in=batch, is_deleted=False).order_by("id"))
         online_ids = set(online_stock().filter(variant__product_id__in=batch).values_list("id", flat=True))
@@ -109,16 +120,18 @@ def product_workbook():
                 sum(available[v.id] for v in vs), ", ".join(dict.fromkeys(v.color_name for v in vs)),
                 len(photos), sum(i.key not in hidden for i in photos), tags[p.id], collections[p.id]])
             colors = {}
+            image_counts = defaultdict(lambda: [0, 0])
             for v in vs:
                 _append(sheets["Variants"], [getattr(v, f.attname) for f in variant_fields] + [available[v.id], p.price, p.sale_price])
                 c = colors.setdefault(v.color_id, [v.color_name, v.color_value, 0])
                 c[2] += available[v.id]
             for img in photos:
+                image_counts[img.color_id][0] += 1
+                image_counts[img.color_id][1] += img.key not in hidden
                 colors.setdefault(img.color_id, ["", "", 0])
                 _append(sheets["Images"], [p.id, subcode, img.color_id, img.id, img.position, img.key, img.source_url, img.key in hidden])
             for cid, (name, value, count) in colors.items():
-                color_photos = [i for i in photos if i.color_id == cid]
-                _append(sheets["Colors"], [p.id, subcode, cid, name, value, count, len(color_photos), sum(i.key not in hidden for i in color_photos)])
+                _append(sheets["Colors"], [p.id, subcode, cid, name, value, count, *image_counts[cid]])
             for source, attrs in [("product", p.attributes), ("AI", ai.attributes if ai else {})]:
                 for key, value in (attrs.items() if isinstance(attrs, dict) else [("attributes", attrs)]):
                     _append(sheets["Features"], [p.id, subcode, source, key, value])

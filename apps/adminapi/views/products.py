@@ -468,8 +468,18 @@ class ExportView(AdminView):
         from django.http import FileResponse
         from ..product_export import product_workbook
 
+        import logging
+        import time
+        logger = logging.getLogger(__name__)
+        started = time.monotonic()
+        try:
+            report = product_workbook()
+        except Exception:
+            logger.exception("Product Excel export failed after %.1fs", time.monotonic() - started)
+            raise
+        logger.info("Product Excel export completed in %.1fs", time.monotonic() - started)
         return FileResponse(
-            product_workbook(), as_attachment=True,
+            report, as_attachment=True,
             filename=f"products-{timezone.localdate().isoformat()}.xlsx",
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
