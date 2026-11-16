@@ -459,3 +459,17 @@ class BriefProductsView(AdminView):
         page = paginated(rows, to_int(q.get("pageNumber"), 1), to_int(q.get("pageSize"), 10))
         page["items"] = _cards([r.id for r in page["items"]], _selections())
         return ok({"result": page})
+
+
+class ExportView(AdminView):
+    """Download every non-deleted product, independent of UI filters and pagination."""
+
+    def get(self, request):
+        from django.http import FileResponse
+        from ..product_export import product_workbook
+
+        return FileResponse(
+            product_workbook(), as_attachment=True,
+            filename=f"products-{timezone.localdate().isoformat()}.xlsx",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
