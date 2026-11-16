@@ -1068,8 +1068,9 @@ class TestPaymentTests(TestCase):
         invoice = order(self.customer, state=Invoice.State.PRE_INVOICE)
         goods()
         payment = InvoicePayment.objects.create(invoice=invoice, gateway=gateway, amount=1900000)
-        with mock.patch("apps.storefront.payments._notify_admins") as notify, self.captureOnCommitCallbacks(execute=True), \
-                mock.patch("apps.erp.outbox.send_soon"), mock.patch("apps.storefront.catalog.clear_caches"):
+        with mock.patch("apps.storefront.payments._notify_admins") as notify, \
+                mock.patch("apps.erp.outbox.send_soon"), mock.patch("apps.storefront.catalog.clear_caches"), \
+                self.captureOnCommitCallbacks(execute=True):
             payments._finish(payment, True, "R")
         invoice.refresh_from_db()
         self.notified = notify.called
@@ -1088,6 +1089,10 @@ class TestPaymentTests(TestCase):
     @override_settings(SNAPPAY_IS_STAGE=True)
     def test_a_stage_snapppay_payment_is_a_test(self):
         self.assertTrue(self.finish("snapppay").is_test)
+
+    @override_settings(MELLAT_SANDBOX=True)
+    def test_a_sandbox_mellat_payment_is_a_test(self):
+        self.assertTrue(self.finish("mellat").is_test)
 
     @override_settings(SNAPPAY_IS_STAGE=False)
     def test_a_live_snapppay_payment_is_real(self):

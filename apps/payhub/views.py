@@ -20,6 +20,7 @@ from __future__ import annotations
 import hmac
 import json
 import logging
+import secrets
 from decimal import Decimal, InvalidOperation
 from html import escape
 from urllib.parse import urlsplit
@@ -32,9 +33,9 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
-from . import service, snapppay, zarinpal
+from . import mellat, service, snapppay, zarinpal
 from .models import PayRecord
-from .service import S, SNAPPPAY, ZARINPAL, Refused
+from .service import MELLAT, S, SNAPPPAY, ZARINPAL, Refused
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +182,10 @@ class GenerateTokenView(ServerView):
         if gateway == SNAPPPAY:
             if not snapppay.configured():
                 return fail("اسنپ‌پی روی هاب پرداخت تنظیم نشده است.")
+        elif gateway == MELLAT:
+            if not mellat.configured() or not mellat.positive_long(amount):
+                return fail("درگاه ملت تنظیم نشده یا مبلغ نامعتبر است.")
+            merchant = mellat.terminal_id()
         else:
             merchant = gateway_code if len(gateway_code) == zarinpal.UUID_LEN else settings.ZARINPAL_MERCHANT_ID
             if len(merchant) != zarinpal.UUID_LEN:
@@ -195,10 +200,11 @@ class GenerateTokenView(ServerView):
 class GoToPayPageView(HubView):
     def get(self, request, token: str, transaction_id: str, pay_amount: str):
         record = _record(token)
-        if not record or record.gateway != ZARINPAL:
+        if not record or record.gateway not in (ZARINPAL, MELLAT):
             return _page(service.BAD_LINK, 404)
         try:
-            return HttpResponseRedirect(service.start_zarinpal(record, transaction_id, _rial(pay_amount) or 0))
+            start = service.start_mellat if record.gateway == MELLAT else service.start_zarinpal
+            return HttpResponseRedirect(start(record, transaction_id, _rial(pay_amount) or 0))
         except Refused as exc:
             if record.state == S.FAILED:
                 return HttpResponseRedirect(service.failed_redirect(record, "خطا در اتصال به درگاه پرداخت: " + exc.message))
@@ -217,6 +223,49 @@ class ZarinpalCallbackView(HubView):
             return _page(exc.message, exc.status)
 
     get = post = handle
+
+
+class MellatPayView(HubView):
+    """Same URL contract as other gateways; the bank itself requires a POST of RefId."""
+
+    def get(self, request, token: str):
+        record = _record(token)
+        if not record or record.gateway != MELLAT:
+            return _page(service.BAD_LINK, 404)
+        if record.state != S.REDIRECTED or not record.authority:
+            return _page(service.LINK_USED, 409)
+        action = f"{mellat.base(record.mellat_sandbox)}/startpay.mellat"
+        nonce = secrets.token_urlsafe(24)
+        label = "انتقال به درگاه آزمایشی به‌پرداخت ملت" if record.mellat_sandbox else "انتقال به درگاه به‌پرداخت ملت"
+        html = (f'<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8">'
+                f'<meta name="viewport" content="width=device-width"><title>{label}</title>'
+                f'<body><p>{label}</p><form id="mellat" method="post" action="{escape(action, quote=True)}">'
+                f'<input type="hidden" name="RefId" value="{escape(record.authority, quote=True)}">'
+                '<button type="submit">ادامه پرداخت</button></form>'
+                f'<script nonce="{nonce}">document.getElementById("mellat").submit();</script></body></html>')
+        response = HttpResponse(html, content_type="text/html; charset=utf-8")
+        response["Cache-Control"] = "no-store"
+        response["Referrer-Policy"] = "no-referrer"
+        response["Content-Security-Policy"] = (
+            f"default-src 'none'; script-src 'nonce-{nonce}'; form-action {mellat.base(record.mellat_sandbox)}; "
+            "base-uri 'none'; frame-ancestors 'none'"
+        )
+        return response
+
+
+class MellatCallbackView(HubView):
+    def post(self, request, token: str):
+        record = _record(token)
+        if not record or record.gateway != MELLAT:
+            return _page(service.BAD_LINK, 404)
+        fields = request.data.dict() if hasattr(request.data, "dict") else request.data
+        if not isinstance(fields, dict):
+            return _page(service.BAD_LINK)
+        try:
+            url = service.mellat_return(record, fields)
+        except Refused as exc:
+            return _page(exc.message, exc.status)
+        return HttpResponseRedirect(url) if url else _page(service.CHECKING, 202)
 
 
 class GetPaymentTokenView(ServerView):

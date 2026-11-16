@@ -18,6 +18,7 @@ minutes) or goes to a person (REVIEW).
 from __future__ import annotations
 
 import logging
+import re
 import time
 import uuid
 from datetime import timedelta
@@ -27,7 +28,7 @@ from django.conf import settings
 from django.db.models import Q
 from django.utils import timezone
 
-from . import snapppay, zarinpal
+from . import mellat, snapppay, zarinpal
 from .models import PayRecord
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,8 @@ logger = logging.getLogger(__name__)
 S = PayRecord.State
 Source = PayRecord.Source
 ZARINPAL, SNAPPPAY = "zarinpal", "snapppay"
-GATEWAYS = (ZARINPAL, SNAPPPAY)
+MELLAT = "mellat"
+GATEWAYS = (ZARINPAL, SNAPPPAY, MELLAT)
 
 RETRY_DELAY = 3  # seconds, before asking SnappPay again (GENERAL, ONGOING_PAYMENT_TRANSITION_PROCESS)
 CONFIRM_WAIT = 40  # seconds a second confirm waits for the first one
@@ -111,7 +113,8 @@ def create(*, gateway: str, amount: int, success: str, failed: str, source: str 
            customer_key: str = "", company_id: int = 0, merchant_id: str = "") -> PayRecord:
     record = PayRecord.objects.create(
         token=uuid.uuid4().hex, source=source, gateway=gateway, amount=amount, success_callback=success, failed_callback=failed,
-        cell_phone=cell_phone, customer_key=customer_key, company_id=company_id, merchant_id=merchant_id)
+        cell_phone=cell_phone, customer_key=customer_key, company_id=company_id, merchant_id=merchant_id,
+        mellat_sandbox=settings.MELLAT_SANDBOX)
     note(record, "created", amount=amount)
     record.save()
     return record
@@ -163,6 +166,137 @@ def zarinpal_return(record: PayRecord, authority: str, status: str) -> str:
     note(record, "returned")
     record.save()
     return success_redirect(record)
+
+
+# -----------------------------------------------------------------------------
+# Behpardakht Mellat
+# -----------------------------------------------------------------------------
+def mellat_page_url(record: PayRecord) -> str:
+    return f"{settings.PAYHUB_PUBLIC_URL}/mellat/pay/{record.token}"
+
+
+def start_mellat(record: PayRecord, transaction_id: str, pay_amount: int) -> str:
+    if record.gateway != MELLAT:
+        raise Refused(BAD_LINK, 404)
+    if pay_amount != record.amount or not mellat.positive_long(pay_amount):
+        raise Refused("مبلغ پرداخت با فاکتور مطابقت ندارد.")
+    if record.state == S.REDIRECTED and record.authority and record.transaction_id == transaction_id:
+        return mellat_page_url(record)
+    if not _claim(record, (S.CREATED,), S.STARTING):
+        raise Refused(LINK_USED, 409)
+    record.transaction_id = transaction_id
+    # One bank order per payment attempt, never the invoice id (which can be retried).
+    record.gateway_transaction_id = str(record.pk)
+    record.merchant_id = record.merchant_id or mellat.terminal_id()
+    record.save()
+    if not mellat.positive_long(record.merchant_id) or not settings.MELLAT_USERNAME or not settings.MELLAT_PASSWORD:
+        _set(record, S.FAILED, "درگاه به‌پرداخت ملت تنظیم نشده است.")
+        raise Refused(record.error)
+    result = mellat.request(record.merchant_id, record.mellat_sandbox, record.gateway_transaction_id, record.amount,
+                            f"{settings.PAYHUB_PUBLIC_URL}/mellat/callback/{record.token}",
+                            f"پرداخت فاکتور شماره {transaction_id} - فروشگاه مانگ")
+    note(record, "mellat_request", code=result.code, sandbox=record.mellat_sandbox)
+    if result.code != 0 or not result.authority:
+        _set(record, S.FAILED, result.message)
+        raise Refused(CONNECTION_FAILED, 502)
+    record.authority = result.authority
+    _set(record, S.REDIRECTED)
+    return mellat_page_url(record)
+
+
+def mellat_return(record: PayRecord, fields: dict) -> str | None:
+    # IPG 1.38, table 13: validate both identifiers before ANY verify, even on a replay.
+    if (not record.authority or fields.get("RefId") != record.authority
+            or str(fields.get("SaleOrderId") or "") != record.gateway_transaction_id):
+        raise Refused("اطلاعات بازگشتی از درگاه ملت معتبر نیست.")
+    code = str(fields.get("ResCode", ""))
+    reference = str(fields.get("SaleReferenceId") or "")
+    if not code.isascii() or not code.isdigit() or len(code) > 4:
+        raise Refused("کد وضعیت بازگشتی معتبر نیست.")
+    if code == "0" and not mellat.positive_long(reference):
+        raise Refused("کد مرجع تراکنش معتبر نیست.")
+    if record.ref_id and record.ref_id != reference:
+        raise Refused("کد مرجع تراکنش مطابقت ندارد.")
+    if record.state in (S.RETURNED, S.CONSUMED):
+        return success_redirect(record)
+    if record.state in (S.VERIFYING, S.CONFIRMING):
+        return None
+    if not _claim(record, (S.REDIRECTED,), S.VERIFYING):
+        return failed_redirect(record, record.error or "پرداخت ناموفق بود.")
+    note(record, "mellat_callback", code=int(code))
+    if code != "0":
+        _set(record, S.FAILED, mellat.Result(int(code)).message)
+        return failed_redirect(record, record.error)
+    record.ref_id = reference
+    # Keep only masked PANs, never a full card number supplied in an untrusted POST.
+    pan = str(fields.get("CardHolderPan") or "")
+    if re.fullmatch(r"[0-9]{6}[*xX•]{3,9}[0-9]{4}", pan):
+        record.card_pan = pan
+    _set(record, S.RETURNED)
+    return success_redirect(record)
+
+
+def _mellat_call(record: PayRecord, method: str) -> mellat.Result:
+    result = mellat.transaction(method, record)
+    note(record, "mellat_operation", method=method, code=result.code)
+    record.save()  # persist each step before issuing another bank request
+    return result
+
+
+def _mellat_reverse(record: PayRecord, reason: str) -> None:
+    result = _mellat_call(record, "bpReversalRequest")
+    state = (S.REVERTED if result.code in (0, 48) else S.REVIEW if result.code == 45 else S.UNKNOWN)
+    _set(record, state, reason)
+
+
+def _mellat_confirm(record: PayRecord) -> str:
+    result = _mellat_call(record, "bpVerifyRequest")
+    if result.code not in (0, 43, 45, 48):
+        result = _mellat_call(record, "bpVerifyRequest")  # official document: retry non-successful verify
+    if result.code not in (0, 43, 45, 48):
+        result = _mellat_call(record, "bpInquiryRequest")
+    if result.code == 45:
+        return S.CONSUMED
+    if result.code == 48:
+        return S.REVERTED
+    if result.code not in (0, 43):
+        _mellat_reverse(record, CHECKING)
+        return record.state
+    result = _mellat_call(record, "bpSettleRequest")
+    if result.code in (0, 45):
+        return S.CONSUMED
+    if result.code == 48:
+        return S.REVERTED
+    # A lost settle response can mean it was settled. A retry is idempotent;
+    # never report success on a timeout or reverse blindly after settlement.
+    status = _mellat_call(record, "bpInquiryRequest")
+    if status.code == 45:
+        return S.CONSUMED
+    return S.REVERTED if status.code == 48 else S.RETURNED
+
+
+def _mellat_resolve(record: PayRecord, reason: str = NOT_CONFIRMED) -> None:
+    if not record.ref_id:
+        _set(record, S.FAILED, reason)  # no verify: the bank automatically reverses after 20 minutes
+        return
+    result = _mellat_call(record, "bpInquiryRequest")
+    if result.code == 45:
+        _set(record, S.REVIEW, "ملت تراکنش را تسویه کرده ولی سفارش ثبت نشده است.")
+        return
+    if result.code == 48:
+        _set(record, S.REVERTED, reason)
+        return
+    # The document requires verify before reversal (maximum 3 hours after verify).
+    result = _mellat_call(record, "bpVerifyRequest")
+    if result.code == 45:
+        _set(record, S.REVIEW, reason)
+    elif result.code == 48:
+        _set(record, S.REVERTED, reason)
+    else:
+        _mellat_reverse(record, reason)
+        tries = sum(e.get("event") == "mellat_operation" and e.get("method") == "bpReversalRequest" for e in record.events)
+        if record.state == S.UNKNOWN and tries >= MAX_RESOLVE_TRIES:
+            _set(record, S.REVIEW, CHECKING)
 
 
 # -----------------------------------------------------------------------------
@@ -372,6 +506,11 @@ def confirm(record: PayRecord, transaction_id: str, amount: int) -> dict:
         if state != S.CONSUMED:
             _set(record, state)  # RETURNED: the job in reconcile gives the money back
             return answer("failed")
+    elif record.gateway == MELLAT:
+        state = _mellat_confirm(record)
+        if state != S.CONSUMED:
+            _set(record, state, CHECKING)
+            return answer("failed")
     else:
         result = zarinpal.verify(record.merchant_id, record.amount, record.authority)
         note(record, "verify", code=result.code, ref_id=result.ref_id, raw=result.raw[:500])
@@ -392,6 +531,8 @@ def abandon(record: PayRecord, reason: str) -> None:
         return
     if record.gateway == SNAPPPAY:
         _revert(record, reason)
+    elif record.gateway == MELLAT:
+        _mellat_resolve(record, reason)
     else:
         _set(record, S.FAILED, reason)
 
@@ -480,10 +621,15 @@ def reconcile() -> int:
         count += 1
         if record.gateway == SNAPPPAY:
             _resolve(record)
+        elif record.gateway == MELLAT:
+            _mellat_resolve(record)
         else:
             _set(record, S.FAILED, NOT_CONFIRMED)  # never verified: Zarinpal refunds it by itself
     for record in records.filter(state=S.UNKNOWN, updated__lt=now - RECHECK_AFTER):
         if _claim(record, (S.UNKNOWN,), S.CONFIRMING):
             count += 1
-            _resolve(record)
+            if record.gateway == MELLAT:
+                _mellat_resolve(record)
+            else:
+                _resolve(record)
     return count

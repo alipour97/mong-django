@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
@@ -200,6 +201,7 @@ def _gateway(g: BankGateway, stats: dict) -> dict:
     count, total, last = stats.get(g.bank.key, (0, 0, None))
     return {
         "id": g.id, "bankId": g.bank_id, "bankName": g.bank.name, "icon": g.bank.icon or None,
+        "gatewayKey": g.bank.key, "sandbox": settings.MELLAT_SANDBOX if g.bank.key == "mellat" else None,
         "merchantCode": g.merchant or g.terminal_id, "isDelete": g.is_deleted,
         "transactionCount": count, "sumTransactionPrice": total,
         "lastTransaction": {"createDate": jalali(last.verified_at or last.created), "price": last.amount} if last else None,
@@ -218,7 +220,9 @@ class GatewayListView(AdminView):
 
 class BankInfoView(AdminView):
     def get(self, request):
-        return ok({"result": [{"bankId": b.id, "bankName": b.name} for b in BankInfo.objects.filter(is_deleted=False)]})
+        return ok({"result": [{"bankId": b.id, "bankName": b.name, "gatewayKey": b.key,
+                               "sandbox": settings.MELLAT_SANDBOX if b.key == "mellat" else None}
+                              for b in BankInfo.objects.filter(is_deleted=False)]})
 
 
 def _save_gateway(request, g: BankGateway | None):
@@ -227,6 +231,12 @@ def _save_gateway(request, g: BankGateway | None):
     if not bank:
         return fail("این بانک موجود نیست.", 400)
     merchant, terminal = str(d.get("merchant") or "").strip(), str(d.get("terminalId") or "").strip()
+    if bank.key == "mellat":
+        from apps.payhub.mellat import positive_long
+
+        if not positive_long(terminal):
+            return fail("شماره ترمینال ملت باید یک عدد صحیح مثبت باشد.", 400)
+        merchant = ""
     if g is None and BankGateway.objects.filter(bank=bank, is_deleted=False).exists():
         return fail("این پورتال وجود دارد.", 400)
     g = g or BankGateway(created=timezone.now())

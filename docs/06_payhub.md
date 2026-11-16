@@ -1,6 +1,6 @@
 # فصل ۶: سرویس پرداخت واحد (`payhub.mong.ir`)
 
-همهٔ پرداخت‌های هر دو سایت از یک سرویس رد می‌شوند: `apps/payhub`. درگاه‌های فعلی زرین‌پال و اسنپ‌پی هستند.
+همهٔ پرداخت‌های هر دو سایت از یک سرویس رد می‌شوند: `apps/payhub`. درگاه‌های فعلی زرین‌پال، اسنپ‌پی و به‌پرداخت ملت هستند. ملت به‌صورت پیش‌فرض در محیط آزمایشی است؛ [راهنمای تنظیم و تست ملت](./behpardakht/README.md).
 
 ```text
 سایت جدید ─ فراخوانی داخلی ─┐
@@ -18,6 +18,8 @@
 | GET | `/GoToPayPage/{token}/{invoiceId}/{amount}` | زرین‌پال: انتقال مشتری به درگاه |
 | POST | `/GetPaymentToken/{token}/{invoiceId}/{amount}` | اسنپ‌پی: توکن پرداخت و صفحهٔ پرداخت |
 | GET، POST | `/zarinpal/callback/{token}` | بازگشت از زرین‌پال |
+| GET | `/mellat/pay/{token}` | فرم POST حاوی `RefId` برای انتقال به صفحهٔ ملت |
+| POST | `/mellat/callback/{token}` | تطبیق `RefId` و `SaleOrderId`؛ تأیید و تسویه در `PaymentVerification` |
 | GET، POST | `/api/SnappPay/CallBack/{id}/{token}` | `returnURL` اسنپ‌پی؛ verify همین‌جا و فقط یک بار انجام می‌شود |
 | POST | `/PaymentVerification/{token}` | نهایی کردن (verify زرین‌پال یا settle اسنپ‌پی)؛ `ok` فقط یک بار |
 | GET | `/CheckToken/{token}` | وضعیت پرداخت |
@@ -72,7 +74,7 @@
 ## راه‌اندازی
 
 1. ابتدا `deploy/nginx/payhub.mong.ir.conf` نصب و SSL صادر می‌شود.
-2. سپس `manage.py migrate payhub` اجرا و gunicorn با `--timeout 120` دوباره راه‌اندازی می‌شود.
+2. سپس `manage.py migrate` اجرا و gunicorn با `--timeout 180` دوباره راه‌اندازی می‌شود.
 3. کران `erp_outbox` از `crontab.txt` تعریف شده باشد (کران جدا برای `payhub_reconcile` لازم نیست).
 4. دامنهٔ ثبت‌شده نزد اسنپ‌پی `pay.mong.ir` است و اسنپ‌پی مشتری را به `https://pay.mong.ir/api/SnappPay/CallBack/{id}/{token}` برمی‌گرداند. `pay.mong.ir` مثل `payhub.mong.ir` به سرویس `dadeh` وصل می‌شود (فصل ۷). اگر به فرانت وصل شود هم کار می‌کند: `front/src/app/api/SnappPay/CallBack/[id]/[token]/route.ts` درخواست را بی‌تغییر به بک‌اند (`API_ORIGIN`) می‌فرستد. لینک شخصی زرین‌پال از `pay.mong.ir` به `checkout.mong.ir` منتقل شده است.
 

@@ -321,6 +321,11 @@ SMSIR_INVOICE_PARAM = os.getenv("SMSIR_INVOICE_PARAM", "INVOICE")
 # Online payment. SITE_URL is the storefront the customer returns to after paying.
 # (SITE_URL, defined at the top, is also the storefront the customer returns to after paying.)
 ZARINPAL_MERCHANT_ID = os.getenv("ZARINPAL_KEY", "")
+# Behpardakht IPG 1.38: the official development host is selected by default.
+MELLAT_SANDBOX = os.getenv("MELLAT_SANDBOX", "true").strip().lower() not in ("0", "false", "no", "off")
+MELLAT_TERMINAL_ID = os.getenv("MELLAT_TERMINAL_ID", "").strip()
+MELLAT_USERNAME = os.getenv("MELLAT_USERNAME", "")
+MELLAT_PASSWORD = os.getenv("MELLAT_PASSWORD", "")
 ZARINPAL_SANDBOX = os.getenv("ZARINPAL_SANDBOX", "false").lower() in ("1", "true", "yes")
 # A branded StartPay address. Empty (the default): Zarinpal's own payment.zarinpal.com/pg/StartPay.
 # Not checkout.mong.ir: that is a Zarinpal personal-link domain and answers 404 for /pg/StartPay/<authority>.

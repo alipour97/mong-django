@@ -35,7 +35,7 @@ from apps import smsir
 from apps.erp import outbox, store as erp_store, vouchers
 from apps.erp.connector import Refused
 from apps.payhub import service as hub
-from apps.payhub import snapppay, zarinpal
+from apps.payhub import mellat, snapppay, zarinpal
 from apps.payhub.models import PayRecord
 from apps.website.models import BankGateway, Customer, Invoice, InvoicePayment, ProductVariant
 
@@ -49,6 +49,7 @@ from .views import PublicView
 logger = logging.getLogger(__name__)
 
 ZARINPAL, SNAPPPAY = hub.ZARINPAL, hub.SNAPPPAY
+MELLAT = hub.MELLAT
 SUPPORTED = hub.GATEWAYS
 OFFER_SECONDS = 300  # product pages share the answer: one customer view is not one SnappPay call
 
@@ -72,6 +73,8 @@ def _enabled(key: str) -> bool:
         return False
     if key == ZARINPAL:
         return bool(zarinpal_merchant())
+    if key == MELLAT:
+        return mellat.configured()
     # SnappPay's OAuth client, user and API address stay in .env.
     return snapppay.configured()
 
@@ -126,6 +129,8 @@ def _payable_invoice(request, invoice_id) -> Invoice | None:
 
 
 def _test_money(gateway: str) -> bool:
+    if gateway == MELLAT:
+        return settings.MELLAT_SANDBOX
     return settings.ZARINPAL_SANDBOX if gateway == ZARINPAL else settings.SNAPPAY_IS_STAGE
 
 
@@ -204,6 +209,11 @@ def _start_payment(inv: Invoice, key: str) -> str:
     if key == ZARINPAL:
         url = hub.start_zarinpal(record, str(inv.id), inv.payable_amount)
         InvoicePayment.objects.create(invoice=inv, gateway=key, amount=inv.payable_amount, authority=record.authority)
+        return url
+    if key == MELLAT:
+        url = hub.start_mellat(record, str(inv.id), inv.payable_amount)
+        InvoicePayment.objects.create(invoice=inv, gateway=key, amount=inv.payable_amount, authority=record.authority,
+                                      transaction_id=record.gateway_transaction_id)
         return url
     started = hub.start_snapp(record, str(inv.id), inv.payable_amount, snapp_order(inv))
     InvoicePayment.objects.create(invoice=inv, gateway=key, amount=inv.payable_amount, authority=started["paymentToken"],
@@ -325,13 +335,14 @@ class ZeroAmountView(CustomerView):
         return answer(_confirmation(True, inv), message="پرداخت موفق با کارت هدیه.")
 
 
-def _finish(payment: InvoicePayment, success: bool, reference: str = "", card: str = "", error: str = "") -> None:
+def _finish(payment: InvoicePayment, success: bool, reference: str = "", card: str = "", error: str = "", *,
+            test: bool | None = None) -> None:
     with transaction.atomic():
         won = InvoicePayment.objects.filter(pk=payment.pk, verified_at__isnull=True).update(
             is_success=success, reference=reference, card_pan=card, error_message=error[:2000], verified_at=timezone.now())
         payment.refresh_from_db()
         if won and success and payment.invoice.state == S.PRE_INVOICE:
-            _mark_paid(payment.invoice, test=_test_money(payment.gateway))
+            _mark_paid(payment.invoice, test=_test_money(payment.gateway) if test is None else test)
         elif won and not success:
             _release_voucher(payment.invoice)
 
@@ -369,7 +380,8 @@ class PaymentVerificationView(PublicView):
         result = hub.confirm(record, record.transaction_id, record.amount)
         if result["status"] in ("ok", "duplicate"):
             reference = _gateway_reference(record)
-            _finish(payment, True, reference, record.card_pan)
+            _finish(payment, True, reference, record.card_pan,
+                    test=record.mellat_sandbox if record.gateway == MELLAT else None)
             return HttpResponseRedirect(_confirmation(True, payment.invoice, reference))
         logger.warning("payment %s not confirmed: %s (%s)", payment.pk, result["status"], record.error)
         if record.state != hub.S.RETURNED:  # RETURNED: coming back to this URL confirms again

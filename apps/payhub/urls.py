@@ -31,6 +31,8 @@ urlpatterns = [
     route(rf"^GoToPayPage/{TOKEN}/(?P<transaction_id>[^/]+)/(?P<pay_amount>[^/]+)/?$", v.GoToPayPageView),
     route(rf"^GetPaymentToken/{TOKEN}/(?P<transaction_id>[^/]+)/(?P<pay_amount>[^/]+)/?$", v.GetPaymentTokenView),
     route(rf"^zarinpal/callback/{TOKEN}/?$", v.ZarinpalCallbackView),
+    route(rf"^mellat/pay/{TOKEN}/?$", v.MellatPayView),
+    route(rf"^mellat/callback/{TOKEN}/?$", v.MellatCallbackView),
     route(rf"^PaymentVerification/{TOKEN}/?$", v.PaymentVerificationView),
     route(rf"^CheckToken/{TOKEN}/?$", v.CheckTokenView),
     route(rf"^api/SnappPay/CallBack/(?P<record_id>\d+)/{TOKEN}/?$", v.SnappCallbackView),
