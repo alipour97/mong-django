@@ -201,6 +201,35 @@ class ReadTests(TestCase):
     def test_after_discount_rounds_to_ten_thousand(self):
         self.assertEqual(dadehfa.after_discount(26800000, 62.724), 9990000)
 
+    def test_sync_updates_list_price_and_can_remove_a_discount(self):
+        source_rows = self.rows
+        price, reduction = 2000000, 30
+
+        def rows(sql, params=None):
+            result = source_rows(sql, params)
+            if "Products p" in sql and "p.Barcode" in sql:
+                return [{**row, "Price": price, "Reduction": reduction} for row in result]
+            return result
+
+        with mock.patch("apps.erp.dadehfa.fetch_all", side_effect=rows):
+            DadehfaConnector().sync(log=lambda message: None)
+            product = Product.objects.get(pk=5)
+            self.assertEqual((product.price, product.reduction, product.sale_price), (2000000, 30, 1400000))
+            price, reduction = 3000000, 0
+            DadehfaConnector().sync(log=lambda message: None)
+        product.refresh_from_db()
+        self.assertEqual((product.price, product.reduction, product.sale_price), (3000000, 0, 3000000))
+
+    def test_a_failed_price_read_keeps_the_last_local_price(self):
+        goods()
+        from sqlalchemy.exc import OperationalError
+
+        with mock.patch("apps.erp.dadehfa.fetch_all", side_effect=OperationalError("SELECT", {}, Exception("unavailable"))):
+            with self.assertRaises(OperationalError):
+                DadehfaConnector().sync(log=lambda message: None)
+        product = Product.objects.get(pk=1)
+        self.assertEqual((product.price, product.sale_price), (1000000, 1000000))
+
 
 class CatalogTests(TestCase):
     def setUp(self):

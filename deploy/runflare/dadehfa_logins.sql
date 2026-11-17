@@ -1,6 +1,6 @@
 -- Logins for the site on SQL Server. Run by hand in SSMS, after setting both passwords.
--- The reader sees the shop's database, and in the sales software's own database (PTCERPNew) only the two
--- point-of-sale tables the best-seller numbers are summed from. The writer can add invoices and
+-- The reader sees the shop's database, and in the sales software's own database (PTCERPNew) the two
+-- point-of-sale tables for best sellers and ViewPriceOnline for online prices. The writer can add invoices and
 -- what they need, and nothing more: no delete anywhere, no change to an existing invoice.
 -- The few updates are what the .NET site does to a paid invoice: the coupon or gift card it
 -- spent, the variant's Qty (and SalesCount when a voucher paid it all), the default address.
@@ -35,4 +35,5 @@ GO
 IF USER_ID('mong_reader') IS NULL CREATE USER mong_reader FOR LOGIN mong_reader;
 GRANT SELECT ON dbo.tblPosTransactions TO mong_reader;
 GRANT SELECT ON dbo.tblPosTransactionsItems TO mong_reader;
+GRANT SELECT ON dbo.ViewPriceOnline TO mong_reader;
 GO

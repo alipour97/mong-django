@@ -2,7 +2,9 @@
 The Dadehfa connector. Copies the shop's catalog, prices, stock, coupons and gift cards out of
 DadehfaOnlineShop (SELECT only, apps/legacy/db.py) on the sync's schedule, and writes paid invoices there
 (apps/erp/dadehfa_write.py). The site itself never reads it. The .NET service's jobs carry those invoices
-to the ERP and keep that database fresh, so the service must stay running while the site is on this connector.
+to the ERP and keep stock/catalog fresh, so the service must stay running while the site is on this connector.
+Prices and discounts come directly from the sales database's ViewPriceOnline during sync,
+joined by Products.MapId; products absent from the view keep Products.Price/Reduction.
 
 The rules below were worked out against the shop's own API, row by row:
 
@@ -31,9 +33,17 @@ from .models import ErpCoupon, ErpGiftCard
 PRICE_STEP = 10_000
 
 READERS = 4  # the reader engine's pool holds 2 + 2
-ON_SALE = """
+
+
+def _on_sale() -> str:
+    # Use the view's effective price for eligibility too: Products.Price may be stale.
+    db = settings.DADEHFA_SALES_DB
+    return f"""
     FROM Products p
-    WHERE p.IsDeleted = 0 AND p.IsActive = 1 AND p.IsSaleable = 1 AND p.Price > 0
+    LEFT JOIN [{db}].dbo.ViewPriceOnline online_price
+        ON online_price.ProductMain_ID = TRY_CONVERT(bigint, p.MapId)
+    WHERE p.IsDeleted = 0 AND p.IsActive = 1 AND p.IsSaleable = 1
+        AND COALESCE(online_price.SalePrice, p.Price) > 0
 """
 
 
@@ -73,9 +83,11 @@ def _categories() -> list[dict]:
 
 def _products(brand_ids: set[int], category_ids: set[int]) -> list[dict]:
     rows = fetch_all(f"""
-        SELECT p.Id, p.Title, p.Slug, p.HasManualSlug, p.CategoryId, p.BrandId, p.Barcode, p.Price, p.Reduction, p.VAT, p.Created,
+        SELECT p.Id, p.Title, p.Slug, p.HasManualSlug, p.CategoryId, p.BrandId, p.Barcode,
+               COALESCE(online_price.SalePrice, p.Price) AS Price,
+               COALESCE(online_price.Reduction, p.Reduction) AS Reduction, p.VAT, p.Created,
                p.ShortDesc, p.ProductSeasonTitle, p.ProductStyleTitle
-        {ON_SALE}""")
+        {_on_sale()}""")
     products = []
     for p in rows:
         price, reduction = _rial(p["Price"]), float(p["Reduction"] or 0)
@@ -102,7 +114,7 @@ def _variants() -> list[store.VariantRow]:
             FROM ProductVariants v
             JOIN VariantFeatureValues f ON f.ProductVariantId = v.Id AND f.IsDeleted = 0
             JOIN FeatureValueDependencies d ON d.Id = f.FeatureValueDependencyId AND d.IsDeleted = 0
-            WHERE v.IsDeleted = 0 AND v.ProductId IN (SELECT p.Id {ON_SALE}) ORDER BY f.Id"""):
+            WHERE v.IsDeleted = 0 AND v.ProductId IN (SELECT p.Id {_on_sale()}) ORDER BY f.Id"""):
         latest[row["vid"]] = row  # a variant's newest link is the one invoices use
     rows = []
     for v in latest.values():
@@ -124,7 +136,7 @@ def _stock_rows() -> list[store.StockRow]:
         FROM VariantWarehouses w
         JOIN ProductVariants v ON v.Id = w.ProductVariantId
         LEFT JOIN Warehouses h ON h.Id = w.WarehouseId
-        WHERE w.IsDeleted = 0 AND v.IsDeleted = 0 AND v.ProductId IN (SELECT p.Id {ON_SALE})
+        WHERE w.IsDeleted = 0 AND v.IsDeleted = 0 AND v.ProductId IN (SELECT p.Id {_on_sale()})
         GROUP BY w.ProductVariantId, w.WarehouseId, h.WarehouseTitle
         HAVING SUM(w.Qty) > 0""")]
 
