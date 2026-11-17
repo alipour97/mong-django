@@ -11,6 +11,7 @@ from datetime import timedelta
 from decimal import Decimal
 from typing import NamedTuple
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
@@ -165,7 +166,11 @@ def barcodes() -> list[tuple[str, int, int]]:
 
 def online_stock():
     rows = VariantStock.objects.all()
-    return rows if get_connector().all_warehouses else rows.filter(warehouse_id__in=online_warehouse_ids())
+    connector = get_connector()
+    if connector.name == "dadehfa":
+        # Never interpret Samian ids as Dadehfa ids or offer every synced warehouse.
+        return rows.filter(warehouse_id__in=settings.DADEHFA_STOREFRONT_WAREHOUSE_IDS)
+    return rows if connector.all_warehouses else rows.filter(warehouse_id__in=online_warehouse_ids())
 
 
 def take(variant_id: int, qty: Decimal) -> None:

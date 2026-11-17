@@ -27,7 +27,54 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 
 from apps.storefront import catalog
+from apps.storefront.snappay_logger import log_snappay_access
 from apps.website.models import Product, ProductAIProfile
+
+_ARABIC_TO_PERSIAN_TRANS = str.maketrans({
+    "ي": "ی", "ى": "ی", "ك": "ک", "ۀ": "ه", "ة": "ه",
+})
+
+
+def normalize_persian_text(val: Any) -> Any:
+    """Normalize Arabic Kaf and Yeh, FreeS to Persian standard across strings and collections."""
+    if isinstance(val, str):
+        t = val.translate(_ARABIC_TO_PERSIAN_TRANS)
+        if t.strip() in ("FreeS", "frees", "Frees", "free_size", "Free Size"):
+            return "فری‌سایز"
+        return t
+    elif isinstance(val, dict):
+        return {normalize_persian_text(k): normalize_persian_text(v) for k, v in val.items()}
+    elif isinstance(val, list):
+        return [normalize_persian_text(x) for x in val]
+    return val
+
+
+def sort_sizes(size_list: list[str]) -> list[str]:
+    """Sort sizes with Free Size first, followed by numeric sizes ascending, then others."""
+    def _key(s: str):
+        s_strip = s.strip()
+        if s_strip.isdigit():
+            return (1, int(s_strip), "")
+        if "فری" in s_strip:
+            return (0, 0, "")
+        return (2, 0, s_strip)
+    return sorted(size_list, key=_key)
+
+
+def clean_gtin(code: str) -> str:
+    """
+    Validate GTIN checksum according to GS1 rules (8, 12, 13, 14 digits).
+    Returns valid GTIN or empty string if it's an internal retail code (e.g. 10 or 4 digits).
+    """
+    code = (code or "").strip()
+    if not code.isdigit() or len(code) not in (8, 12, 13, 14):
+        return ""
+    digits = [int(c) for c in code]
+    check = digits[-1]
+    reversed_digits = digits[:-1][::-1]
+    total = sum(d * (3 if i % 2 == 0 else 1) for i, d in enumerate(reversed_digits))
+    expected = (10 - (total % 10)) % 10
+    return code if check == expected else ""
 
 # Official SearchWise / SnappPay crawler IPs from specification
 SNAPPAY_DEFAULT_IPS = {
@@ -350,13 +397,37 @@ def build_snappay_product(
 
     # 7. Variants (colors & sizes)
     visible_variants = bundle.visible_variants(p.id)
-    colors = list(dict.fromkeys(v.color.name for v in visible_variants if v.color and v.color.name))
-    sizes = list(dict.fromkeys(v.size.name for v in visible_variants if v.size and v.size.name))
+    # Prefer in-stock variants when available so out-of-stock sizes aren't falsely advertised
+    in_stock_variants = [v for v in visible_variants if getattr(v, "stock", 0) > 0]
+    active_variants = in_stock_variants if in_stock_variants else visible_variants
+
+    raw_colors = [v.color.name for v in active_variants if v.color and v.color.name]
+    raw_sizes = [v.size.name for v in active_variants if v.size and v.size.name]
+
+    colors = []
+    for c in raw_colors:
+        norm_c = normalize_persian_text(c).strip()
+        if norm_c and norm_c not in colors:
+            colors.append(norm_c)
+
+    sizes = []
+    for s in raw_sizes:
+        norm_s = normalize_persian_text(s).strip()
+        if norm_s and norm_s not in sizes:
+            sizes.append(norm_s)
+    sizes = sort_sizes(sizes)
 
     link = f"{base_url}/products-item/{p.slug}"
 
+    meta_desc = (ai.meta_description if ai and ai.meta_description else "") or ""
+    if not meta_desc.strip():
+        meta_desc = f"{title} - برند مانگ با تضمین کیفیت دوخت و پارچه"
+
+    valid_gtin = clean_gtin(p.barcode)
+
     item: dict[str, Any] = {
         "id": str(p.id),
+        "sku": p.barcode or str(p.id),
         "title": title,
         "subtitle": subtitle,
         "link": link,
@@ -364,11 +435,13 @@ def build_snappay_product(
         "availability": "in stock" if in_stk else "out of stock",
         "regular_price": regular_price,
         "sale_price": sale_price,
+        "currency": "IRR",
         "category": category_str,
+        "short_description": meta_desc,
         "description": desc_dict,
         "brand": "مانگ",
-        "GTIN": p.barcode or "",
-        "gtin": p.barcode or "",
+        "GTIN": valid_gtin,
+        "gtin": valid_gtin,
     }
 
     if colors:
@@ -388,7 +461,7 @@ def build_snappay_product(
         if ai.summary_bullets:
             item["summary_bullets"] = ai.summary_bullets
 
-    return item
+    return normalize_persian_text(item)
 
 
 def get_all_snappay_products(
@@ -515,15 +588,35 @@ class SnappPayFeedView(View):
 
     def get(self, request: HttpRequest, *args, **kwargs):
         if not is_snappay_authorized(request):
+            log_snappay_access(
+                "Method 2: Product Feed (JSON/XML)",
+                request,
+                status_code=403,
+                note="Forbidden: IP or token not allowed",
+            )
             return JsonResponse({"error": "Forbidden: IP not allowed"}, status=403)
 
         force_refresh = _should_force_refresh(request)
         feed_format = request.GET.get("format", "").lower()
         if kwargs.get("format") == "xml" or feed_format == "xml":
             products = get_all_snappay_products(force_refresh=force_refresh)
+            log_snappay_access(
+                "Method 2: Product Feed (XML)",
+                request,
+                status_code=200,
+                items_count=len(products),
+                params={"format": "xml", "refresh": force_refresh},
+            )
             return HttpResponse(to_xml(products), content_type="application/xml; charset=utf-8")
 
         products = get_all_snappay_products(force_refresh=force_refresh)
+        log_snappay_access(
+            "Method 2: Product Feed (JSON)",
+            request,
+            status_code=200,
+            items_count=len(products),
+            params={"format": "json", "refresh": force_refresh},
+        )
         return JsonResponse(products, safe=False, json_dumps_params={"ensure_ascii": False})
 
 
@@ -539,6 +632,12 @@ class SnappPayProductsView(View):
 
     def get(self, request: HttpRequest, *args, **kwargs):
         if not is_snappay_authorized(request):
+            log_snappay_access(
+                "Method 3: REST API (/api/snappay/products)",
+                request,
+                status_code=403,
+                note="Forbidden: IP not allowed",
+            )
             return JsonResponse({"error": "Forbidden: IP not allowed"}, status=403)
 
         # 1. Single product lookup via query parameter (un-cached, real-time)
@@ -547,7 +646,22 @@ class SnappPayProductsView(View):
         if pid or slug:
             item = get_single_snappay_product(pid or slug)
             if not item:
+                log_snappay_access(
+                    "Method 3: REST API (/api/snappay/products)",
+                    request,
+                    status_code=404,
+                    params={"id": pid, "slug": slug},
+                    note="Product not found",
+                )
                 return JsonResponse({"error": "Product not found"}, status=404)
+            log_snappay_access(
+                "Method 3: REST API (/api/snappay/products)",
+                request,
+                status_code=200,
+                items_count=1,
+                params={"id": pid, "slug": slug},
+                note=f"Single product lookup: {item.get('title')}",
+            )
             return JsonResponse(item, json_dumps_params={"ensure_ascii": False})
 
         # 2. Paginated list
@@ -560,6 +674,13 @@ class SnappPayProductsView(View):
 
         # If no page/size given and format is raw array requested
         if not page_str and not size_str and request.GET.get("format") == "array":
+            log_snappay_access(
+                "Method 3: REST API (/api/snappay/products)",
+                request,
+                status_code=200,
+                items_count=total_count,
+                params={"format": "array"},
+            )
             return JsonResponse(all_products, safe=False, json_dumps_params={"ensure_ascii": False})
 
         page = max(1, int(page_str)) if page_str and page_str.isdigit() else 1
@@ -581,6 +702,15 @@ class SnappPayProductsView(View):
             "products": page_items,
         }
 
+        log_snappay_access(
+            "Method 3: REST API (/api/snappay/products)",
+            request,
+            status_code=200,
+            items_count=len(page_items),
+            params={"page": page, "size": size},
+            note=f"Page {page}/{total_pages} ({len(page_items)} items)",
+        )
+
         response = JsonResponse(payload, json_dumps_params={"ensure_ascii": False})
         response["X-Total-Count"] = str(total_count)
         response["X-Page"] = str(page)
@@ -598,11 +728,33 @@ class SnappPayProductDetailView(View):
 
     def get(self, request: HttpRequest, identifier: str, *args, **kwargs):
         if not is_snappay_authorized(request):
+            log_snappay_access(
+                "Method 3: REST Single Product",
+                request,
+                status_code=403,
+                note="Forbidden: IP not allowed",
+            )
             return JsonResponse({"error": "Forbidden: IP not allowed"}, status=403)
 
         item = get_single_snappay_product(identifier)
         if not item:
+            log_snappay_access(
+                "Method 3: REST Single Product",
+                request,
+                status_code=404,
+                params={"identifier": identifier},
+                note="Product not found",
+            )
             return JsonResponse({"error": "Product not found"}, status=404)
+
+        log_snappay_access(
+            "Method 3: REST Single Product",
+            request,
+            status_code=200,
+            items_count=1,
+            params={"identifier": identifier},
+            note=f"Item: {item.get('title')}",
+        )
         return JsonResponse(item, json_dumps_params={"ensure_ascii": False})
 
 
@@ -631,6 +783,12 @@ class SnappPayLegacyProductListView(View):
 
     def _handle(self, request: HttpRequest):
         if not is_snappay_authorized(request):
+            log_snappay_access(
+                "Method 3: Legacy .NET List (/api/SnappPay/ProductList)",
+                request,
+                status_code=403,
+                note="Forbidden: IP not whitelisted",
+            )
             return JsonResponse(
                 {"result": None, "resultMessage": "Forbidden: IP not whitelisted", "statusCode": 403},
                 status=403,
@@ -644,6 +802,13 @@ class SnappPayLegacyProductListView(View):
         if pid or slug:
             item = get_single_snappay_product(pid or slug)
             if not item:
+                log_snappay_access(
+                    "Method 3: Legacy .NET List (/api/SnappPay/ProductList)",
+                    request,
+                    status_code=404,
+                    params=params,
+                    note="Single product not found",
+                )
                 return JsonResponse(
                     {
                         "isSuccess": False,
@@ -655,6 +820,14 @@ class SnappPayLegacyProductListView(View):
                     },
                     status=404,
                 )
+            log_snappay_access(
+                "Method 3: Legacy .NET List (/api/SnappPay/ProductList)",
+                request,
+                status_code=200,
+                items_count=1,
+                params=params,
+                note=f"Single product: {item.get('title')}",
+            )
             return JsonResponse(
                 {
                     "isSuccess": True,
@@ -688,6 +861,15 @@ class SnappPayLegacyProductListView(View):
         end = start + size
         page_items = all_products[start:end]
         max_pages = math.ceil(total_count / size) if size > 0 else 1
+
+        log_snappay_access(
+            "Method 3: Legacy .NET List (/api/SnappPay/ProductList)",
+            request,
+            status_code=200,
+            items_count=len(page_items),
+            params={"page": page, "size": size},
+            note=f"Legacy page {page}/{max_pages} ({len(page_items)} items)",
+        )
 
         # Match legacy PaginationResult & ResultDto shape from dadehfa-snappay.pdf
         return JsonResponse(
@@ -738,6 +920,12 @@ class SnappPayLegacyProductInfoView(View):
 
     def _handle(self, request: HttpRequest):
         if not is_snappay_authorized(request):
+            log_snappay_access(
+                "Method 3: Legacy .NET Info (/api/SnappPay/ProductInfo)",
+                request,
+                status_code=403,
+                note="Forbidden: IP not whitelisted",
+            )
             return JsonResponse(
                 {"isSuccess": False, "result": None, "resultMessage": "Forbidden: IP not whitelisted", "statusCode": 403},
                 status=403,
@@ -748,6 +936,13 @@ class SnappPayLegacyProductInfoView(View):
         slug = params.get("slug") or params.get("Slug")
 
         if not pid and not slug:
+            log_snappay_access(
+                "Method 3: Legacy .NET Info (/api/SnappPay/ProductInfo)",
+                request,
+                status_code=400,
+                params=params,
+                note="Missing Id and Slug parameters",
+            )
             return JsonResponse(
                 {
                     "isSuccess": False,
@@ -766,6 +961,13 @@ class SnappPayLegacyProductInfoView(View):
 
         item = get_single_snappay_product(pid or slug)
         if not item:
+            log_snappay_access(
+                "Method 3: Legacy .NET Info (/api/SnappPay/ProductInfo)",
+                request,
+                status_code=404,
+                params=params,
+                note="Product not found",
+            )
             return JsonResponse(
                 {
                     "isSuccess": False,
@@ -779,6 +981,14 @@ class SnappPayLegacyProductInfoView(View):
                 json_dumps_params={"ensure_ascii": False},
             )
 
+        log_snappay_access(
+            "Method 3: Legacy .NET Info (/api/SnappPay/ProductInfo)",
+            request,
+            status_code=200,
+            items_count=1,
+            params=params,
+            note=f"Item found: {item.get('title')}",
+        )
         return JsonResponse(
             {
                 "isSuccess": True,
@@ -795,3 +1005,127 @@ class SnappPayLegacyProductInfoView(View):
 
     def post(self, request: HttpRequest):
         return self._handle(request)
+
+class SnappPayLogsView(View):
+    """
+    API endpoint to fetch SnappPay crawler access logs.
+    GET /api/snappay/logs?limit=50&snappay_only=1
+    """
+    def get(self, request: HttpRequest, *args, **kwargs):
+        from apps.storefront.snappay_logger import ACCESS_JSONL_FILE
+        limit = max(1, min(200, int(request.GET.get("limit", 50))))
+        snappay_only = request.GET.get("snappay_only", "").lower() in ("1", "true", "yes")
+
+        records = []
+        if ACCESS_JSONL_FILE.exists():
+            try:
+                with open(ACCESS_JSONL_FILE, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            rec = json.loads(line)
+                            if snappay_only and not rec.get("is_snappay_ip"):
+                                continue
+                            records.append(rec)
+                        except Exception:
+                            pass
+            except Exception as e:
+                return JsonResponse({"error": str(e)}, status=500)
+
+        records = records[-limit:][::-1]  # Newest first
+        return JsonResponse({"total": len(records), "logs": records}, json_dumps_params={"ensure_ascii": False})
+
+
+class SnappPayLogsHtmlView(View):
+    """
+    Web visual dashboard to monitor SnappPay crawler requests directly in browser.
+    GET /api/snappay/logs/view
+    """
+    def get(self, request: HttpRequest, *args, **kwargs):
+        from apps.storefront.snappay_logger import ACCESS_JSONL_FILE, SNAPPAY_OFFICIAL_IPS
+        records = []
+        if ACCESS_JSONL_FILE.exists():
+            try:
+                with open(ACCESS_JSONL_FILE, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            try:
+                                records.append(json.loads(line))
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+
+        records = records[-100:][::-1]  # Newest first 100
+        total_snappay = sum(1 for r in records if r.get("is_snappay_ip"))
+
+        rows_html = []
+        for r in records:
+            is_sp = r.get("is_snappay_ip")
+            badge = '<span style="background:#10b981;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;">رسمی اسنپ‌پی</span>' if is_sp else '<span style="background:#64748b;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;">سایر IPها</span>'
+            status = r.get("status_code", 200)
+            st_color = "#16a34a" if status == 200 else ("#dc2626" if status >= 400 else "#d97706")
+            rows_html.append(f"""
+            <tr style="border-bottom:1px solid #e2e8f0;{'background:#f0fdf4;' if is_sp else ''}">
+                <td style="padding:10px;font-family:monospace;direction:ltr;text-align:left;">{r.get('timestamp')}</td>
+                <td style="padding:10px;font-family:monospace;direction:ltr;text-align:left;font-weight:bold;">{r.get('ip')}</td>
+                <td style="padding:10px;">{badge}</td>
+                <td style="padding:10px;font-weight:600;">{r.get('channel')}</td>
+                <td style="padding:10px;font-family:monospace;direction:ltr;text-align:left;">{r.get('verb')} {r.get('path')}</td>
+                <td style="padding:10px;color:{st_color};font-weight:bold;">{status}</td>
+                <td style="padding:10px;">{r.get('items_count', '-')}</td>
+                <td style="padding:10px;font-size:11px;color:#64748b;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{r.get('user_agent','')}">{r.get('user_agent','')}</td>
+            </tr>
+            """)
+
+        html_content = f"""<!DOCTYPE html>
+<html dir="rtl" lang="fa">
+<head>
+    <meta charset="utf-8">
+    <title>داشبورد لاگ درخواست‌های اسنپ‌پی (SearchWise)</title>
+    <style>
+        body {{ font-family: Tahoma, Vazirmatn, sans-serif; background:#f8fafc; margin:0; padding:24px; color:#1e293b; }}
+        .card {{ background:#fff; border-radius:12px; box-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1); padding:24px; max-width:1200px; margin:0 auto; }}
+        .header {{ display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #e2e8f0; padding-bottom:16px; margin-bottom:20px; }}
+        table {{ width:100%; border-collapse:collapse; font-size:13px; }}
+        th {{ background:#0f2c59; color:#fff; padding:12px 10px; text-align:right; font-weight:600; }}
+        .stat-box {{ display:inline-block; padding:8px 16px; border-radius:8px; background:#e0f2fe; color:#0369a1; font-weight:bold; margin-left:10px; }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <div>
+                <h2 style="margin:0;color:#0f2c59;">گزارش زنده درخواست‌های اسنپ‌پی / سرچ‌وایز</h2>
+                <p style="margin:6px 0 0;color:#64748b;font-size:13px;">نمایش آخرین ۱۰۰ درخواست ورودی از ۳ روش (سایت‌مپ، فید JSON و ووکامرس)</p>
+            </div>
+            <div>
+                <span class="stat-box">کل درخواست‌ها: {len(records)}</span>
+                <span class="stat-box" style="background:#dcfce7;color:#15803d;">درخواست اسنپ‌پی: {total_snappay}</span>
+                <button onclick="location.reload()" style="padding:8px 16px;background:#0284c7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:inherit;">بروزرسانی 🔄</button>
+            </div>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th style="direction:ltr;text-align:left;">زمان (Tehran)</th>
+                    <th style="direction:ltr;text-align:left;">IP کلاینت</th>
+                    <th>نوع کاربر</th>
+                    <th>روش اتصال (Method)</th>
+                    <th style="direction:ltr;text-align:left;">آدرس درخواستی</th>
+                    <th>کد وضعیت</th>
+                    <th>تعداد کالا</th>
+                    <th>User-Agent</th>
+                </tr>
+            </thead>
+            <tbody>
+                {''.join(rows_html) if rows_html else '<tr><td colspan="8" style="text-align:center;padding:30px;color:#94a3b8;">هنوز درخواستی ثبت نشده است.</td></tr>'}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>"""
+        return HttpResponse(html_content, content_type="text/html; charset=utf-8")

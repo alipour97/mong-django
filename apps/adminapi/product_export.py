@@ -5,6 +5,7 @@ from decimal import Decimal
 from io import BytesIO
 import json
 
+from django.conf import settings
 from openpyxl import Workbook
 from openpyxl.cell import WriteOnlyCell
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
@@ -13,7 +14,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from apps.erp.models import LebazaiImage
 from apps.erp.store import online_stock
 from apps.website.models import (
-    HiddenImage, Product, ProductAIProfile, ProductCollection, ProductTag,
+    HiddenImage, Product, ProductAIProfile,
     ProductVariant, SiteSetting, VariantStock,
 )
 
@@ -59,19 +60,15 @@ def _append(sheet, values, *, header=False):
 
 def product_workbook():
     wb = Workbook(write_only=True)
-    fields = [f for f in Product._meta.concrete_fields]
-    variant_fields = list(ProductVariant._meta.concrete_fields)
-    ai_fields = list(ProductAIProfile._meta.concrete_fields)
+    # Explicit report schema follows the reviewed workbook (red columns removed).
+    names = {"created", "last_modified", "title", "price", "reduction", "show_torob",
+             "view_count", "product_season_title", "on_sale", "erp_id", "sale_price"}
+    fields = [f for f in Product._meta.concrete_fields if f.name in names]
     sheets = {}
     headers = {
         "Products": [f.attname + (" (IRR)" if f.name in {"price", "sale_price"} else "") for f in fields]
-            + ["subcode", "category", "brand", "qty_online_available", "colors", "image_count", "visible_image_count", "tags", "collections"],
-        "Variants": [f.attname for f in variant_fields] + ["qty_online_available", "price_before_sale (IRR)", "price_after_sale (IRR)"],
-        "Colors": ["product_id", "subcode", "color_id", "color", "color_value", "qty_online_available", "image_count", "visible_image_count"],
-        "Images": ["product_id", "subcode", "color_id", "image_id", "position", "key", "source_url", "hidden"],
-        "Features": ["product_id", "subcode", "source", "feature", "value"],
+            + ["subcode", "category", "brand", "qty_online_available", "colors", "visible_image_count"],
         "Warehouse Stock": ["product_id", "variant_id", "barcode", "warehouse_id", "warehouse", "qty", "online_warehouse"],
-        "AI Details": [f.attname for f in ai_fields],
     }
     for title, columns in headers.items():
         sheet = sheets[title] = wb.create_sheet(title)
@@ -85,13 +82,13 @@ def product_workbook():
     minimum = float(setting.min_qty) if setting else 0
     hidden = set(HiddenImage.objects.values_list("key", flat=True))
     # Include inactive/out-of-stock products too. Deleted products are excluded.
-    ids = list(Product.objects.filter(is_deleted=False).order_by("id").values_list("id", flat=True))
+    ids = list(Product.objects.filter(is_deleted=False, brand_id__in=settings.STOREFRONT_BRAND_IDS).order_by("id").values_list("id", flat=True))
     for start in range(0, len(ids), 1000):
         batch = ids[start:start + 1000]
         products = Product.objects.filter(id__in=batch).select_related("category", "brand").order_by("id")
         variants = list(ProductVariant.objects.filter(product_id__in=batch, is_deleted=False).order_by("id"))
         online_ids = set(online_stock().filter(variant__product_id__in=batch).values_list("id", flat=True))
-        stock = list(VariantStock.objects.filter(variant__product_id__in=batch).select_related("variant"))
+        stock = list(online_stock().filter(variant__product_id__in=batch, variant__is_deleted=False).select_related("variant"))
         qty = defaultdict(float)
         for row in stock:
             if row.id in online_ids:
@@ -103,11 +100,6 @@ def product_workbook():
         for img in LebazaiImage.objects.filter(product_id__in=batch).order_by("product_id", "color_id", "position", "id"):
             images[img.product_id].append(img)
         profiles = {a.product_id: a for a in ProductAIProfile.objects.filter(product_id__in=batch)}
-        tags, collections = defaultdict(list), defaultdict(list)
-        for link in ProductTag.objects.filter(product_id__in=batch, is_deleted=False).select_related("tag"):
-            tags[link.product_id].append(link.tag.title)
-        for link in ProductCollection.objects.filter(product_id__in=batch, is_deleted=False).select_related("collection"):
-            collections[link.product_id].append(link.collection.title)
         grouped = defaultdict(list)
         for v in variants:
             grouped[v.product_id].append(v)
@@ -118,25 +110,7 @@ def product_workbook():
             _append(sheets["Products"], [getattr(p, f.attname) for f in fields] + [subcode,
                 p.category.title if p.category else "", p.brand.title if p.brand else "",
                 sum(available[v.id] for v in vs), ", ".join(dict.fromkeys(v.color_name for v in vs)),
-                len(photos), sum(i.key not in hidden for i in photos), tags[p.id], collections[p.id]])
-            colors = {}
-            image_counts = defaultdict(lambda: [0, 0])
-            for v in vs:
-                _append(sheets["Variants"], [getattr(v, f.attname) for f in variant_fields] + [available[v.id], p.price, p.sale_price])
-                c = colors.setdefault(v.color_id, [v.color_name, v.color_value, 0])
-                c[2] += available[v.id]
-            for img in photos:
-                image_counts[img.color_id][0] += 1
-                image_counts[img.color_id][1] += img.key not in hidden
-                colors.setdefault(img.color_id, ["", "", 0])
-                _append(sheets["Images"], [p.id, subcode, img.color_id, img.id, img.position, img.key, img.source_url, img.key in hidden])
-            for cid, (name, value, count) in colors.items():
-                _append(sheets["Colors"], [p.id, subcode, cid, name, value, count, *image_counts[cid]])
-            for source, attrs in [("product", p.attributes), ("AI", ai.attributes if ai else {})]:
-                for key, value in (attrs.items() if isinstance(attrs, dict) else [("attributes", attrs)]):
-                    _append(sheets["Features"], [p.id, subcode, source, key, value])
-            if ai:
-                _append(sheets["AI Details"], [getattr(ai, f.attname) for f in ai_fields])
+                sum(i.key not in hidden for i in photos)])
     for sheet in sheets.values():
         sheet.auto_filter.ref = f"A1:{get_column_letter(len(headers[sheet.title]))}{sheet.export_row_count}"
     output = BytesIO()

@@ -21,4 +21,10 @@ urlpatterns = [
     # Legacy .NET API Compatibility: /api/SnappPay/ProductList and /api/SnappPay/ProductInfo
     re_path(r"^[Pp]roduct[Ll]ist/?$", views.SnappPayLegacyProductListView.as_view(), name="snappay-legacy-list"),
     re_path(r"^[Pp]roduct[Ii]nfo/?$", views.SnappPayLegacyProductInfoView.as_view(), name="snappay-legacy-info"),
+
+    # Access Logs & Web Dashboard
+    path("logs", views.SnappPayLogsView.as_view(), name="snappay-logs-api"),
+    path("logs/", views.SnappPayLogsView.as_view()),
+    path("logs/view", views.SnappPayLogsHtmlView.as_view(), name="snappay-logs-html"),
+    path("logs/view/", views.SnappPayLogsHtmlView.as_view()),
 ]

@@ -32,6 +32,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from apps.storefront import catalog
 from apps.storefront.snappay_crawler import build_snappay_product, get_all_snappay_products, get_base_url
+from apps.storefront.snappay_logger import log_snappay_access
 from apps.website import slugs
 from apps.website.models import Product, ProductAIProfile, ProductSlugAlias
 
@@ -122,6 +123,11 @@ def _truthy(value: Any) -> bool:
 def plugin_item(item: dict[str, Any], p: Product, include_content: bool) -> dict[str, Any]:
     """One product in the plugin's fields, from the SnappPay feed item."""
     category = [c.strip() for c in item["category"].split(">") if c.strip() and c.strip() != "مد و پوشاک"]
+    short_desc = item.get("meta_description", "") or ""
+    if not short_desc.strip():
+        cat_suffix = f" در دسته‌بندی {' > '.join(category)}" if category else ""
+        short_desc = f"{item['title']} - برند مانگ{cat_suffix}"
+
     out: dict[str, Any] = {
         "id": p.id,
         "slug": p.slug,
@@ -133,11 +139,12 @@ def plugin_item(item: dict[str, Any], p: Product, include_content: bool) -> dict
     out.update({
         "regular_price": item["regular_price"],
         "sale_price": item["sale_price"],
+        "currency": "IRR",
         "availability": "instock" if item["availability"] == "in stock" else "outofstock",
         "category": category,
         "image_link": item["image_link"],
         "link": item["link"],
-        "short_description": item.get("meta_description", "") or "",
+        "short_description": short_desc,
         "description": item["description"],
         "shipping_cost": item["shipping_cost"],
         "delivery_time": item["delivery_time"],
@@ -197,15 +204,87 @@ class SearchwiseFeedView(View):
     def post(self, request: HttpRequest, *args, **kwargs):
         denied = check_key(request)
         if denied:
+            log_snappay_access(
+                "Method 3: WooCommerce Feed (/wp-json/v1/product/feed)",
+                request,
+                status_code=denied.status_code,
+                note="Unauthorized / Invalid API Key",
+            )
             return denied
+
         params = _params(request)
+
+        # Validate page parameter strictly (criticism #2)
+        raw_page = params.get("page")
+        if raw_page is not None and str(raw_page).strip() != "":
+            try:
+                page_val = int(raw_page)
+                if page_val < 1:
+                    log_snappay_access(
+                        "Method 3: WooCommerce Feed (/wp-json/v1/product/feed)",
+                        request,
+                        status_code=400,
+                        params=params,
+                        note="Validation failed: page must be >= 1",
+                    )
+                    return JsonResponse(
+                        {"code": "rest_invalid_param", "message": "Invalid parameter: page must be greater than or equal to 1.", "data": {"status": 400}},
+                        status=400,
+                    )
+            except (ValueError, TypeError):
+                log_snappay_access(
+                    "Method 3: WooCommerce Feed (/wp-json/v1/product/feed)",
+                    request,
+                    status_code=400,
+                    params=params,
+                    note=f"Validation failed: page is not integer ({raw_page})",
+                )
+                return JsonResponse(
+                    {"code": "rest_invalid_param", "message": "Invalid parameter: page must be an integer.", "data": {"status": 400}},
+                    status=400,
+                )
+
+        # Validate limit/size parameter strictly
+        raw_limit = params.get("limit") or params.get("size")
+        if raw_limit is not None and str(raw_limit).strip() != "":
+            try:
+                limit_val = int(raw_limit)
+                if limit_val < 1:
+                    log_snappay_access(
+                        "Method 3: WooCommerce Feed (/wp-json/v1/product/feed)",
+                        request,
+                        status_code=400,
+                        params=params,
+                        note="Validation failed: limit must be >= 1",
+                    )
+                    return JsonResponse(
+                        {"code": "rest_invalid_param", "message": "Invalid parameter: limit must be greater than or equal to 1.", "data": {"status": 400}},
+                        status=400,
+                    )
+            except (ValueError, TypeError):
+                log_snappay_access(
+                    "Method 3: WooCommerce Feed (/wp-json/v1/product/feed)",
+                    request,
+                    status_code=400,
+                    params=params,
+                    note=f"Validation failed: limit is not integer ({raw_limit})",
+                )
+                return JsonResponse(
+                    {"code": "rest_invalid_param", "message": "Invalid parameter: limit must be an integer.", "data": {"status": 400}},
+                    status=400,
+                )
+
         include_content = _truthy(params.get("include_content", ""))
         ids, slug_list = _list(params.get("products")), _list(params.get("slugs"))
 
         if ids:
-            data: dict[str, Any] = {"products": _by_ids(ids, include_content)}
+            products_res = _by_ids(ids, include_content)
+            data: dict[str, Any] = {"products": products_res}
+            count_returned = len(products_res)
         elif slug_list:
-            data = {"products": _by_slugs(slug_list, include_content)}
+            products_res = _by_slugs(slug_list, include_content)
+            data = {"products": products_res}
+            count_returned = len(products_res)
         else:
             limit = max(1, min(MAX_LIMIT, _int(params.get("limit") or params.get("size"), 100)))
             page = max(1, _int(params.get("page"), 1))
@@ -213,13 +292,28 @@ class SearchwiseFeedView(View):
             feed = sorted(get_all_snappay_products(), key=lambda x: int(x["id"]), reverse=True)
             chunk = feed[(page - 1) * limit: page * limit]
             products = Product.objects.in_bulk([int(x["id"]) for x in chunk])
+            products_res = [plugin_item(x, products[int(x["id"])], include_content)
+                            for x in chunk if int(x["id"]) in products]
             data = {
                 "count": len(feed),
                 "max_pages": math.ceil(len(feed) / limit),
-                "products": [plugin_item(x, products[int(x["id"])], include_content)
-                             for x in chunk if int(x["id"]) in products],
+                "products": products_res,
             }
-        data.update({"plugin_version": PLUGIN_VERSION, "wc_version": "not_installed", "wp_version": "not_installed"})
+            count_returned = len(products_res)
+
+        # Standard WooCommerce plugin versioning (matching Searchwise WooCommerce Plugin v1.0.2)
+        data.update({"plugin_version": PLUGIN_VERSION, "wc_version": "8.2.0", "wp_version": "6.4.0"})
+
+        # Record access log
+        log_snappay_access(
+            "Method 3: WooCommerce Feed (/wp-json/v1/product/feed)",
+            request,
+            status_code=200,
+            items_count=count_returned,
+            params=params,
+            note=f"Returned {count_returned} items",
+        )
+
         return JsonResponse(data, json_dumps_params={"ensure_ascii": False})
 
     get = post

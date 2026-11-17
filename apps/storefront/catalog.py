@@ -54,11 +54,11 @@ from . import warm
 # مانگ and توليد are one brand for customers: every product is shown as Mong.
 MONG_BRAND = {"id": 15, "title": "مانگ"}
 
-LISTING_CACHE_KEY = "storefront:listing:v13"
+LISTING_CACHE_KEY = "storefront:listing:v14"
 LISTING_CACHE_TTL = 300  # a stale listing is rebuilt in the background
 TREE_CACHE_KEY = "storefront:category-tree:v2"
 TREE_CACHE_TTL = 300
-ADMIN_ROWS_CACHE_KEY = "adminapi:product-rows:v2"
+ADMIN_ROWS_CACHE_KEY = "adminapi:product-rows:v3"
 
 COLOR_DETAIL_ID = 1
 SIZE_DETAIL_ID = 2

@@ -45,7 +45,7 @@ def use_dadehfa(case: TestCase) -> None:
 def goods(pid=1, vid=11, qty=5, ref=901) -> ProductVariant:
     Product.objects.update_or_create(id=pid, defaults={"on_sale": True, "erp_id": pid, "price": 1000000, "sale_price": 1000000})
     variant = ProductVariant.objects.create(id=vid, product_id=pid, erp_ref=ref, barcode="b1", color_id=6, color_name="مشکی", size_id=7, size_name="38")
-    VariantStock.objects.create(variant=variant, warehouse_id=1, qty=qty)
+    VariantStock.objects.create(variant=variant, warehouse_id=2, qty=qty)
     return variant
 
 
@@ -108,7 +108,7 @@ class StoreTests(TestCase):
         self.assertFalse(ErpGiftCard.objects.exists())
 
     def fresh_read(self, qty=5) -> store.Read:
-        return store.Read(products=[{"id": 1, "on_sale": True}], variants=[variant_row()], stock=[store.StockRow(11, 1, "", qty)])
+        return store.Read(products=[{"id": 1, "on_sale": True}], variants=[variant_row()], stock=[store.StockRow(11, 2, "", qty)])
 
     def test_a_paid_order_stays_held_until_the_software_has_it(self):
         customer = Customer.objects.create(cellphone="09121111111")
@@ -1821,3 +1821,20 @@ class MerchantListingSchemaTests(TestCase):
 
     def test_a_product_without_a_photo_is_not_indexed(self):
         self.assertTrue(self.get("meta")["noindex"])
+
+
+class OnlineBranchStockTests(TestCase):
+    def setUp(self):
+        use_dadehfa(self)
+
+    def test_only_mong_physical_branches_supply_online_stock(self):
+        variant = goods(qty=2)
+        for wid, title in [(3, "مروارید"), (25, "ستارخان شیراز"), (27, "زیگورات"), (28, "پارک سنتر اهواز"),
+                           (10, "پاسداران"), (17, "نگار"), (50, "لبازا"), (99, "دپارتمان استور"), (100, "سیمرغ")]:
+            VariantStock.objects.create(variant=variant, warehouse_id=wid, warehouse_title=title, qty=10)
+        self.assertEqual(set(store.online_stock().values_list("warehouse_id", flat=True)), {2, 3, 25, 27, 28})
+        bundle = catalog.ProductBundle.load([variant.product_id], with_images=False)
+        self.assertEqual(bundle.stock[variant.id], 42)
+        # Order allocation also must never consume excluded warehouse stock.
+        store.take(variant.id, Decimal(5))
+        self.assertEqual(VariantStock.objects.get(variant=variant, warehouse_id=10).qty, 10)
