@@ -68,6 +68,7 @@ urlpatterns = [
     path("PrimaryConfig/SoftDelete/<int:config_id>", customize.ConfigDeleteView.as_view()),
 
     path("Setting/GetSetting", customize.SettingView.as_view()),
+    path("Setting/PriceSource", customize.PriceSourceView.as_view()),
     path("Setting/ChangeMinQty", customize.MinQtyView.as_view()),
     path("Setting/ToggleHasMediaProducts", customize.HasMediaView.as_view()),
     path("Setting/UpdateShowCategoryTopProduct", customize.ShowCategoryTopProductView.as_view()),

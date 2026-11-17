@@ -158,8 +158,25 @@ class SettingView(AdminView):
         result = None if s is None else {
             "showAllCategory": s.show_all_category, "webSiteTitle": s.website_title,
             "minQty": float(s.min_qty), "onlyHasMediaProducts": s.only_has_media_products,
+            "priceSource": s.dadehfa_price_source, "priceSourceAvailable": settings.ERP_CONNECTOR == "dadehfa",
         }
+        if s is None:
+            result = {"webSiteTitle": "", "showAllCategory": False, "minQty": 0, "onlyHasMediaProducts": False,
+                      "priceSource": "list", "priceSourceAvailable": settings.ERP_CONNECTOR == "dadehfa"}
         return Response({"result": result})
+
+
+class PriceSourceView(AdminView):
+    def post(self, request):
+        if settings.ERP_CONNECTOR != "dadehfa":
+            return fail("انتخاب منبع قیمت برای نرم‌افزار فعلی در دسترس نیست", 400)
+        source = request.data.get("source")
+        if source not in ("list", "main"):
+            return fail("منبع قیمت نامعتبر است", 400)
+        s = _setting_or_new()
+        s.dadehfa_price_source, s.last_modified = source, timezone.now()
+        s.save()
+        return ok({"result": True})
 
 
 class MinQtyView(AdminView):

@@ -1,7 +1,7 @@
 import io
 import tempfile
 import zipfile
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest import mock
@@ -137,6 +137,8 @@ class StoreTests(TestCase):
 
 class ReadTests(TestCase):
     def rows(self, sql, params=None):
+        if "Accounting.DepartmentInfo" in sql:
+            return []
         if "VariantWarehouses" in sql:
             return [{"vid": 50, "warehouse": 2, "title": "انبار", "qty": Decimal("4")}]
         if "FROM Brands" in sql:
@@ -229,6 +231,45 @@ class ReadTests(TestCase):
                 DadehfaConnector().sync(log=lambda message: None)
         product = Product.objects.get(pk=1)
         self.assertEqual((product.price, product.sale_price), (1000000, 1000000))
+
+    def test_main_price_mode_does_not_read_price_lists(self):
+        SiteSetting.objects.create(dadehfa_price_source="main")
+        with mock.patch("apps.erp.dadehfa.fetch_all") as fetch:
+            self.assertIsNone(dadehfa._current_price_list_id())
+        fetch.assert_not_called()
+
+    def test_only_the_online_departments_valid_list_is_selected(self):
+        row = {"PricingListInfo_ID": 45269, "IsActive": True, "IsDeleted": False,
+               "FromDate": "2026-11-20", "ToDate": "2026-11-28", "FromTime": "00:01:00",
+               "ToTime": "23:59:00", "ActiveDays": "Friday,Saturday"}
+        at = timezone.make_aware(datetime(2026, 11, 20, 12))
+        with mock.patch("apps.erp.dadehfa.fetch_all", return_value=[row]), mock.patch("apps.erp.dadehfa.timezone.localtime", return_value=at):
+            self.assertEqual(dadehfa._current_price_list_id(), 45269)
+            row["IsActive"] = False
+            self.assertIsNone(dadehfa._current_price_list_id())
+
+    def test_list_validity_covers_dates_hours_days_and_deletion(self):
+        row = {"IsActive": True, "IsDeleted": False, "FromDate": "2026-11-20", "ToDate": "2026-11-28",
+               "FromTime": "09:00:00", "ToTime": "22:00:00", "ActiveDays": "Friday,Saturday"}
+        for at, expected in [
+            (datetime(2026, 11, 17, 12), False),  # current incident: future list
+            (datetime(2026, 11, 20, 9), True),
+            (datetime(2026, 11, 20, 8, 59), False),
+            (datetime(2026, 11, 20, 22), True),
+            (datetime(2026, 11, 20, 22, 1), False),
+            (datetime(2026, 11, 22, 12), False),  # Sunday excluded
+            (datetime(2026, 11, 28, 12), True),  # final day stays valid
+            (datetime(2026, 11, 29, 12), False),
+        ]:
+            with self.subTest(at=at):
+                self.assertEqual(dadehfa._list_is_valid(row, at), expected)
+        self.assertFalse(dadehfa._list_is_valid({**row, "IsDeleted": True}, datetime(2026, 11, 20, 12)))
+
+    def test_overnight_price_list_hours(self):
+        row = {"IsActive": True, "IsDeleted": False, "FromTime": "22:00:00", "ToTime": "02:00:00"}
+        self.assertTrue(dadehfa._list_is_valid(row, datetime(2026, 11, 20, 23)))
+        self.assertTrue(dadehfa._list_is_valid(row, datetime(2026, 11, 20, 1)))
+        self.assertFalse(dadehfa._list_is_valid(row, datetime(2026, 11, 20, 12)))
 
 
 class CatalogTests(TestCase):
@@ -703,8 +744,9 @@ class VoucherPaymentTests(TestCase):
         self.customer = Customer.objects.create(first_name="ع", cellphone="09121234567")
         self.client = APIClient()
         self.client.force_authenticate(self.customer)
-        self.gateways = {key: BankGateway.objects.create(bank=BankInfo.objects.create(id=number, name=key, key=key))
-                         for number, key in ((1, "zarinpal"), (14, "snapppay"))}
+        # Bank rows may already be seeded by migrations; their primary keys are not fixed.
+        self.gateways = {key: BankGateway.objects.create(bank=BankInfo.objects.get_or_create(key=key, defaults={"name": key})[0])
+                         for key in ("zarinpal", "snapppay")}
         software_vouchers(self.customer)
         patcher = mock.patch("apps.storefront.payments._enabled", return_value=True)
         patcher.start()

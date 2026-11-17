@@ -3,8 +3,8 @@ The Dadehfa connector. Copies the shop's catalog, prices, stock, coupons and gif
 DadehfaOnlineShop (SELECT only, apps/legacy/db.py) on the sync's schedule, and writes paid invoices there
 (apps/erp/dadehfa_write.py). The site itself never reads it. The .NET service's jobs carry those invoices
 to the ERP and keep stock/catalog fresh, so the service must stay running while the site is on this connector.
-Prices and discounts come directly from the sales database's ViewPriceOnline during sync,
-joined by Products.MapId; products absent from the view keep Products.Price/Reduction.
+Prices come from the online department's valid list or the product's AccountingInfo,
+joined by Products.MapId. This avoids ViewPriceOnline's incomplete validity checks.
 
 The rules below were worked out against the shop's own API, row by row:
 
@@ -16,6 +16,7 @@ The rules below were worked out against the shop's own API, row by row:
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, time
 from decimal import Decimal
 
 from django.conf import settings
@@ -24,7 +25,7 @@ from django.utils import timezone
 from apps.legacy.db import fetch_all
 from apps.storefront.catalog import norm
 from apps.website import slugs
-from apps.website.models import Invoice, ProductVariant
+from apps.website.models import Invoice, ProductVariant, SiteSetting
 
 from . import dadehfa_write, specs, store
 from .connector import Connector, Log
@@ -35,15 +36,55 @@ PRICE_STEP = 10_000
 READERS = 4  # the reader engine's pool holds 2 + 2
 
 
-def _on_sale() -> str:
-    # Use the view's effective price for eligibility too: Products.Price may be stale.
+def _list_is_valid(row: dict, at: datetime) -> bool:
+    if not row["IsActive"] or row["IsDeleted"]:
+        return False
+    today, clock = at.date(), at.time().replace(tzinfo=None)
+    start = date.fromisoformat(str(row["FromDate"])[:10]) if row.get("FromDate") else date.min
+    end = date.fromisoformat(str(row["ToDate"])[:10]) if row.get("ToDate") else date.max
+    if not start <= today <= end:
+        return False
+    start_time = time.fromisoformat(str(row["FromTime"])) if row.get("FromTime") else time.min
+    end_time = time.fromisoformat(str(row["ToTime"])) if row.get("ToTime") else time.max
+    in_hours = start_time <= clock <= end_time if start_time <= end_time else clock >= start_time or clock <= end_time
+    days = {d.strip().lower() for d in (row.get("ActiveDays") or "").split(",") if d.strip()}
+    weekday = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")[at.weekday()]
+    return in_hours and (not days or weekday in days)
+
+
+def _current_price_list_id() -> int | None:
+    source = SiteSetting.objects.filter(is_deleted=False).values_list("dadehfa_price_source", flat=True).first()
+    if source == "main":
+        return None
     db = settings.DADEHFA_SALES_DB
+    rows = fetch_all(f"""
+        SELECT p.PricingListInfo_ID, p.IsActive, p.IsDeleted, p.FromDate, p.ToDate,
+               p.FromTime, p.ToTime, p.ActiveDays
+        FROM [{db}].Accounting.DepartmentInfo d
+        JOIN [{db}].Product.PricingListInfo p ON p.PricingListInfo_ID = d.PricingListInfo_ID
+        WHERE d.DepartmentInfo_ID = 13
+    """)
+    if rows and _list_is_valid(rows[0], timezone.localtime()):
+        return int(rows[0]["PricingListInfo_ID"])
+    return None
+
+
+def _on_sale(price_list_id: int | None = None) -> str:
+    db = settings.DADEHFA_SALES_DB
+    list_join = (
+        f"""LEFT JOIN [{db}].Product.PricingProductListItems online_price
+            ON online_price.ProductMain_ID = TRY_CONVERT(bigint, p.MapId)
+            AND online_price.PricingListInfo_ID = {int(price_list_id)} AND online_price.IsDeleted = 0"""
+        if price_list_id is not None else
+        "OUTER APPLY (SELECT CAST(NULL AS decimal(18,3)) AS Price, CAST(NULL AS decimal(18,3)) AS Discount) online_price"
+    )
     return f"""
     FROM Products p
-    LEFT JOIN [{db}].dbo.ViewPriceOnline online_price
-        ON online_price.ProductMain_ID = TRY_CONVERT(bigint, p.MapId)
+    LEFT JOIN [{db}].Product.AccountingInfo main_price
+        ON main_price.ProductMain_ID = TRY_CONVERT(bigint, p.MapId)
+    {list_join}
     WHERE p.IsDeleted = 0 AND p.IsActive = 1 AND p.IsSaleable = 1
-        AND COALESCE(online_price.SalePrice, p.Price) > 0
+        AND COALESCE(online_price.Price, main_price.SalePrice, p.Price) > 0
 """
 
 
@@ -81,13 +122,13 @@ def _categories() -> list[dict]:
     } for r in rows]
 
 
-def _products(brand_ids: set[int], category_ids: set[int]) -> list[dict]:
+def _products(brand_ids: set[int], category_ids: set[int], price_list_id: int | None = None) -> list[dict]:
     rows = fetch_all(f"""
         SELECT p.Id, p.Title, p.Slug, p.HasManualSlug, p.CategoryId, p.BrandId, p.Barcode,
-               COALESCE(online_price.SalePrice, p.Price) AS Price,
-               COALESCE(online_price.Reduction, p.Reduction) AS Reduction, p.VAT, p.Created,
+               COALESCE(online_price.Price, main_price.SalePrice, p.Price) AS Price,
+               COALESCE(online_price.Discount, main_price.Reduction, p.Reduction) AS Reduction, p.VAT, p.Created,
                p.ShortDesc, p.ProductSeasonTitle, p.ProductStyleTitle
-        {_on_sale()}""")
+        {_on_sale(price_list_id)}""")
     products = []
     for p in rows:
         price, reduction = _rial(p["Price"]), float(p["Reduction"] or 0)
@@ -105,7 +146,7 @@ def _products(brand_ids: set[int], category_ids: set[int]) -> list[dict]:
     return products
 
 
-def _variants() -> list[store.VariantRow]:
+def _variants(price_list_id: int | None = None) -> list[store.VariantRow]:
     values = {r["Id"]: r for r in fetch_all("SELECT Id, Name, Value, DisplayPriority FROM FeatureValues")}
     latest: dict[int, dict] = {}
     for row in fetch_all(f"""
@@ -114,7 +155,7 @@ def _variants() -> list[store.VariantRow]:
             FROM ProductVariants v
             JOIN VariantFeatureValues f ON f.ProductVariantId = v.Id AND f.IsDeleted = 0
             JOIN FeatureValueDependencies d ON d.Id = f.FeatureValueDependencyId AND d.IsDeleted = 0
-            WHERE v.IsDeleted = 0 AND v.ProductId IN (SELECT p.Id {_on_sale()}) ORDER BY f.Id"""):
+            WHERE v.IsDeleted = 0 AND v.ProductId IN (SELECT p.Id {_on_sale(price_list_id)}) ORDER BY f.Id"""):
         latest[row["vid"]] = row  # a variant's newest link is the one invoices use
     rows = []
     for v in latest.values():
@@ -130,13 +171,13 @@ def _variants() -> list[store.VariantRow]:
     return rows
 
 
-def _stock_rows() -> list[store.StockRow]:
+def _stock_rows(price_list_id: int | None = None) -> list[store.StockRow]:
     return [store.StockRow(r["vid"], r["warehouse"], r["title"] or "", r["qty"]) for r in fetch_all(f"""
         SELECT w.ProductVariantId AS vid, w.WarehouseId AS warehouse, h.WarehouseTitle AS title, SUM(w.Qty) AS qty
         FROM VariantWarehouses w
         JOIN ProductVariants v ON v.Id = w.ProductVariantId
         LEFT JOIN Warehouses h ON h.Id = w.WarehouseId
-        WHERE w.IsDeleted = 0 AND v.IsDeleted = 0 AND v.ProductId IN (SELECT p.Id {_on_sale()})
+        WHERE w.IsDeleted = 0 AND v.IsDeleted = 0 AND v.ProductId IN (SELECT p.Id {_on_sale(price_list_id)})
         GROUP BY w.ProductVariantId, w.WarehouseId, h.WarehouseTitle
         HAVING SUM(w.Qty) > 0""")]
 
@@ -179,10 +220,11 @@ def _gift_cards() -> list[ErpGiftCard]:
 
 def read() -> store.Read:
     """The queries do not wait on each other, so they run side by side: the read is as long as its longest one."""
+    price_list_id = _current_price_list_id()
     out = store.Read(brands=_brands(), categories=_categories())
     with ThreadPoolExecutor(max_workers=READERS) as pool:
-        products = pool.submit(_products, {b["id"] for b in out.brands}, {c["id"] for c in out.categories})
-        variants, stock = pool.submit(_variants), pool.submit(_stock_rows)
+        products = pool.submit(_products, {b["id"] for b in out.brands}, {c["id"] for c in out.categories}, price_list_id)
+        variants, stock = pool.submit(_variants, price_list_id), pool.submit(_stock_rows, price_list_id)
         coupons, gift_cards = pool.submit(_coupons), pool.submit(_gift_cards)
         out.products = products.result()
         on_sale = {p["id"] for p in out.products}

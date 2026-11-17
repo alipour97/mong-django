@@ -724,6 +724,10 @@ class SiteSetting(LegacyMixin):
     only_has_media_products = models.BooleanField(default=False)
     coupon_calculation_type = models.IntegerField(null=True, blank=True)
     gift_card_use_type = models.IntegerField(null=True, blank=True)
+    dadehfa_price_source = models.CharField(
+        _("منبع قیمت داده‌فا"), max_length=16, default="list",
+        choices=[("list", _("لیست قیمت معتبر")), ("main", _("قیمت اصلی کالا"))],
+    )
 
     class Meta:
         verbose_name = _("تنظیمات سایت")
