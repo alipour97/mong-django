@@ -292,7 +292,7 @@ STOREFRONT_STOCK_WAREHOUSE_IDS = [
 # Golsar, Morvarid, Sattarkhan Shiraz, Ziggurat, Park Center Ahvaz.
 # Excludes Pasdaran (10), Negar (17), Lebaza (50), department stores and Simorgh.
 DADEHFA_STOREFRONT_WAREHOUSE_IDS = [
-    int(x) for x in os.getenv("DADEHFA_STOREFRONT_WAREHOUSE_IDS", "2,3,25,27,28").split(",") if x.strip()
+    int(x) for x in os.getenv("DADEHFA_STOREFRONT_WAREHOUSE_IDS", "2,3,16,27,28").split(",") if x.strip()
 ]
 
 # The sales software this site sells through, and what is needed to reach it (apps/erp)

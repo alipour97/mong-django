@@ -145,14 +145,20 @@ class ListView(AdminView):
             p = bundle.products.get(r.id)
             category = tree.nodes.get(r.category_id)
             parent = tree.nodes.get(category.parent_id) if category else None
-            warehouses = {w["warehouseId"]: w["warehouseTitle"] for ws in stock[r.id].values() for w in ws}
+            warehouses = {}
+            for ws in stock[r.id].values():
+                for w in ws:
+                    warehouse = warehouses.setdefault(w["warehouseId"], {
+                        "id": w["warehouseId"], "title": w["warehouseTitle"], "qty": 0.0,
+                    })
+                    warehouse["qty"] += w["realQty"]
             return {
                 "id": r.id, "name": r.name, "barcode": r.barcode, "price": r.price, "reduction": r.reduction,
                 "mediaCount": r.media_count, "categoryName": category.title if category else "",
                 "parentCategoryName": parent.title if parent else "", "collectionName": "/".join(collections[r.id]),
                 "qty": r.qty, "isSaleable": r.on_site,
                 "variantIds": [v.id for v in bundle.variants.get(r.id, [])] if p else [],
-                "warehouses": [{"id": k, "title": v} for k, v in sorted(warehouses.items(), key=lambda kv: kv[1])],
+                "warehouses": sorted(warehouses.values(), key=lambda w: w["title"]),
                 "hasLongDescription": r.has_long_description, "hasShortDescription": r.has_short_description,
             }
 
