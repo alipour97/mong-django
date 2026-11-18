@@ -10,12 +10,19 @@ and every action sets the state of the given requests and appends the note.
 """
 from __future__ import annotations
 
+import mimetypes
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
+
+from django.conf import settings
 from django.db import transaction
 from django.db.models import F, Q
+from django.http import FileResponse
 from django.utils import timezone
 
 from apps.storefront import catalog
 from apps.website.models import CooperationRequest, MediaAttachment
+from apps.website import images as site_images
 
 from ..envelope import fail, ok
 from ..paging import int_list, paginated, to_int
@@ -79,3 +86,38 @@ class ActionView(AdminView):
                     r.reason = f"{r.reason}{label}: {reason}\n"
                 r.save(update_fields=["state", "last_time_action", "last_modified", "reason"])
         return ok({"result": True})
+
+
+class ResumeView(AdminView):
+    """Serve uploaded resumes even when production does not expose /media/."""
+
+    def get(self, request, request_id: int):
+        if not CooperationRequest.objects.filter(id=request_id, is_deleted=False).exists():
+            return fail("درخواست همکاری یافت نشد", 404)
+        att = MediaAttachment.objects.filter(
+            table=MediaAttachment.Table.COOPERATION_REQUESTS, record_id=request_id, is_deleted=False,
+        ).order_by("id").first()
+        if not att:
+            return fail("فایل رزومه یافت نشد", 404)
+        path = unquote(urlsplit(att.media_url).path)
+        prefix = urlsplit(settings.MEDIA_URL).path
+        file = None
+        if path.startswith(prefix):
+            root = Path(settings.MEDIA_ROOT).resolve()
+            candidate = (root / path[len(prefix):]).resolve()
+            if candidate.is_relative_to(root):
+                file = candidate
+        else:
+            # Imported requests may still refer to the local copy of the old CDN.
+            candidate = site_images.legacy_local_path(att.media_url)
+            root = Path(settings.LEGACY_CDN_ROOT).resolve()
+            if candidate and candidate.resolve().is_relative_to(root):
+                file = candidate.resolve()
+        if file is None or not file.is_file():
+            return fail("فایل رزومه یافت نشد", 404)
+        response = FileResponse(
+            file.open("rb"), as_attachment=True, filename=f"resume-{request_id}{file.suffix}",
+            content_type=mimetypes.guess_type(file.name)[0] or "application/octet-stream",
+        )
+        response["Cache-Control"] = "private, no-store"
+        return response

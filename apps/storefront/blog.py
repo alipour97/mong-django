@@ -192,7 +192,12 @@ def render_products(refs: list[str], single: bool) -> str:
     if not ids:
         return ""
     bundle = catalog.ProductBundle.load(ids)
-    cards = [_card(bundle, pid, single) for pid in ids if pid in bundle.products]
+    cards = [
+        _card(bundle, pid, single) for pid in ids
+        if pid in bundle.products and bundle.products[pid].is_active
+        and not bundle.products[pid].is_deleted and bundle.in_stock(pid)
+        and bundle.pricing(pid).after > 0
+    ]
     if not cards:
         return ""
     kind = "blog-products blog-products--single" if single and len(cards) == 1 else "blog-products"

@@ -113,10 +113,10 @@ class ArticlePackageTests(TestCase):
         self.assertEqual(sorted(a.tags.values_list("name", flat=True)), ["استایل اداری", "مانتو"])
 
         page = blog.page_data(a)
-        self.assertIn('href="/products-item/شلوار-لینن"', page["articleContent"])
-        self.assertIn("ناموجود", page["articleContent"])
+        self.assertNotIn('class="blog-product"', page["articleContent"])
         with mock.patch("apps.storefront.catalog.ProductBundle.in_stock", return_value=True):
             card = blog.page_data(a)["articleContent"]
+        self.assertIn('href="/products-item/شلوار-لینن"', card)
         self.assertIn("<del>۲٬۰۰۰٬۰۰۰</del>", card)
         self.assertIn("۱٬۵۰۰٬۰۰۰ <small>تومان</small>", card)
         self.assertIn("٪۲۵", card)
@@ -159,7 +159,25 @@ class ArticlePackageTests(TestCase):
         a = Article.objects.get(id=r.json()["data"]["result"]["id"])
         self.assertIn(f'data-product="{self.product.id}"', a.content)
         r = self.client.get(f"/api/admin/v1/Article/{a.id}/Preview")
-        self.assertIn("blog-product", r.json()["data"]["result"]["articleContent"])
+        self.assertNotIn('class="blog-product"', r.json()["data"]["result"]["articleContent"])
+
+    def test_product_recommendations_hide_unavailable_inactive_and_deleted_products(self):
+        from apps.website.models import ProductVariant, VariantStock
+
+        self.product.is_active = True
+        self.product.save()
+        variant = ProductVariant.objects.create(product=self.product, color_id=1, color_name="مشکی")
+        stock = VariantStock.objects.create(variant=variant, warehouse_id=2, qty=3)
+        self.assertIn('class="blog-product"', blog.render_products([str(self.product.id)], True))
+        stock.qty = 0
+        stock.save()
+        self.assertEqual(blog.render_products([str(self.product.id)], True), "")
+        stock.qty = 3
+        stock.save()
+        for changes in ({"is_active": False}, {"is_active": True, "is_deleted": True},
+                        {"is_deleted": False, "sale_price": 0}):
+            Product.objects.filter(pk=self.product.id).update(**changes)
+            self.assertEqual(blog.render_products([str(self.product.id)], True), "")
 
 
 class AdminUserPasswordTests(TestCase):

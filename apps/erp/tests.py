@@ -1634,6 +1634,18 @@ class ListingFixTests(TestCase):
         self.assertFalse(offered & {6, 7})
         self.assertIn(2, offered)
 
+    def test_search_matches_product_variant_and_ai_codes_with_any_digits(self):
+        Product.objects.filter(id=2).update(barcode="0730000197")
+        ProductVariant.objects.filter(id=13).update(barcode="8834567890")
+        ProductAIProfile.objects.create(product_id=4, subcode="99887766")
+        warm.drop(catalog.LISTING_CACHE_KEY)
+        for query, expected in (("0730000197", 2), ("۰۷۳۰۰۰۰۱۹۷", 2),
+                                ("٠٧٣٠٠٠٠١٩٧", 2), ("8834567890", 3), ("99887766", 4)):
+            with self.subTest(query=query):
+                self.assertEqual(self.ids({"search": query}), [expected])
+                result = self.client.post("/api/v1/Product/Search", {"query": query}, format="json")
+                self.assertEqual([p["id"] for p in result.json()["result"]["data"]], [expected])
+
     def test_size_filter_offers_and_matches_sizes_in_stock(self):
         reply = self.client.get("/api/v1/Product/GetFilterByCategoryId?id=1").json()["result"]["data"]
         sizes = {v["name"]: v["id"] for v in reply["filteredValues"] if not v["hasColor"]}

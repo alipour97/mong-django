@@ -54,7 +54,7 @@ from . import warm
 # مانگ and توليد are one brand for customers: every product is shown as Mong.
 MONG_BRAND = {"id": 15, "title": "مانگ"}
 
-LISTING_CACHE_KEY = "storefront:listing:v14"
+LISTING_CACHE_KEY = "storefront:listing:v15"
 LISTING_CACHE_TTL = 300  # a stale listing is rebuilt in the background
 TREE_CACHE_KEY = "storefront:category-tree:v2"
 TREE_CACHE_TTL = 300
@@ -664,11 +664,13 @@ def listing_rows() -> list[ListingRow]:
 
 def search_text_of(text: str | None) -> str:
     """norm(), with the slug's dashes and repeated spaces read as one space."""
-    return " ".join(norm((text or "").replace("-", " ").replace("ى", "ی")).split())
+    text = (text or "").translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789"))
+    return " ".join(norm(text.replace("-", " ").replace("ى", "ی")).split())
 
 
-def search_text(p: Product, ai) -> str:
-    parts = [p.title, ai.title if ai else "", p.slug]
+def search_text(p: Product, ai, variants=()) -> str:
+    parts = [p.title, ai.title if ai else "", p.slug, p.barcode, ai.subcode if ai else ""]
+    parts.extend(v.barcode for v in variants)
     return " | ".join(search_text_of(x) for x in parts if x)
 
 
@@ -697,7 +699,8 @@ def _build_listing_rows() -> list[ListingRow]:
         if only_media and not bundle.has_images(pid):  # like the legacy site; also when every photo is hidden in the admin
             continue
         rows.append(ListingRow(
-            id=pid, title=norm(p.title), category_id=p.category_id, search_text=search_text(p, bundle.ai_profiles.get(pid)),
+            id=pid, title=norm(p.title), category_id=p.category_id,
+            search_text=search_text(p, bundle.ai_profiles.get(pid), bundle.variants.get(pid, ())),
             price_after=pr.after, reduction=pr.reduction, in_stock=bundle.in_stock(pid),
             color_ids=frozenset(v.color_id for v in bundle.visible_variants(pid)),
             created=p.created, sold=p.sold, featured=featured.get(pid, math.inf),

@@ -120,6 +120,7 @@ urlpatterns = [
     path("User/AddRole", users.AddRoleView.as_view()),
 
     path("Cooperation/GetAllCooperationRequests", cooperation.ListView.as_view()),
+    path("Cooperation/<int:request_id>/Resume", cooperation.ResumeView.as_view()),
     *[
         path(f"Cooperation/Get{name}CooperationRequests", cooperation.ListView.as_view(state=state))
         for name, state in cooperation.LISTS.items()
