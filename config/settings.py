@@ -361,7 +361,7 @@ if (_hub_host := urlsplit(PAYHUB_PUBLIC_URL).hostname) and _hub_host not in ALLO
 # SnappPay's returnURL alone may sit on another domain: the one registered with SnappPay (https://pay.mong.ir),
 # pointed at this service like payhub.mong.ir (or at the frontend, which passes /api/SnappPay/CallBack/... on to
 # this hub: front/src/app/api/SnappPay/CallBack). Zarinpal stays on PAYHUB_PUBLIC_URL.
-PAYHUB_SNAPP_RETURN_URL = os.getenv("PAYHUB_SNAPP_RETURN_URL", PAYHUB_PUBLIC_URL).rstrip("/")
+PAYHUB_SNAPP_RETURN_URL = os.getenv("PAYHUB_SNAPP_RETURN_URL", "https://pay.mong.ir").rstrip("/")
 if (_snapp_host := urlsplit(PAYHUB_SNAPP_RETURN_URL).hostname) and _snapp_host not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(_snapp_host)
 PAYHUB_ALLOWED_API_IPS = [h.strip() for h in os.getenv("PAYHUB_ALLOWED_API_IPS", "").split(",") if h.strip()]

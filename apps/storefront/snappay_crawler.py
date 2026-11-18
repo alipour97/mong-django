@@ -439,6 +439,8 @@ def build_snappay_product(
         "category": category_str,
         "short_description": meta_desc,
         "description": desc_dict,
+        "description_text": (p.description or meta_desc).strip(),
+        "attributes": desc_dict,
         "brand": "مانگ",
         "GTIN": valid_gtin,
         "gtin": valid_gtin,

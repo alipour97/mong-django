@@ -128,6 +128,21 @@ def plugin_item(item: dict[str, Any], p: Product, include_content: bool) -> dict
         cat_suffix = f" در دسته‌بندی {' > '.join(category)}" if category else ""
         short_desc = f"{item['title']} - برند مانگ{cat_suffix}"
 
+    desc_obj = item.get("description")
+    if isinstance(desc_obj, dict):
+        text_parts = []
+        if p.description and p.description.strip():
+            text_parts.append(p.description.strip())
+        attr_summary = [f"{k}: {v}" for k, v in desc_obj.items() if k != "توضیحات تکمیلی" and v]
+        if attr_summary:
+            text_parts.append("مشخصات: " + " | ".join(attr_summary))
+        extra = desc_obj.get("توضیحات تکمیلی")
+        if extra and extra not in (p.description or ""):
+            text_parts.append(str(extra))
+        description_text = "\n\n".join(text_parts).strip() or short_desc
+    else:
+        description_text = str(desc_obj or p.description or short_desc)
+
     out: dict[str, Any] = {
         "id": p.id,
         "slug": p.slug,
@@ -145,7 +160,8 @@ def plugin_item(item: dict[str, Any], p: Product, include_content: bool) -> dict
         "image_link": item["image_link"],
         "link": item["link"],
         "short_description": short_desc,
-        "description": item["description"],
+        "description": description_text,
+        "attributes": desc_obj if isinstance(desc_obj, dict) else {},
         "shipping_cost": item["shipping_cost"],
         "delivery_time": item["delivery_time"],
         "brand": item["brand"],
