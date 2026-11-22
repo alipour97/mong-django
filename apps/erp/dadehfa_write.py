@@ -37,6 +37,7 @@ from .models import ErpWriteLog, SiteCoupon
 logger = logging.getLogger(__name__)
 
 GIFT_CARD_BANK = 13
+BLU_BANK_ID = 3
 BANKS = {"zarinpal": 1, "snapppay": 14, "PayTypeGiftCard": GIFT_CARD_BANK}
 SYSTEM = "Created By System"
 TEST_MARK = "سفارش تست: پولی جابه‌جا نشده"
@@ -347,8 +348,11 @@ def push(invoice: Invoice) -> None:
                             raise CannotSend("DADEHFA_CARD_TRANSFER_BANK_ID must reference a separate bank in Dadehfa BankInfos.")
                     else:
                         card_transfer_bank_id = db.execute(
-                            text("SELECT TOP 1 Id FROM BankInfos WHERE BankWebSite = :key ORDER BY Id"), {"key": CARD_TRANSFER},
+                            text("SELECT Id FROM BankInfos WHERE Id = :id AND BankWebSite = :key"),
+                            {"id": BLU_BANK_ID, "key": "blu"},
                         ).scalar()
+                        if not card_transfer_bank_id:
+                            raise CannotSend("Blu (BankInfo Id 3, key blu) was not found in Dadehfa BankInfos.")
                 rows = plan(invoice, card_transfer_bank_id=card_transfer_bank_id)
                 customer_id = _customer_id(db, invoice, at)
                 address_id = _address_id(db, invoice, customer_id, at)

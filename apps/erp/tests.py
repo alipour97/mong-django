@@ -427,13 +427,23 @@ class WriteTests(TestCase):
         self.assertEqual((head["CreatedBy"], head["LastModified"], head["Description"]), (f"site:{self.invoice.pk}", head["Created"], "سریع"))
 
     @override_settings(DADEHFA_CARD_TRANSFER_BANK_ID=0)
-    def test_card_transfer_payment_uses_the_erp_bank_row(self):
+    def test_card_transfer_payment_uses_blu_in_dadehfa(self):
         self.invoice.payments.update(gateway=CARD_TRANSFER, authority="", reference="card-transfer-45")
-        self.db = FakeDb({"FROM BankInfos": 23})
+        self.db = FakeDb({"FROM BankInfos WHERE Id = :id AND BankWebSite = :key": 3})
         self.push()
         pay = self.db.row("InvoicePayments")
-        self.assertEqual((pay["BankId"], pay["TraceNumber"], pay["PaymentAmount"]), (23, "card-transfer-45", 1900000))
+        self.assertEqual((pay["BankId"], pay["TraceNumber"], pay["PaymentAmount"]), (3, "card-transfer-45", 1900000))
+        lookup = next(params for sql, params in self.db.statements if "FROM BankInfos" in sql)
+        self.assertEqual(lookup, {"id": 3, "key": "blu"})
         self.assertIsNotNone(self.invoice.erp_sent_at)
+
+    @override_settings(DADEHFA_CARD_TRANSFER_BANK_ID=0)
+    def test_missing_blu_leaves_the_card_transfer_invoice_queued(self):
+        self.invoice.payments.update(gateway=CARD_TRANSFER)
+        with self.assertRaisesMessage(write.CannotSend, "Blu (BankInfo Id 3, key blu) was not found"):
+            self.push()
+        self.assertEqual(self.db.tables(), [])
+        self.assertTrue(outbox.waiting().filter(pk=self.invoice.pk).exists())
 
     def test_payment_codes_like_the_shops_own(self):
         """Zarinpal in the shop's rows: TraceNumber = Authority = the tracking code, TransactionId = Zarinpal's authority."""
