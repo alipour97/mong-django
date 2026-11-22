@@ -162,7 +162,13 @@ def _snapp_payment(inv: Invoice):
 
 def _site_filter(qs, q):
     if (state := to_int(q.get("InvoiceState") or q.get("invoiceState"))) is not None:
-        qs = qs.filter(state=state)
+        states = Q(state=state)
+        if state == SUCCESSFUL and to_bool(q.get("IncludePendingCardTransfers")):
+            pending = InvoicePayment.objects.filter(
+                gateway=CARD_TRANSFER, verified_at__isnull=True, transfer_receipt__isnull=False,
+            ).values("invoice_id")
+            states |= Q(state=Invoice.State.SUSPENDED, id__in=pending)
+        qs = qs.filter(states)
     if begin := _date(q.get("FromDate")):
         qs = qs.filter(created__gte=begin)
     if end := _date(q.get("ToDate"), end=True):

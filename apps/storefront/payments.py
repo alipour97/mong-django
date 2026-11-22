@@ -151,12 +151,16 @@ def _mark_paid(inv: Invoice, *, test: bool = False) -> None:
     transaction.on_commit(lambda: outbox.send_soon(inv.id), robust=True)
 
 
-def _notify_admins(number: str) -> None:
-    """Texts the admins who have "send invoice SMS" on (invoice template, one SMS each), in the background."""
+def invoice_sms_admin_mobiles() -> list[str]:
     from apps.adminapi.models import AdminUser
 
-    mobiles = list(AdminUser.objects.filter(is_deleted=False, is_active=True, send_invoice_sms=True)
-                   .exclude(cellphone="").values_list("cellphone", flat=True))
+    return list(AdminUser.objects.filter(is_deleted=False, is_active=True, send_invoice_sms=True)
+                .exclude(cellphone="").values_list("cellphone", flat=True))
+
+
+def _notify_admins(number: str) -> None:
+    """Texts the admins who have "send invoice SMS" on (invoice template, one SMS each), in the background."""
+    mobiles = invoice_sms_admin_mobiles()
 
     def send():
         for mobile in mobiles:

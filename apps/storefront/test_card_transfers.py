@@ -1,5 +1,5 @@
 from io import BytesIO
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -97,6 +97,42 @@ class CardTransferTests(TestCase):
         self.assertIsNotNone(payment.verified_at)
         outbox.assert_not_called()
         notify.assert_not_called()
+
+    @override_settings(SMSIR_CARD_TRANSFER_RECEIVED_TEMPLATE_ID=159473, SMSIR_CARD_TRANSFER_PARAM="ORDER")
+    def test_receipt_notifies_customer_and_admins_with_invoice_sms_enabled_once(self):
+        self.admin.send_invoice_sms = True
+        self.admin.save(update_fields=["send_invoice_sms"])
+        AdminUser.objects.create(username="muted", cellphone="09120003333")
+        AdminUser.objects.create(username="inactive", cellphone="09120004444", send_invoice_sms=True, is_active=False)
+        AdminUser.objects.create(username="buyer", cellphone="+989120001111", send_invoice_sms=True)
+        with patch("apps.storefront.card_transfers.threading.Thread") as worker, \
+                patch("apps.storefront.card_transfers.smsir.send_verify", return_value=True) as sms:
+            worker.side_effect = lambda target, **kwargs: type("Worker", (), {"start": staticmethod(target)})()
+            with self.captureOnCommitCallbacks(execute=True):
+                self.assertEqual(self.submit().status_code, 200)
+                self.assertEqual(self.submit().status_code, 200)
+            self.assertEqual(sms.call_args_list, [
+                call(self.customer.cellphone, 159473, {"ORDER": self.invoice.number}),
+                call(self.admin.cellphone, 159473, {"ORDER": self.invoice.number}),
+            ])
+
+    def test_success_view_can_include_pending_card_transfers_with_their_real_state(self):
+        self.assertEqual(self.submit().status_code, 200)
+        paid = Invoice.objects.create(customer=self.customer, state=Invoice.State.SUCCESSFUL)
+        Invoice.objects.create(customer=self.customer, state=Invoice.State.SUSPENDED)
+
+        def listed(**params):
+            response = self.admin_client.get("/api/admin/v1/Invoice/GetFilteredInvoices", {"InvoiceState": 3, **params})
+            return {row["id"]: row for row in response.data["data"]["result"]["items"]}
+
+        self.assertEqual(set(listed()), {paid.pk})
+        rows = listed(IncludePendingCardTransfers="true")
+        self.assertEqual(set(rows), {paid.pk, self.invoice.pk})
+        self.assertEqual(rows[self.invoice.pk]["invoiceState"], Invoice.State.SUSPENDED)
+        self.assertEqual(rows[self.invoice.pk]["paymentType"], "کارت‌به‌کارت · در انتظار بررسی")
+
+        self.assertEqual(self.decide(self.invoice.payments.get(), False).status_code, 200)
+        self.assertEqual(set(listed(IncludePendingCardTransfers="true")), {paid.pk})
 
     def test_upload_rejects_foreign_invoice_invalid_image_and_stale_amount(self):
         other = APIClient()

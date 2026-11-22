@@ -16,7 +16,7 @@ from apps.erp.connector import Refused
 from apps.website.models import CARD_TRANSFER, BankGateway, CardTransferReceipt, Customer, Invoice, InvoicePayment
 
 from .account import CustomerView, answer
-from .payments import _hold_voucher, _mark_paid, _out_of_stock, _release_voucher
+from .payments import _hold_voucher, _mark_paid, _out_of_stock, _release_voucher, invoice_sms_admin_mobiles
 
 logger = logging.getLogger(__name__)
 S = Invoice.State
@@ -40,17 +40,21 @@ def _receipt_image(file) -> bytes:
         raise ValueError("تصویر رسید معتبر نیست. یک عکس JPG، PNG یا WebP انتخاب کنید.") from exc
 
 
-def _notify(template_id: int, invoice: Invoice) -> None:
+def _notify(template_id: int, invoice: Invoice, *, include_admins: bool = False) -> None:
     if not template_id:
         return
-    mobile = invoice.customer.cellphone
+    mobiles = [invoice.customer.cellphone]
+    if include_admins:
+        mobiles.extend(invoice_sms_admin_mobiles())
+    recipients = dict.fromkeys(smsir.normalize_mobile(mobile) for mobile in mobiles if mobile)
     number = invoice.number or str(invoice.pk)
 
     def send():
-        try:
-            smsir.send_verify(mobile, template_id, {settings.SMSIR_CARD_TRANSFER_PARAM: number})
-        except Exception:
-            logger.exception("card transfer SMS failed for invoice %s", invoice.pk)
+        for mobile in recipients:
+            try:
+                smsir.send_verify(mobile, template_id, {settings.SMSIR_CARD_TRANSFER_PARAM: number})
+            except Exception:
+                logger.exception("card transfer SMS failed for invoice %s", invoice.pk)
 
     transaction.on_commit(lambda: threading.Thread(target=send, daemon=True).start(), robust=True)
 
@@ -93,7 +97,7 @@ class SubmitCardTransferView(CustomerView):
         CardTransferReceipt.objects.create(payment=payment, image=image)
         invoice.state = S.SUSPENDED
         invoice.save(update_fields=["state", "last_modified"])
-        _notify(settings.SMSIR_CARD_TRANSFER_RECEIVED_TEMPLATE_ID, invoice)
+        _notify(settings.SMSIR_CARD_TRANSFER_RECEIVED_TEMPLATE_ID, invoice, include_admins=True)
         return answer(result, message=PENDING_MESSAGE)
 
 
