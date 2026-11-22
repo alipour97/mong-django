@@ -300,6 +300,7 @@ ERP_CONNECTOR = os.getenv("ERP_CONNECTOR", "dadehfa")
 ERP_CONNECTORS = {"samian": "apps.erp.samian.SamianConnector", "dadehfa": "apps.erp.dadehfa.DadehfaConnector"}
 # Off until the writing code is reviewed and a real test order is agreed: paid orders wait in the site.
 ERP_WRITES_ENABLED = os.getenv("ERP_WRITES_ENABLED", "false").lower() in ("1", "true", "yes")
+DADEHFA_CARD_TRANSFER_BANK_ID = int(os.getenv("DADEHFA_CARD_TRANSFER_BANK_ID") or 0)
 # How long a gift card or coupon stays out of reach while its order is in a payment page; 0 for no hold.
 VOUCHER_HOLD_MINUTES = int(os.getenv("VOUCHER_HOLD_MINUTES", "11"))
 # Measures every API request (config/timing.py). For a debugging session, not for leaving on.
@@ -324,6 +325,9 @@ SMSIR_OTP_TEMPLATE_ID = int(os.getenv("SMSIR_OTP_TEMPLATE_ID", "214177"))
 SMSIR_OTP_PARAM = os.getenv("SMSIR_OTP_PARAM", "TOKEN")
 SMSIR_INVOICE_TEMPLATE_ID = int(os.getenv("SMSIR_INVOICE_TEMPLATE_ID", "725839"))
 SMSIR_INVOICE_PARAM = os.getenv("SMSIR_INVOICE_PARAM", "INVOICE")
+SMSIR_CARD_TRANSFER_PARAM = os.getenv("SMSIR_CARD_TRANSFER_PARAM", "ORDER")
+SMSIR_CARD_TRANSFER_RECEIVED_TEMPLATE_ID = int(os.getenv("SMSIR_CARD_TRANSFER_RECEIVED_TEMPLATE_ID", "159473") or 0)
+SMSIR_CARD_TRANSFER_APPROVED_TEMPLATE_ID = int(os.getenv("SMSIR_CARD_TRANSFER_APPROVED_TEMPLATE_ID", "594290") or 0)
 
 # Online payment. SITE_URL is the storefront the customer returns to after paying.
 # (SITE_URL, defined at the top, is also the storefront the customer returns to after paying.)

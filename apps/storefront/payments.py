@@ -37,7 +37,7 @@ from apps.erp.connector import Refused
 from apps.payhub import service as hub
 from apps.payhub import mellat, snapppay, zarinpal
 from apps.payhub.models import PayRecord
-from apps.website.models import BankGateway, Customer, Invoice, InvoicePayment, ProductVariant
+from apps.website.models import CARD_TRANSFER, BankGateway, Customer, Invoice, InvoicePayment, ProductVariant
 
 from apps.adminapi.paging import to_int
 
@@ -121,6 +121,9 @@ class GatewaysView(CustomerView):
             if _enabled(key):
                 g = _active(key)
                 out.append({"id": g.id, "name": g.bank.name, "iconUrl": _icon_url(g.bank.icon), "gatewayKey": key})
+        if (g := _active(CARD_TRANSFER)) and g.card_number:
+            out.append({"id": g.id, "name": g.bank.name, "iconUrl": "", "gatewayKey": CARD_TRANSFER,
+                        "cardNumber": g.card_number, "instructions": g.instructions})
         return answer(out)
 
 
@@ -143,9 +146,9 @@ def _mark_paid(inv: Invoice, *, test: bool = False) -> None:
         number = assign_number(inv)
         for line in inv.lines.all():
             erp_store.take(line.variant_id, line.qty)
-    transaction.on_commit(catalog.clear_caches)
-    transaction.on_commit(lambda: _notify_admins(number))
-    transaction.on_commit(lambda: outbox.send_soon(inv.id))
+    transaction.on_commit(catalog.clear_caches, robust=True)
+    transaction.on_commit(lambda: _notify_admins(number), robust=True)
+    transaction.on_commit(lambda: outbox.send_soon(inv.id), robust=True)
 
 
 def _notify_admins(number: str) -> None:
@@ -323,7 +326,9 @@ class SnappOfferView(PublicView):
 class ZeroAmountView(CustomerView):
     """A pre-invoice with nothing to pay (once gift cards cover it) is finished without a gateway."""
 
+    @transaction.atomic
     def get(self, request):
+        Customer.objects.select_for_update().get(pk=request.user.pk)
         inv = _payable_invoice(request, request.query_params.get("InvoiceId"))
         if not inv:
             return answer(None, 404, "فاکتور یافت نشد")
@@ -345,7 +350,7 @@ def _finish(payment: InvoicePayment, success: bool, reference: str = "", card: s
         payment.refresh_from_db()
         if won and success and payment.invoice.state == S.PRE_INVOICE:
             _mark_paid(payment.invoice, test=_test_money(payment.gateway) if test is None else test)
-        elif won and not success:
+        elif won and not success and payment.invoice.state == S.PRE_INVOICE:
             _release_voucher(payment.invoice)
 
 
@@ -363,12 +368,15 @@ def _gateway_reference(record: PayRecord) -> str:
 class PaymentVerificationView(PublicView):
     """The hub's return address for this site: the token is secret, and confirm answers ok only once."""
 
+    @transaction.atomic
     def get(self, request):
         q = request.query_params
         record = PayRecord.objects.filter(token=q.get("trackingToken", ""), source=PayRecord.Source.SITE).first()
         payment = _payment_of(record)
         if not payment:
             return HttpResponseRedirect(_confirmation(False, None))
+        payment.invoice = Invoice.objects.select_for_update().get(pk=payment.invoice_id)
+        payment.refresh_from_db(fields=["verified_at", "is_success", "reference"])
         if payment.verified_at:  # already handled (refresh or a second visit)
             return HttpResponseRedirect(_confirmation(payment.is_success, payment.invoice, payment.reference))
         if q.get("success") != "true":

@@ -21,6 +21,7 @@ from apps.adminapi.models import AdminUser
 from apps.samian.models import SamianBarcode, SamianColor, SamianProduct
 from apps.storefront import catalog, payments, warm
 from apps.website.models import (
+    CARD_TRANSFER,
     BankGateway, BankInfo, CacheStamp, Category, Customer, CustomerAddress, Feature, FeatureValue, Invoice,
     InvoiceLine, InvoicePayment, Product, ProductAIProfile, ProductSamianLink, ProductTag, ProductVariant,
     SiteSetting, VariantStock,
@@ -424,6 +425,15 @@ class WriteTests(TestCase):
         self.assertEqual((self.db.row("InvoicePayments")["BankId"], self.invoice.erp_invoice_id is not None, self.invoice.erp_error), (1, True, ""))
         self.assertIsNotNone(self.invoice.erp_sent_at)
         self.assertEqual((head["CreatedBy"], head["LastModified"], head["Description"]), (f"site:{self.invoice.pk}", head["Created"], "سریع"))
+
+    @override_settings(DADEHFA_CARD_TRANSFER_BANK_ID=0)
+    def test_card_transfer_payment_uses_the_erp_bank_row(self):
+        self.invoice.payments.update(gateway=CARD_TRANSFER, authority="", reference="card-transfer-45")
+        self.db = FakeDb({"FROM BankInfos": 23})
+        self.push()
+        pay = self.db.row("InvoicePayments")
+        self.assertEqual((pay["BankId"], pay["TraceNumber"], pay["PaymentAmount"]), (23, "card-transfer-45", 1900000))
+        self.assertIsNotNone(self.invoice.erp_sent_at)
 
     def test_payment_codes_like_the_shops_own(self):
         """Zarinpal in the shop's rows: TraceNumber = Authority = the tracking code, TransactionId = Zarinpal's authority."""

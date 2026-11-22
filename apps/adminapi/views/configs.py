@@ -27,7 +27,7 @@ from django.utils import timezone
 from rest_framework.response import Response
 
 from apps.storefront.envelope import jalali
-from apps.website.models import BankGateway, BankInfo, City, InvoicePayment, MediaAttachment, Product, Province, ShippingMethod, ShippingMethodLocation, ShippingMethodType
+from apps.website.models import CARD_TRANSFER, BankGateway, BankInfo, City, InvoicePayment, MediaAttachment, Product, Province, ShippingMethod, ShippingMethodLocation, ShippingMethodType
 
 from .. import products as index
 from ..envelope import fail, ok
@@ -203,6 +203,7 @@ def _gateway(g: BankGateway, stats: dict) -> dict:
         "id": g.id, "bankId": g.bank_id, "bankName": g.bank.name, "icon": g.bank.icon or None,
         "gatewayKey": g.bank.key, "sandbox": settings.MELLAT_SANDBOX if g.bank.key == "mellat" else None,
         "merchantCode": g.merchant or g.terminal_id, "isDelete": g.is_deleted,
+        "cardNumber": g.card_number, "instructions": g.instructions,
         "transactionCount": count, "sumTransactionPrice": total,
         "lastTransaction": {"createDate": jalali(last.verified_at or last.created), "price": last.amount} if last else None,
     }
@@ -231,6 +232,16 @@ def _save_gateway(request, g: BankGateway | None):
     if not bank:
         return fail("این بانک موجود نیست.", 400)
     merchant, terminal = str(d.get("merchant") or "").strip(), str(d.get("terminalId") or "").strip()
+    card_number, instructions = "", ""
+    if bank.key == CARD_TRANSFER:
+        digits = str(d.get("cardNumber") or "").translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789"))
+        card_number = "".join(digits.replace("-", "").split())
+        instructions = str(d.get("instructions") or "").strip()
+        if len(card_number) != 16 or not (card_number.isascii() and card_number.isdecimal()):
+            return fail("شماره کارت مقصد باید ۱۶ رقم باشد.", 400)
+        if len(instructions) > 2000:
+            return fail("توضیحات پرداخت حداکثر ۲۰۰۰ کاراکتر است.", 400)
+        merchant, terminal = "", ""
     if bank.key == "mellat":
         from apps.payhub.mellat import positive_long
 
@@ -241,6 +252,7 @@ def _save_gateway(request, g: BankGateway | None):
         return fail("این پورتال وجود دارد.", 400)
     g = g or BankGateway(created=timezone.now())
     g.bank, g.merchant, g.terminal_id = bank, merchant, terminal
+    g.card_number, g.instructions = card_number, instructions
     g.merchant_key = merchant or terminal
     g.last_modified = timezone.now()
     g.save()

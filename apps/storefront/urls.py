@@ -10,6 +10,7 @@ from . import blog
 from . import interactions as act
 from . import orders
 from . import payments as pay
+from .card_transfers import SubmitCardTransferView
 from . import views as v
 
 urlpatterns = [
@@ -61,6 +62,7 @@ urlpatterns = [
     path("Bank/PayInvoiceById", pay.PayView.as_view()),
     path("Bank/SnappPayEligible", pay.SnappEligibleView.as_view()),
     path("Bank/GiftCardPayInvoiceById", pay.ZeroAmountView.as_view()),
+    path("Bank/CardTransfer/<int:invoice_id>", SubmitCardTransferView.as_view()),
     path("Bank/SnappPayOffer", pay.SnappOfferView.as_view()),
     path("Bank/PaymentVerification", pay.PaymentVerificationView.as_view()),
 

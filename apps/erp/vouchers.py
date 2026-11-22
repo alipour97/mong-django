@@ -34,7 +34,8 @@ def left(until: datetime) -> str:
 
 def held_until(invoice_id: int | None = None, **voucher) -> datetime | None:
     """When another invoice's hold on this voucher ends. An invoice never waits for itself."""
-    held = Invoice.objects.filter(state=Invoice.State.PRE_INVOICE, is_deleted=False, voucher_held_until__gt=timezone.now(), **voucher)
+    held = Invoice.objects.filter(state__in=(Invoice.State.PRE_INVOICE, Invoice.State.SUSPENDED),
+                                  is_deleted=False, voucher_held_until__gt=timezone.now(), **voucher)
     return held.exclude(pk=invoice_id).aggregate(until=Max("voucher_held_until"))["until"]
 
 

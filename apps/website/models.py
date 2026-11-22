@@ -24,6 +24,9 @@ def validate_slug(value: str) -> None:
         raise ValidationError(_("آدرس فقط حروف فارسی یا انگلیسی، عدد، - و _ می‌تواند داشته باشد (بدون فاصله و /)."))
 
 
+CARD_TRANSFER = "card_to_card"
+
+
 class SlugKeyMixin(models.Model):
     """Keeps slug_key in step with slug on save (bulk writes: manage.py fix_slugs)."""
 
@@ -1410,6 +1413,12 @@ class InvoicePayment(models.Model):
         ordering = ("-id",)
 
 
+class CardTransferReceipt(models.Model):
+    payment = models.OneToOneField(InvoicePayment, on_delete=models.CASCADE, related_name="transfer_receipt")
+    image = models.BinaryField(editable=False)
+    reviewed_by = models.ForeignKey("adminapi.AdminUser", null=True, blank=True, on_delete=models.SET_NULL)
+
+
 # -----------------------------------------------------------------------------
 # Payment gateways (configs page in the panel). The site offers the active ones
 # it can talk to (zarinpal, snapppay).
@@ -1437,6 +1446,8 @@ class BankGateway(LegacyMixin):
     merchant = models.CharField(_("مرچنت"), max_length=255, blank=True, default="")
     terminal_id = models.CharField(_("ترمینال"), max_length=255, blank=True, default="")
     merchant_key = models.CharField(_("کلید مرچنت"), max_length=255, blank=True, default="")
+    card_number = models.CharField(_("شماره کارت مقصد"), max_length=16, blank=True, default="")
+    instructions = models.TextField(_("توضیحات پرداخت"), blank=True, default="")
 
     class Meta:
         verbose_name = _("درگاه پرداخت")

@@ -39,7 +39,7 @@ from django.utils import timezone
 from apps.erp import vouchers
 from apps.erp.connector import Held, Refused
 from apps.erp.store import online_stock
-from apps.website.models import City, CustomerAddress, Invoice, InvoiceLine, ProductVariant, Province, ShippingMethod, SiteSetting
+from apps.website.models import CARD_TRANSFER, City, Customer, CustomerAddress, Invoice, InvoiceLine, ProductVariant, Province, ShippingMethod, SiteSetting
 
 from . import catalog
 from .account import CustomerView, answer
@@ -216,6 +216,7 @@ class AddView(CustomerView):
         except Refused as exc:
             return reply(None, 400, str(exc))
         with transaction.atomic():
+            Customer.objects.select_for_update().get(pk=customer.pk)
             inv = _pre_invoice(customer) or Invoice(customer=customer)
             is_new = inv.pk is None
             inv.shipping_method, inv.address = method, address
@@ -384,12 +385,16 @@ def full_invoice(inv: Invoice) -> dict:
 def invoice_summary(inv: Invoice) -> dict:
     m = inv.shipping_method
     lines = _lines(inv)
+    transfer = next((p for p in inv.payments.all() if p.gateway == CARD_TRANSFER), None)
     return {
         "id": inv.id, "customerId": inv.customer_id, "amount": inv.amount, "payableAmount": inv.payable_amount,
         "finalAmount": inv.payable_amount, "totalAmountPayable": inv.payable_amount, "discount": inv.reduction_amount,
         "reductionAmount": inv.reduction_amount, "totalReductionAmounts": inv.reduction_amount + inv.deduction_amount,
         "amountAfterReduction": inv.amount - inv.reduction_amount, "hasDiscount": inv.reduction_amount > 0,
         "invoiceNumber": inv.number,
+        "cardTransferStatus": (
+            "pending" if transfer.verified_at is None else "approved" if transfer.is_success else "rejected"
+        ) if transfer else None,
         "invoiceState": inv.state, "invoiceType": inv.state, "createDatePersian": jalali(inv.created, with_time=False),
         "shippingMethodId": inv.shipping_method_id or 0, "shippingMethodName": m.name if m else "",
         "shippingMethodType": m.type.key if m and m.type else "", "shippingMethodTypeId": m.type_id if m else 0,
@@ -456,9 +461,13 @@ class ClearCartView(CustomerView):
 
 class CustomerInvoicesView(CustomerView):
     def get(self, request):
-        qs = request.user.invoices.filter(is_deleted=False).select_related("shipping_method__type", "address", "customer")
+        qs = (request.user.invoices.filter(is_deleted=False)
+              .select_related("shipping_method__type", "address", "customer").prefetch_related("payments"))
         if (kind := _int(request.query_params.get("invoiceType"))) is not None:
-            qs = qs.filter(state=kind)
+            if kind == S.PRE_INVOICE and request.query_params.get("includeSuspended") == "true":
+                qs = qs.filter(state__in=(S.PRE_INVOICE, S.SUSPENDED))
+            else:
+                qs = qs.filter(state=kind)
         rows = [invoice_summary(inv) for inv in qs.order_by("-id")]
         return reply({
             "invoices": rows,

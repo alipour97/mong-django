@@ -36,14 +36,17 @@ from decimal import Decimal
 from django.db import transaction
 from django.db.models import BigIntegerField, Case, DecimalField, F, Max, Min, Q, Sum, Value, When
 from django.db.models.functions import Abs, Coalesce
+from django.http import HttpResponse
 from django.utils import timezone
 
 from apps.payhub import service as payhub
+from apps.erp.connector import Refused
 from apps.samian.models import SamianColor, SamianProduct, SamianSalesRow, SamianSalesTransaction
 from apps.storefront.envelope import jalali
+from apps.storefront.card_transfers import review as review_card_transfer
 from apps.storefront.orders import coupon_deduction
 from apps.storefront.payments import SNAPPPAY, snapp_order
-from apps.website.models import City, CompanyInfo, Customer, Invoice, InvoicePayment, Product, ProductComment, ProductSamianLink, Province
+from apps.website.models import CARD_TRANSFER, CardTransferReceipt, City, CompanyInfo, Customer, Invoice, InvoicePayment, Product, ProductComment, ProductSamianLink, Province
 
 from ..envelope import fail, ok
 from ..paging import sort_spec, to_bool, to_int
@@ -55,7 +58,7 @@ from .dashboard import _aware, month_range, today_j
 AWAITING_PAYMENT, WEB_CANCELLED = 1, 5
 VOIDED = (4, 5)  # retail/transactionstatus «ابطال شده», «حذف شده»
 PRE_INVOICE, SUCCESSFUL, CANCELLED = 1, 3, 4
-GATEWAY_NAMES = {"zarinpal": "زرین‌پال", "snapppay": "اسنپ‌پی"}
+GATEWAY_NAMES = {"zarinpal": "زرین‌پال", "snapppay": "اسنپ‌پی", CARD_TRANSFER: "کارت‌به‌کارت"}
 
 
 def _state(t) -> int:
@@ -148,6 +151,8 @@ def _payment_type(inv: Invoice) -> str | None:
     """What paid this order: the gateway, or the gift card when nothing was left to pay."""
     if paid := _paid_by(inv):
         return GATEWAY_NAMES.get(paid.gateway, paid.gateway)
+    if transfer := next((p for p in inv.payments.all() if p.gateway == CARD_TRANSFER), None):
+        return "کارت‌به‌کارت · در انتظار بررسی" if not transfer.verified_at else "کارت‌به‌کارت · رد شده"
     return "کارت هدیه" if inv.state == SUCCESSFUL and inv.gift_card_number else None
 
 
@@ -214,6 +219,15 @@ def _site_header(inv: Invoice) -> dict:
     }
 
 
+def _card_transfers(inv: Invoice) -> list[dict]:
+    return [
+        {"id": p.id, "amount": p.amount, "status": (
+            "pending" if p.verified_at is None else "approved" if p.is_success else "rejected"
+        )}
+        for p in inv.payments.all() if p.gateway == CARD_TRANSFER
+    ]
+
+
 def _site_detail(inv: Invoice) -> dict:
     header = _site_header(inv)
     c, a, info = inv.customer, inv.address, CompanyInfo.objects.filter(is_deleted=False).first()
@@ -242,7 +256,7 @@ def _site_detail(inv: Invoice) -> dict:
          "fullName": f"{c.first_name} {c.last_name}".strip(), "authority": p.authority, "paymentAmount": p.amount,
          "isSuccess": p.is_success, "cellPhone": c.cellphone, "errorCode": None, "errorMessage": p.error_message or None,
          "bankName": GATEWAY_NAMES.get(p.gateway, p.gateway), "key": p.gateway}
-        for p in inv.payments.all()
+        for p in inv.payments.all() if p.gateway != CARD_TRANSFER
     ]
     return {
         "buyer": {"id": c.id, "firstName": c.first_name, "lastName": c.last_name, "mobile": c.cellphone},
@@ -259,6 +273,7 @@ def _site_detail(inv: Invoice) -> dict:
             "cityTitle": (City.objects.filter(id=a.city_id).values_list("name", flat=True).first() if a else "") or inv.city_name,
         },
         "invoiceHeader": header, "invoiceDetails": lines, "invoicePayments": payments,
+        "cardTransfers": _card_transfers(inv),
     }
 
 
@@ -435,6 +450,8 @@ class DetailView(AdminView):
         if not t:
             return fail("فاکتور یافت نشد.", 404)
         header = _headers([t])[0]
+        linked_invoice = (Invoice.objects.filter(samian_transaction_id=t.samian_id, is_deleted=False)
+                          .prefetch_related("payments").first())
         sc, info = t.samian_customer, CompanyInfo.objects.filter(is_deleted=False).first()
         return ok({"result": {
             "buyer": {"id": header["customerId"], "firstName": header["customerName"], "lastName": header["customerLastName"],
@@ -450,7 +467,34 @@ class DetailView(AdminView):
             "invoiceHeader": header,
             "invoiceDetails": _lines(t),
             "invoicePayments": [],
+            "cardTransfers": _card_transfers(linked_invoice) if linked_invoice else [],
         }})
+
+
+class CardTransferImageView(AdminView):
+    def get(self, request, payment_id: int):
+        receipt = (CardTransferReceipt.objects.filter(payment_id=payment_id, payment__invoice__is_deleted=False)
+                   .values_list("image", flat=True).first())
+        if receipt is None:
+            return fail("رسید یافت نشد.", 404)
+        return HttpResponse(bytes(receipt), content_type="image/jpeg", headers={
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        })
+
+
+class CardTransferReviewView(AdminView):
+    def post(self, request, payment_id: int):
+        approved = request.data.get("approved") if isinstance(request.data, dict) else None
+        if not isinstance(approved, bool):
+            return fail("تأیید یا رد رسید را مشخص کنید.", 400)
+        try:
+            review_card_transfer(payment_id, approved, request.user)
+        except InvoicePayment.DoesNotExist:
+            return fail("رسید یافت نشد.", 404)
+        except Refused as exc:
+            return fail(str(exc), 409)
+        return ok({"result": True})
 
 
 class CorruptedView(AdminView):

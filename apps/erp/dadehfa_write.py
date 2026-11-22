@@ -30,7 +30,7 @@ from django.utils import timezone
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import URL, Engine
 
-from apps.website.models import Invoice
+from apps.website.models import CARD_TRANSFER, Invoice
 
 from .models import ErpWriteLog, SiteCoupon
 
@@ -164,7 +164,7 @@ def _description(invoice: Invoice, free: bool) -> str:
     return text[:DESCRIPTION]
 
 
-def plan(invoice: Invoice) -> Plan:
+def plan(invoice: Invoice, *, card_transfer_bank_id: int = 0) -> Plan:
     # No gateway when the voucher covered it all: PayInvoiceByIdHandler. Otherwise PaymentVerificationHandler.
     free = invoice.payable_amount <= 0
     delivery = invoice.delivery_amount
@@ -190,13 +190,16 @@ def plan(invoice: Invoice) -> Plan:
         rows.taken[line.erp_ref] = rows.taken.get(line.erp_ref, Decimal(0)) + Decimal(line.qty)
     paid = []
     for payment in invoice.payments.filter(is_success=True):
-        if payment.gateway not in BANKS:
+        bank_id = card_transfer_bank_id if payment.gateway == CARD_TRANSFER else BANKS.get(payment.gateway)
+        if payment.gateway == CARD_TRANSFER and not bank_id:
+            raise CannotSend("Card transfer bank is missing in Dadehfa BankInfos. Set DADEHFA_CARD_TRANSFER_BANK_ID.")
+        if not bank_id:
             raise CannotSend(f"payment {payment.pk}: unknown gateway {payment.gateway!r}")
         # As in the shop's own rows: TraceNumber and Authority are one tracking code, TransactionId the gateway's own
         # (Zarinpal's authority, SnappPay's transactionId).
         trace = (payment.reference or payment.authority)[:CODE] or None
         paid.append({
-            "PaymentAmount": payment.amount, "BankId": BANKS[payment.gateway], "TransactionId": (payment.transaction_id or payment.authority)[:CODE] or None,
+            "PaymentAmount": payment.amount, "BankId": bank_id, "TransactionId": (payment.transaction_id or payment.authority)[:CODE] or None,
             "TraceNumber": trace, "CellPhone": cellphone, "FullName": name, "Authority": trace,
             "IsSuccess": 1, "IsDeleted": 0, "TsCodeId": 0, "DeliveryAmount": delivery,
         })
@@ -324,14 +327,29 @@ def push(invoice: Invoice) -> None:
     """Writes one paid invoice, test orders too. Does nothing until ERP_WRITES_ENABLED; safe to call again."""
     if not settings.ERP_WRITES_ENABLED or invoice.erp_sent_at:
         return
-    rows = plan(invoice)
     at = timezone.localtime()
     mark = f"site:{invoice.pk}"
     db = _Logged(invoice.pk)
     try:
         with get_engine().begin() as db.db:
-            invoice_id = db.execute(text("SELECT TOP 1 Id FROM Invoices WHERE CreatedBy = :m"), {"m": mark}).scalar()
+            invoice_id = db.execute(
+                text("SELECT TOP 1 Id FROM Invoices WITH (UPDLOCK, HOLDLOCK) WHERE CreatedBy = :m"), {"m": mark},
+            ).scalar()
             if not invoice_id:
+                card_transfer_bank_id = 0
+                if invoice.payments.filter(is_success=True, gateway=CARD_TRANSFER).exists():
+                    configured = settings.DADEHFA_CARD_TRANSFER_BANK_ID
+                    if configured:
+                        card_transfer_bank_id = db.execute(
+                            text("SELECT Id FROM BankInfos WHERE Id = :id"), {"id": configured},
+                        ).scalar()
+                        if not card_transfer_bank_id or card_transfer_bank_id in BANKS.values():
+                            raise CannotSend("DADEHFA_CARD_TRANSFER_BANK_ID must reference a separate bank in Dadehfa BankInfos.")
+                    else:
+                        card_transfer_bank_id = db.execute(
+                            text("SELECT TOP 1 Id FROM BankInfos WHERE BankWebSite = :key ORDER BY Id"), {"key": CARD_TRANSFER},
+                        ).scalar()
+                rows = plan(invoice, card_transfer_bank_id=card_transfer_bank_id)
                 customer_id = _customer_id(db, invoice, at)
                 address_id = _address_id(db, invoice, customer_id, at)
                 invoice_id = _insert(db, "Invoices", {

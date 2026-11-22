@@ -36,6 +36,8 @@ urlpatterns = [
     path("Invoice/GetInvoiceStatistics", invoices.StatisticsView.as_view()),
     path("Invoice/InvoiceAmountRange", invoices.AmountRangeView.as_view()),
     path("Invoice/InvoiceDetails/<int:invoice_id>", invoices.DetailView.as_view()),
+    path("Invoice/CardTransfer/<int:payment_id>/Image", invoices.CardTransferImageView.as_view()),
+    path("Invoice/CardTransfer/<int:payment_id>/Review", invoices.CardTransferReviewView.as_view()),
     path("Invoice/RecentInvoicesForCustomer", invoices.CustomerInvoicesView.as_view()),
     path("Invoice/GetCorruptedInvoices", invoices.CorruptedView.as_view()),
     path("Invoice/ValidateCorruptedInvoices", invoices.NotYetView.as_view()),

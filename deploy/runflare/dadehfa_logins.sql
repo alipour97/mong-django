@@ -21,6 +21,7 @@ GRANT UPDATE (IsDefault) ON dbo.CustomerAddresses TO mong_writer;
 GRANT SELECT, INSERT ON dbo.Invoices TO mong_writer;
 GRANT SELECT, INSERT ON dbo.InvoiceDetails TO mong_writer;
 GRANT SELECT, INSERT ON dbo.InvoicePayments TO mong_writer;
+GRANT SELECT ON dbo.BankInfos TO mong_writer;
 GRANT SELECT, INSERT ON dbo.Coupons TO mong_writer;
 GRANT UPDATE (IsUsed, UsedDate, IsActive, BankPortalEndTime) ON dbo.Coupons TO mong_writer;
 GRANT SELECT ON dbo.GiftCards TO mong_writer;
