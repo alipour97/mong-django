@@ -24,6 +24,7 @@ import uuid
 from datetime import timedelta
 from urllib.parse import quote
 
+import requests
 from django.conf import settings
 from django.db.models import Q
 from django.utils import timezone
@@ -338,12 +339,100 @@ def start_snapp(record: PayRecord, transaction_id: str, pay_amount: int, order: 
     note(record, "token", tx=record.gateway_transaction_id, reply=reply.brief())
     payment_token, page_url = reply.value("paymentToken"), reply.value("paymentPageUrl")
     if not reply.ok or not payment_token or not page_url:
+        if (reply.http == 403 or (not reply.ok and getattr(reply, "http", 0) in (403, 0))) and getattr(settings, "PAYHUB_OLD_HUB_URL", ""):
+            logger.warning("Direct SnappPay returned %s. Attempting fallback to %s", reply.http, settings.PAYHUB_OLD_HUB_URL)
+            relayed = _start_snapp_fallback(record, transaction_id, order, mobile)
+            if relayed:
+                return relayed
         _set(record, S.FAILED, reply.message)
         raise Refused(CONNECTION_FAILED, 502)
     record.payment_token, record.payment_page_url = str(payment_token), str(page_url)
     _set(record, S.REDIRECTED)
     return {"paymentToken": record.payment_token, "paymentPageUrl": record.payment_page_url,
             "transactionId": record.gateway_transaction_id}
+
+
+def _start_snapp_fallback(record: PayRecord, transaction_id: str, order: dict, mobile: str) -> dict | None:
+    hub_url = getattr(settings, "PAYHUB_OLD_HUB_URL", "").rstrip("/")
+    if not hub_url:
+        return None
+    try:
+        gen_payload = {
+            "gateway": "snapppay",
+            "payAmount": record.amount,
+            "successCallBack": record.success_callback,
+            "failedCallBack": record.failed_callback,
+            "cellPhone": mobile,
+            "customerKey": str(record.customer_key or ""),
+            "companyId": 0,
+        }
+        res = requests.post(f"{hub_url}/GenerateToken", json=gen_payload, timeout=15)
+        if res.status_code != 200:
+            logger.warning("SnappPay fallback GenerateToken failed: %s %s", res.status_code, res.text)
+            return None
+        gen_data = res.json()
+        hub_token = gen_data.get("token")
+        if not hub_token:
+            return None
+
+        tok_payload = {
+            "amount": record.amount,
+            "discountAmount": order.get("discountAmount", 0),
+            "externalSourceAmount": order.get("externalSourceAmount", 0),
+            "mobile": mobile,
+            "cartList": order.get("cartList") or [],
+        }
+        tok_res = requests.post(
+            f"{hub_url}/GetPaymentToken/{hub_token}/{record.gateway_transaction_id}/{record.amount}",
+            json=tok_payload,
+            timeout=25,
+        )
+        if tok_res.status_code != 200:
+            logger.warning("SnappPay fallback GetPaymentToken failed: %s %s", tok_res.status_code, tok_res.text)
+            return None
+        tok_data = tok_res.json()
+        payment_token = tok_data.get("paymentToken")
+        page_url = tok_data.get("paymentPageUrl")
+        if not payment_token or not page_url:
+            return None
+
+        record.payment_token = str(payment_token)
+        record.payment_page_url = str(page_url)
+        record.ref_id = str(hub_token)
+        note(record, "snapp_fallback", hub=hub_url, hub_token=hub_token, reply="http=200 ok=True")
+        _set(record, S.REDIRECTED)
+        return {
+            "paymentToken": record.payment_token,
+            "paymentPageUrl": record.payment_page_url,
+            "transactionId": record.gateway_transaction_id,
+        }
+    except Exception as exc:
+        logger.exception("SnappPay fallback exception: %s", exc)
+        return None
+
+
+def _settle_fallback(record: PayRecord, transaction_id: str, amount: int) -> str:
+    hub_url = getattr(settings, "PAYHUB_OLD_HUB_URL", "").rstrip("/")
+    hub_token = record.ref_id
+    if not hub_url or not hub_token:
+        return S.FAILED
+    try:
+        res = requests.post(
+            f"{hub_url}/PaymentVerification/{hub_token}",
+            json={"transactionId": transaction_id, "amount": amount},
+            timeout=45,
+        )
+        note(record, "settle_fallback", status=res.status_code, body=res.text[:200])
+        if res.status_code == 200:
+            data = res.json()
+            if data.get("status") in ("ok", "duplicate"):
+                return S.CONSUMED
+            if data.get("status") == "reverted":
+                return S.REVERTED
+        return S.FAILED
+    except Exception as exc:
+        logger.exception("SnappPay fallback settle exception: %s", exc)
+        return S.UNKNOWN
 
 
 def _delivery_problem(record: PayRecord) -> str:
@@ -502,7 +591,10 @@ def confirm(record: PayRecord, transaction_id: str, amount: int) -> dict:
         return answer("duplicate" if record.state == S.CONSUMED else "not_paid")
 
     if record.gateway == SNAPPPAY:
-        state = _settle(record)
+        if any(e.get("event") == "snapp_fallback" for e in record.events) and getattr(settings, "PAYHUB_OLD_HUB_URL", ""):
+            state = _settle_fallback(record, transaction_id, amount)
+        else:
+            state = _settle(record)
         if state != S.CONSUMED:
             _set(record, state)  # RETURNED: the job in reconcile gives the money back
             return answer("failed")

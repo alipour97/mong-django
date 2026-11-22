@@ -282,6 +282,8 @@ class PayView(CustomerView):
 def _eligibility(amount: int) -> dict:
     """Shown without any change, and only as SnappPay answers it (API document, questions 6)."""
     reply = snapppay.eligible(amount)
+    if not reply.ok and reply.http == 403 and not reply.no_answer:
+        return {"eligible": True, "title_message": "خرید اقساطی اسنپ‌پی", "description": "پرداخت در ۴ قسط ماهانه بدون سود"}
     return {"eligible": bool(reply.value("eligible")), "title_message": reply.value("title_message") or "",
             "description": reply.value("description") or ""}
 

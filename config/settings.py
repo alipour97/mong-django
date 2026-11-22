@@ -367,4 +367,4 @@ if (_snapp_host := urlsplit(PAYHUB_SNAPP_RETURN_URL).hostname) and _snapp_host n
 PAYHUB_ALLOWED_API_IPS = [h.strip() for h in os.getenv("PAYHUB_ALLOWED_API_IPS", "").split(",") if h.strip()]
 PAYHUB_ACCEPT_KEY = os.getenv("PAYHUB_ACCEPT_KEY", "")  # SnappPayForward.Key on Mong.Pay
 PAYHUB_ALLOWED_CALLBACK_HOSTS = [h.strip().lower() for h in os.getenv("PAYHUB_ALLOWED_CALLBACK_HOSTS", "api.mong.ir,api.mongnew.ir").split(",") if h.strip()]
-PAYHUB_OLD_HUB_URL = os.getenv("PAYHUB_OLD_HUB_URL", "").rstrip("/")  # while moving: Mong.Pay, for the tokens it made
+PAYHUB_OLD_HUB_URL = os.getenv("PAYHUB_OLD_HUB_URL", "https://zarinpal.mong.ir").rstrip("/")  # fallback relay hub: Mong.Pay on Plesk

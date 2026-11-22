@@ -288,6 +288,9 @@ class SnappCallbackView(HubView):
     def handle(self, request, record_id: str, token: str):
         record = _record(token)
         if not record or record.gateway != SNAPPPAY or str(record.pk) != record_id:
+            passed = _pass_to_old_hub(request, f"/api/SnappPay/CallBack/{record_id}/{token}")
+            if passed:
+                return passed
             return _page("تراکنش پیدا نشد. اگر مبلغی از حساب شما کسر شده، به‌صورت خودکار برمی‌گردد.", 404)
         fields = {**request.query_params.dict(), **(request.data.dict() if hasattr(request.data, "dict") else request.data)}
         try:
