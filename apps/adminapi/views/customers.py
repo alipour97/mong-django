@@ -37,6 +37,8 @@ from ..paging import paginated, sort_rows, to_bool, to_int
 from .auth import AdminView
 from .comments import _date
 
+_PERSIAN_NAME_ORDER = str.maketrans({char: chr(0x600 + index) for index, char in enumerate("اآبپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی")})
+
 NOT_FOUND = "مشتری مورد نظر موجود نیست."
 
 
@@ -207,7 +209,10 @@ class BulletinView(AdminView):
                 "personalMailLink": f"mailto:{c.email}?subject={subject}&body={body}",
             }
 
-        page = paginated(list(qs.order_by("id")), number, size, item)
+        rows = sort_rows(list(qs.order_by("id")), d, {
+            "fullName": lambda c: catalog.norm(f"{c.first_name} {c.last_name}").translate(_PERSIAN_NAME_ORDER),
+        })
+        page = paginated(rows, number, size, item)
         emails = ";".join(x["email"] for x in page["items"])
         page["additionalInfo"] = f"mailto:{emails}?subject={subject}&body={quote(f'سلام همراهان عزیز مجموعه {company}')}"
         return ok({"result": page})

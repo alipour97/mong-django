@@ -28,7 +28,7 @@ from apps.website.models import Category, Collection, CollectionCategory, MediaA
 
 from .. import products as index
 from ..envelope import fail, ok
-from ..paging import int_list, paginated, to_bool, to_int
+from ..paging import int_list, paginated, sort_rows, sort_spec, to_bool, to_int
 from .auth import AdminView
 from .comments import _date
 
@@ -47,14 +47,28 @@ def _links(model, collection_ids, field: str) -> dict[int, list[int]]:
     return out
 
 
+def _product_count(site_pids, cat_rows, cats, pids):
+    return len(set(pids) & site_pids) + sum(cat_rows.get(cat, 0) for cat in cats)
+
+
 def _summary(c: Collection, media: list, site_pids: set[int], cat_rows: dict[int, int], cats: list[int], pids: list[int]) -> dict:
     return {
         "id": c.id, "mapId": c.map_id, "title": c.title,
         "beginningDate": jalali(c.beginning_date, with_time=False), "endDate": jalali(c.end_date, with_time=False),
         "created": jalali(c.created, with_time=False), "inMainPage": c.in_main_page, "isActive": c.is_active,
         "reduction": float(c.reduction), "medias": media,
-        "productCount": len(set(pids) & site_pids) + sum(cat_rows.get(cat, 0) for cat in cats),
+        "productCount": _product_count(site_pids, cat_rows, cats, pids),
     }
+
+
+def _collection_products(ids, rows, tree):
+    cats = _links(CollectionCategory, ids, "category_id")
+    prods = _links(ProductCollection, ids, "product_id")
+    per_cat: dict[int, int] = {}
+    for r in rows:
+        per_cat[r.category_id] = per_cat.get(r.category_id, 0) + 1
+    cat_rows = {cat: sum(per_cat.get(d, 0) for d in tree.descendants(cat)) for cl in cats.values() for cat in cl}
+    return cats, prods, cat_rows, {r.id for r in rows}
 
 
 class AllView(AdminView):
@@ -70,17 +84,17 @@ class AllView(AdminView):
             qs = qs.filter(end_date__lte=end)
         search = catalog.norm(q.get("Search") or q.get("search") or "")
         cols = [c for c in qs.order_by("-id") if not search or search in catalog.norm(c.title)]
-        page = paginated(cols, to_int(q.get("pageNumber"), 1), to_int(q.get("pageSize"), 30))
-
+        sort_keys = {"created": lambda c: c.created, "beginningDate": lambda c: c.beginning_date, "endDate": lambda c: c.end_date}
+        key, _ = sort_spec(q, {*sort_keys, "productCount"})
+        rows, tree = index.admin_rows(), catalog.category_tree()
+        if key == "productCount":
+            cats, prods, cat_rows, site_pids = _collection_products([c.id for c in cols], rows, tree)
+            sort_keys["productCount"] = lambda c: _product_count(site_pids, cat_rows, cats.get(c.id, []), prods.get(c.id, []))
+        page = paginated(sort_rows(cols, q, sort_keys), to_int(q.get("pageNumber"), 1), to_int(q.get("pageSize"), 30))
         ids = [c.id for c in page["items"]]
-        media, cats, prods = _media(ids), _links(CollectionCategory, ids, "category_id"), _links(ProductCollection, ids, "product_id")
-        rows = index.admin_rows()
-        tree = catalog.category_tree()
-        per_cat: dict[int, int] = {}
-        for r in rows:
-            per_cat[r.category_id] = per_cat.get(r.category_id, 0) + 1
-        cat_rows = {cat: sum(per_cat.get(d, 0) for d in tree.descendants(cat)) for cl in cats.values() for cat in cl}
-        site_pids = {r.id for r in rows}
+        if key != "productCount":
+            cats, prods, cat_rows, site_pids = _collection_products(ids, rows, tree)
+        media = _media(ids)
         page["items"] = [
             _summary(c, media.get(c.id, []), site_pids, cat_rows, cats.get(c.id, []), prods.get(c.id, [])) for c in page["items"]
         ]

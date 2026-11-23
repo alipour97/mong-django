@@ -25,7 +25,7 @@ from apps.website.models import CooperationRequest, MediaAttachment
 from apps.website import images as site_images
 
 from ..envelope import fail, ok
-from ..paging import int_list, paginated, to_int
+from ..paging import int_list, paginated, sort_rows, to_int
 from .auth import AdminView
 
 S = CooperationRequest.State
@@ -61,7 +61,7 @@ class ListView(AdminView):
             return fail("اندازه و شماره صفحه باید بیشتر از 0 باشد", 400)
         # Untouched ones first, then by the latest action or submission.
         rows = list(qs.order_by(F("last_time_action").asc(nulls_first=True), "-created", "-id"))
-        page = paginated(rows, number, size)
+        page = paginated(sort_rows(rows, d, {"submitTime": lambda r: r.created}), number, size)
         ids = [r.id for r in page["items"]]
         resumes = {}
         for att in MediaAttachment.objects.filter(table=MediaAttachment.Table.COOPERATION_REQUESTS, record_id__in=ids, is_deleted=False).order_by("id"):

@@ -1,12 +1,15 @@
+from datetime import timedelta
 from io import BytesIO
 from unittest.mock import call, patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from PIL import Image
 from rest_framework.test import APIClient
 
 from apps.adminapi.models import AdminUser
+from apps.samian.models import SamianSalesRow, SamianSalesTransaction
 from apps.website.models import CARD_TRANSFER, BankGateway, BankInfo, CardTransferReceipt, Customer, Invoice
 
 
@@ -133,6 +136,45 @@ class CardTransferTests(TestCase):
 
         self.assertEqual(self.decide(self.invoice.payments.get(), False).status_code, 200)
         self.assertEqual(set(listed(IncludePendingCardTransfers="true")), {paid.pk})
+
+    def test_invoice_date_filters_and_sort_use_the_payment_date(self):
+        today = timezone.now()
+        older_invoice = Invoice.objects.create(customer=self.customer, state=Invoice.State.SUCCESSFUL,
+                                               paid_at=today - timedelta(days=1))
+        Invoice.objects.filter(pk=self.invoice.pk).update(state=Invoice.State.SUCCESSFUL, paid_at=today,
+                                                          created=today - timedelta(days=3), reduction_amount=20000)
+        url = "/api/admin/v1/Invoice/GetFilteredInvoices"
+        rows = self.admin_client.get(url, {"InvoiceState": 3}).data["data"]["result"]["items"]
+        self.assertEqual([row["id"] for row in rows], [self.invoice.pk, older_invoice.pk])
+        self.assertEqual(rows[0]["createDate"], today.isoformat())
+        day = timezone.localdate(today).isoformat()
+        filtered = self.admin_client.get(url, {"InvoiceState": 3, "FromDate": day, "ToDate": day})
+        self.assertEqual([row["id"] for row in filtered.data["data"]["result"]["items"]], [self.invoice.pk])
+        stats = self.admin_client.get("/api/admin/v1/Invoice/GetInvoiceStatistics", {
+            "invoiceState": 3, "FromDate": day, "ToDate": day,
+        }).data["data"]["result"]
+        self.assertEqual(stats, {"totalCount": 1, "recentInvoicesCount": 1, "commentInvoicesCount": 0, "discountInvoicesCount": 1})
+
+    def test_synced_invoice_keeps_its_site_payment_date(self):
+        paid_at = timezone.now()
+        receipt = SamianSalesTransaction.objects.create(
+            samian_id=598, store_order_id=self.invoice.pk, order_web_status_id=2,
+            order_date=paid_at - timedelta(days=4), transaction_date=paid_at - timedelta(days=1),
+        )
+        SamianSalesRow.objects.create(samian_id=499, transaction=receipt, discount_amount=1000)
+        Invoice.objects.filter(pk=self.invoice.pk).update(
+            state=Invoice.State.SUCCESSFUL, paid_at=paid_at, samian_transaction_id=receipt.samian_id,
+        )
+        day = timezone.localdate(paid_at).isoformat()
+        response = self.admin_client.get("/api/admin/v1/Invoice/GetFilteredInvoices", {
+            "InvoiceState": 3, "FromDate": day, "ToDate": day,
+        })
+        rows = response.data["data"]["result"]["items"]
+        self.assertEqual([(row["id"], row["createDate"]) for row in rows], [(receipt.samian_id, paid_at.isoformat())])
+        stats = self.admin_client.get("/api/admin/v1/Invoice/GetInvoiceStatistics", {
+            "invoiceState": 3, "FromDate": day, "ToDate": day,
+        }).data["data"]["result"]
+        self.assertEqual((stats["totalCount"], stats["recentInvoicesCount"], stats["discountInvoicesCount"]), (1, 1, 1))
 
     def test_upload_rejects_foreign_invoice_invalid_image_and_stale_amount(self):
         other = APIClient()

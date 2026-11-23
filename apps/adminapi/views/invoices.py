@@ -34,7 +34,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import BigIntegerField, Case, DecimalField, F, Max, Min, Q, Sum, Value, When
+from django.db.models import BigIntegerField, Case, DecimalField, F, Max, Min, OuterRef, Q, Subquery, Sum, Value, When
 from django.db.models.functions import Abs, Coalesce
 from django.http import HttpResponse
 from django.utils import timezone
@@ -90,9 +90,12 @@ def _signed(field: str, kind=BigIntegerField):
 
 def _invoices():
     """Online orders with at least one Mong row, with their Mong totals (rial)."""
+    site_paid_at = (Invoice.objects.filter(samian_transaction_id=OuterRef("samian_id"), paid_at__isnull=False)
+                    .order_by("-paid_at").values("paid_at")[:1])
     return (
         SamianSalesTransaction.objects.filter(rows__isnull=False, store_order_id__isnull=False)
         .annotate(
+            invoice_date=Coalesce(Subquery(site_paid_at), "transaction_date"),
             amount=_signed("gross_amount"), reduction_amount=_signed("discount_amount"),
             vat_amount=_signed("vat_amount"), revenue=_signed("line_revenue"), units=_signed("quantity", DecimalField),
         )
@@ -107,13 +110,18 @@ def _commented_products() -> set[int]:
     return set(SamianProduct.objects.filter(samian_id__in=samian_ids).values_list("pk", flat=True))
 
 
+def _invoice_date_filter(qs, q):
+    if begin := _date(q.get("FromDate")):
+        qs = qs.filter(invoice_date__gte=begin)
+    if end := _date(q.get("ToDate"), end=True):
+        qs = qs.filter(invoice_date__lte=end)
+    return qs
+
+
 def _filter(qs, q):
     if (state := to_int(q.get("InvoiceState") or q.get("invoiceState"))) is not None:
         qs = _in_state(qs, state)
-    if begin := _date(q.get("FromDate")):
-        qs = qs.filter(transaction_date__gte=begin)
-    if end := _date(q.get("ToDate"), end=True):
-        qs = qs.filter(transaction_date__lte=end)
+    qs = _invoice_date_filter(qs, q)
     if (low := to_int(q.get("FromAmount"))) is not None:
         qs = qs.filter(amount__gte=low)
     if (high := to_int(q.get("ToAmount"))) is not None:
@@ -139,7 +147,13 @@ def _filter(qs, q):
 # Site orders not yet in Samian
 # -----------------------------------------------------------------------------
 def _site():
+    payment_date = (InvoicePayment.objects.filter(invoice_id=OuterRef("pk"))
+                    .filter(Q(is_success=True, verified_at__isnull=False)
+                            | Q(gateway=CARD_TRANSFER, verified_at__isnull=True, transfer_receipt__isnull=False))
+                    .annotate(recorded_at=Coalesce("verified_at", "created"))
+                    .order_by("-recorded_at").values("recorded_at")[:1])
     return (Invoice.objects.filter(is_deleted=False, samian_transaction_id__isnull=True)
+            .annotate(invoice_date=Coalesce("paid_at", Subquery(payment_date), "created"))
             .select_related("customer", "shipping_method__type", "address").prefetch_related("payments"))
 
 
@@ -169,10 +183,7 @@ def _site_filter(qs, q):
             ).values("invoice_id")
             states |= Q(state=Invoice.State.SUSPENDED, id__in=pending)
         qs = qs.filter(states)
-    if begin := _date(q.get("FromDate")):
-        qs = qs.filter(created__gte=begin)
-    if end := _date(q.get("ToDate"), end=True):
-        qs = qs.filter(created__lte=end)
+    qs = _invoice_date_filter(qs, q)
     if (low := to_int(q.get("FromAmount"))) is not None:
         qs = qs.filter(amount__gte=low)
     if (high := to_int(q.get("ToAmount"))) is not None:
@@ -204,8 +215,8 @@ def _site_header(inv: Invoice) -> dict:
     snapp, paid = _snapp_payment(inv), _paid_by(inv)
     return {
         "id": inv.id, "invoiceNumber": inv.number, "customerId": c.id, "customerName": c.first_name, "customerLastName": c.last_name,
-        "qty": float(sum(ln.qty for ln in lines)), "createDate": inv.created.isoformat(),
-        "createDatePersian": jalali(inv.created, with_time=False), "branchId": None, "branchTitle": None,
+        "qty": float(sum(ln.qty for ln in lines)), "createDate": inv.invoice_date.isoformat(),
+        "createDatePersian": jalali(inv.invoice_date, with_time=False), "branchId": None, "branchTitle": None,
         "invoiceState": inv.state, "invoiceType": inv.state,
         "shippingMethodId": inv.shipping_method_id or 0, "shippingMethodName": m.name if m else "",
         "shippingMethodTypeId": m.type_id if m else 0, "shippingMethodTypeTitle": m.type.name if m and m.type else "",
@@ -300,8 +311,8 @@ def _header(t: SamianSalesTransaction, site: dict, commented_rows: dict) -> dict
     return {
         "id": t.samian_id, "invoiceNumber": t.transaction_code or str(t.samian_id),
         "customerId": cu.id if cu else 0, "customerName": first, "customerLastName": last,
-        "qty": float(t.units), "createDate": t.transaction_date.isoformat() if t.transaction_date else None,
-        "createDatePersian": jalali(t.transaction_date, with_time=False),
+        "qty": float(t.units), "createDate": t.invoice_date.isoformat() if t.invoice_date else None,
+        "createDatePersian": jalali(t.invoice_date, with_time=False),
         "branchId": t.warehouse_id, "branchTitle": t.warehouse or None,
         "invoiceState": state, "invoiceType": state,
         "shippingMethodId": t.shipment_type_id or 0, "shippingMethodName": t.shipment_type,
@@ -331,12 +342,12 @@ def _headers(txs: list) -> list[dict]:
 def _page(qs, q, site_qs=None) -> dict:
     """One page of Samian receipts and site orders together, newest first or by the column the panel sorts."""
     size, number = max(to_int(q.get("pageSize"), 10), 1), max(to_int(q.get("pageNumber"), 1), 1)
-    site_qs = site_qs if site_qs is not None else Invoice.objects.none()
+    site_qs = site_qs if site_qs is not None else _site().none()
     total = qs.count() + site_qs.count()
     upto = number * size
     key, desc = sort_spec(q, ("qty", "payableAmount", "createDate"))
-    key = key or "createDate"
-    desc = desc if q.get("SortBy") else True
+    if key is None:
+        key, desc = "createDate", True
     oldest = timezone.make_aware(datetime.min.replace(year=2000))
     # Each side sorted in the database by the same value, then merged.
     if key == "qty":
@@ -348,9 +359,10 @@ def _page(qs, q, site_qs=None) -> dict:
         site_qs = site_qs.order_by(("-" if desc else "") + "payable_amount", "-id")
         value = lambda obj: obj.payable if isinstance(obj, SamianSalesTransaction) else obj.payable_amount  # noqa: E731
     else:
-        qs = qs.order_by(("-" if desc else "") + "transaction_date", "-samian_id")
-        site_qs = site_qs.order_by(("-" if desc else "") + "created", "-id")
-        value = lambda obj: (obj.transaction_date or oldest) if isinstance(obj, SamianSalesTransaction) else obj.created  # noqa: E731
+        order = F("invoice_date").desc(nulls_last=True) if desc else F("invoice_date").asc(nulls_first=True)
+        qs = qs.order_by(order, "-samian_id")
+        site_qs = site_qs.order_by(("-" if desc else "") + "invoice_date", "-id")
+        value = lambda obj: obj.invoice_date or oldest  # noqa: E731
     merged = sorted(list(qs[:upto]) + list(site_qs[:upto]), key=value, reverse=desc)[(number - 1) * size: upto]
     receipts = _headers([obj for obj in merged if isinstance(obj, SamianSalesTransaction)])
     by_id = {h["id"]: h for h in receipts}
@@ -380,17 +392,19 @@ class CustomerInvoicesView(AdminView):
 
 class StatisticsView(AdminView):
     def get(self, request):
-        state = to_int(request.query_params.get("invoiceState"))
-        qs, site = _invoices(), _site()
+        q = request.query_params
+        state = to_int(q.get("invoiceState"))
+        qs, site = _invoice_date_filter(_invoices(), q), _invoice_date_filter(_site(), q)
         if state is not None:
             qs, site = _in_state(qs, state), site.filter(state=state)
         jy, jm, _ = today_j()
-        month = _aware(month_range(jy, jm)[0])
+        month_start, month_end = map(_aware, month_range(jy, jm))
+        in_current_month = {"invoice_date__gte": month_start, "invoice_date__lt": month_end}
         with_comment = SamianSalesRow.objects.filter(samian_product_id__in=_commented_products()).values("transaction_id")
         commented = ProductComment.objects.filter(is_deleted=False, is_buyer=True, is_admin_comment=False).values("product_id")
         return ok({"result": {
             "totalCount": qs.count() + site.count(),
-            "recentInvoicesCount": qs.filter(transaction_date__gte=month).count() + site.filter(created__gte=month).count(),
+            "recentInvoicesCount": qs.filter(**in_current_month).count() + site.filter(**in_current_month).count(),
             "commentInvoicesCount": qs.filter(pk__in=with_comment).count() + site.filter(lines__product_id__in=commented).distinct().count(),
             "discountInvoicesCount": qs.filter(reduction_amount__gt=0).count() + site.filter(reduction_amount__gt=0).count(),
         }})

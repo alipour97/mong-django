@@ -32,7 +32,7 @@ from apps.website.models import (
 
 from ..envelope import fail, ok
 from ..models import AdminUser
-from ..paging import int_list, paginated, to_int
+from ..paging import int_list, paginated, sort_rows, to_int
 from .auth import AdminView
 from .comments import _date
 from .gallery import _url
@@ -65,6 +65,13 @@ def _authors(ids) -> dict[int, str]:
     return {u.id: f"{u.first_name} {u.last_name}" for u in AdminUser.objects.filter(id__in=[i for i in ids if i])}
 
 
+def _with_engagement(qs):
+    return qs.annotate(
+        n_likes=Count("likes", filter=Q(likes__liked=True, likes__is_deleted=False), distinct=True),
+        n_comments=Count("comments", filter=Q(comments__status=1, comments__is_deleted=False), distinct=True),
+    )
+
+
 class ListView(BlogView):
     def get(self, request):
         q = request.query_params
@@ -77,11 +84,12 @@ class ListView(BlogView):
             qs = qs.filter(author_id=author)
         if search := (q.get("Search") or q.get("search") or "").strip():
             qs = qs.filter(Q(title__icontains=search) | Q(content__icontains=search) | Q(description__icontains=search))
-        qs = qs.annotate(
-            n_likes=Count("likes", filter=Q(likes__liked=True, likes__is_deleted=False), distinct=True),
-            n_comments=Count("comments", filter=Q(comments__status=1, comments__is_deleted=False), distinct=True),
-        ).order_by("-created", "-id")
-        rows = list(qs)
+        qs = _with_engagement(qs).order_by("-created", "-id")
+        rows = sort_rows(list(qs), q, {
+            "createDate": lambda a: a.created, "viewCount": lambda a: a.view_count,
+            "comment": lambda a: a.n_comments, "likeCount": lambda a: a.n_likes,
+            "showOnPage": lambda a: a.show_on_page,
+        })
         authors = _authors({a.author_id for a in rows})
 
         def item(a: Article) -> dict:

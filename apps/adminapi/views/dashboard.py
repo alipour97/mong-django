@@ -357,9 +357,15 @@ class SearchView(AdminView):
         tree = catalog.category_tree()
         files = [f for f in FileMedia.objects.filter(is_deleted=False).order_by("-id") if norm in catalog.norm(f"{f.file_name} {f.alternative}")][:LIMIT]
 
+        from .blog import _with_engagement
+        from .categories import _Tree, _rows as _category_rows
+        from .collections import _collection_products, _summary as _collection_summary
+        from .comments import _status_dates
+
         def comment(c: ProductComment) -> dict:
             return {"id": c.id, "comment": c.comment, "score": float(c.score), "productId": c.product_id, "status": c.status,
-                    "title": c.title, "typeId": 0, "type": "محصول", "createDate": jalali(c.created, with_time=False)}
+                    "title": c.title, "typeId": 0, "type": "محصول", "createDate": jalali(c.created, with_time=False),
+                    **_status_dates(c)}
 
         from .customers import _purchases
         from .gallery import _dto as _file_dto, _tags_of
@@ -372,6 +378,19 @@ class SearchView(AdminView):
         invoices = list(_invoice_filter(_invoices(), search).order_by("-transaction_date")[:LIMIT])
         site_invoices = list(_site_filter(_site(), search).order_by("-created")[:LIMIT])
 
+        selected_categories = [c for c in tree.nodes.values() if norm in catalog.norm(c.title)][:LIMIT]
+        collections = list(Collection.objects.filter(is_deleted=False, title__icontains=text)[:LIMIT])
+        collection_rows = []
+        if collections:
+            cats, prods, counts, site_pids = _collection_products([c.id for c in collections], index.admin_rows(), tree)
+            collection_rows = [
+                _collection_summary(c, [], site_pids, counts, cats.get(c.id, []), prods.get(c.id, []))
+                for c in collections
+            ]
+
+        articles = _with_engagement(Article.objects.filter(is_deleted=False).filter(
+            Q(title__icontains=text) | Q(description__icontains=text),
+        ))[:LIMIT]
         formats = {x.id: x for x in FileFormat.objects.filter(id__in={f.format_id for f in files})}
         file_tags = _tags_of([f.id for f in files])
 
@@ -386,16 +405,14 @@ class SearchView(AdminView):
             "articles": [
                 {"id": a.id, "title": a.title, "createDate": a.created.isoformat() if a.created else None,
                  "publishDate": jalali(a.publish_date, with_time=False),
-                 "viewCount": a.view_count, "showOnPage": a.show_on_page, "authorName": "", "likeCount": 0, "commentCount": 0}
-                for a in Article.objects.filter(is_deleted=False).filter(Q(title__icontains=text) | Q(description__icontains=text))[:LIMIT]
+                 "viewCount": a.view_count, "showOnPage": a.show_on_page, "authorName": "",
+                 "likeCount": a.n_likes, "commentCount": a.n_comments, "comment": a.n_comments}
+                for a in articles
             ],
             "approvedComments": [comment(c) for c in comments if c.status == 1][:LIMIT],
             "pendingComments": [comment(c) for c in comments if c.status == 0][:LIMIT],
             "rejectedComments": [comment(c) for c in comments if c.status == 2][:LIMIT],
-            "categories": [
-                {"id": c.id, "title": c.title, "parentId": c.parent_id, "isOnlineActive": c.is_online_active}
-                for c in tree.nodes.values() if norm in catalog.norm(c.title)
-            ][:LIMIT],
+            "categories": _category_rows(_Tree(), selected_categories, with_descriptions=False) if selected_categories else [],
             "users": [
                 {"id": u.id, "firstName": u.first_name, "lastName": u.last_name, "sendInvoiceSms": u.send_invoice_sms,
                  "roleId": u.role_id, "roleTitle": u.role.title if u.role else None, "cellPhone": u.cellphone,
@@ -403,11 +420,7 @@ class SearchView(AdminView):
                 for u in users
             ],
             "fileMedias": [_file_dto(f, formats, file_tags) for f in files],
-            "collections": [
-                {"id": c.id, "title": c.title, "isActive": c.is_active, "inMainPage": c.in_main_page,
-                 "beginningDate": jalali(c.beginning_date, with_time=False), "endDate": jalali(c.end_date, with_time=False)}
-                for c in Collection.objects.filter(is_deleted=False, title__icontains=text)[:LIMIT]
-            ],
+            "collections": collection_rows,
             "products": [
                 {"id": r.id, "name": r.name, "barcode": r.barcode, "price": r.price, "reduction": r.reduction,
                  "mediaCount": r.media_count, "qty": r.qty, "isSaleable": r.on_site,

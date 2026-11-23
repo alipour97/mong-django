@@ -20,7 +20,7 @@ from apps.website import images as site_images
 from apps.website.models import Category, CategoryTag, FileMedia, MediaAttachment, Product
 
 from ..envelope import fail, ok
-from ..paging import paginated, to_bool, to_int
+from ..paging import paginated, sort_rows, sort_spec, to_bool, to_int
 from .auth import AdminView
 
 NOT_FOUND = "شناسه دسته‌بندی نامعتبر است"
@@ -90,7 +90,7 @@ def _rows(tree: _Tree, cats: list[Category], with_descriptions: bool) -> list[di
             "totalChildrenCount": len(below),
             "totalLeafChildrenCount": sum(1 for x in below if not tree.children.get(x)),
             "isOnlineActive": c.is_online_active, "inMainPage": c.in_main_page, "depthLevel": tree.depth(c),
-            "fileMedias": media[c.id], "tags": tags[c.id],
+            "hasMedia": bool(media[c.id]), "fileMedias": media[c.id], "tags": tags[c.id],
         }
         if with_descriptions:
             row["hasLongDescription"] = bool(c.long_description_html)
@@ -117,6 +117,11 @@ def _filtered(request, roots: bool) -> dict:
                 cats = [c for c in cats if bool(getattr(c, field)) == want]
     cats.sort(key=lambda c: c.id)
     page_number, page_size = to_int(data.get("pageNumber"), 1), to_int(data.get("pageSize"), 1000)
+    sorters = {key: lambda row, key=key: row[key] for key in
+               ("productCounts", "totalChildrenCount", "inMainPage", "isOnlineActive", "hasMedia")}
+    if sort_spec(data, sorters)[0]:
+        rows = sort_rows(_rows(tree, cats, with_descriptions=not roots), data, sorters)
+        return {"result": paginated(rows, page_number, page_size)}
     page = paginated(cats, page_number, page_size)
     page["items"] = _rows(tree, page["items"], with_descriptions=not roots)
     return {"result": page}

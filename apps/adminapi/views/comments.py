@@ -40,12 +40,16 @@ def _date(value, end: bool = False):
     """A date filter from the panel (ISO date or datetime); a bare end date covers the whole day."""
     if not value:
         return None
-    dt = parse_datetime(str(value))
-    if dt is None:
-        d = parse_date(str(value)[:10])
-        if d is None:
-            return None
-        dt = timezone.datetime.combine(d, timezone.datetime.max.time() if end else timezone.datetime.min.time())
+    value = str(value).strip()
+    try:
+        dt = parse_datetime(value) if len(value) > 10 else None
+        if dt is None:
+            d = parse_date(value[:10])
+            if d is None:
+                return None
+            dt = timezone.datetime.combine(d, timezone.datetime.max.time() if end else timezone.datetime.min.time())
+    except ValueError:
+        return None
     return timezone.make_aware(dt) if timezone.is_naive(dt) else dt
 
 

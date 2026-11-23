@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from django.db.models import F
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
@@ -21,7 +22,7 @@ from apps.storefront.catalog import norm
 from apps.storefront.envelope import jalali
 
 from ..envelope import fail, ok
-from ..paging import one_page, to_int
+from ..paging import one_page, sort_spec, to_int
 from .auth import AdminView
 
 MAX_PAGE_SIZE = 200
@@ -43,6 +44,14 @@ def _labels(total: int, active: int, used: int) -> dict:
     return {"totalCount": total, "totalActive": active, "totalUnActice": total - active, "totalUsed": used}
 
 
+def _order(rows, q, fields):
+    key, desc = sort_spec(q, fields)
+    if key is None:
+        return rows
+    field = F(fields[key])
+    return rows.order_by(field.desc(nulls_last=True) if desc else field.asc(nulls_last=True), "id")
+
+
 class CouponListView(AdminView):
     def get(self, request):
         q = request.query_params
@@ -56,6 +65,10 @@ class CouponListView(AdminView):
             rows = rows.filter(created__gte=created_from)
         if expires_to:
             rows = rows.filter(expires__lte=expires_to)
+        rows = _order(rows, q, {
+            "minPrice": "min_price", "maxPrice": "max_price", "reduction": "reduction",
+            "isUsed": "is_used", "usedDate": "used_at", "isActive": "is_active",
+        })
         total = rows.count()
         items = [{
             "id": r.id, "customerId": r.customer_erp_id, "serial": r.serial, "reduction": float(r.reduction),
@@ -105,6 +118,10 @@ class GiftCardListView(AdminView):
         ):
             if value is not None:
                 rows = rows.filter(**{lookup: value})
+        rows = _order(rows, q, {
+            "startDate": "starts", "expDate": "expires", "gcBalance": "balance",
+            "minFactorPrice": "min_price", "invoiceCount": "invoice_count", "isActive": "is_active",
+        })
         total = rows.count()
         items = [{
             "id": r.id, "gcNum": r.number, "startDate": jalali(r.starts, with_time=False), "expDate": jalali(r.expires, with_time=False),

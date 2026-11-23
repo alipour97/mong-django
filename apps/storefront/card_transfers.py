@@ -52,9 +52,12 @@ def _notify(template_id: int, invoice: Invoice, *, include_admins: bool = False)
     def send():
         for mobile in recipients:
             try:
-                smsir.send_verify(mobile, template_id, {settings.SMSIR_CARD_TRANSFER_PARAM: number})
+                accepted = smsir.send_verify(mobile, template_id, {settings.SMSIR_CARD_TRANSFER_PARAM: number})
+                logger.log(logging.INFO if accepted else logging.WARNING,
+                           "card transfer SMS invoice=%s template=%s mobile_ending=%s accepted=%s",
+                           invoice.pk, template_id, mobile[-4:], accepted)
             except Exception:
-                logger.exception("card transfer SMS failed for invoice %s", invoice.pk)
+                logger.exception("card transfer SMS failed for invoice %s, mobile ending %s", invoice.pk, mobile[-4:])
 
     transaction.on_commit(lambda: threading.Thread(target=send, daemon=True).start(), robust=True)
 
