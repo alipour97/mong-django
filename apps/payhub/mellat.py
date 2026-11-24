@@ -75,7 +75,7 @@ def config(gateway=None) -> dict:
     from apps.website.models import BankGateway
 
     if gateway is None:
-        gateway = BankGateway.objects.filter(bank__key="mellat", is_deleted=False).order_by("-id").first()
+        gateway = BankGateway.objects.filter(bank__key="mellat", is_deleted=False, removed_at__isnull=True).order_by("-id").first()
     panel = gateway is not None and gateway.mellat_sandbox is not None
     return {
         "gateway": gateway,

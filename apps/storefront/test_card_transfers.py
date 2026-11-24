@@ -193,3 +193,42 @@ class CardTransferTests(TestCase):
         gateways = self.customer_client.get("/api/v1/Bank/GetGateways").data["result"]["data"]
         transfer = next(gateway for gateway in gateways if gateway["gatewayKey"] == CARD_TRANSFER)
         self.assertEqual((transfer["cardNumber"], transfer["instructions"]), ("6037991234567891", fields["instructions"]))
+
+    def test_gateway_priority_and_removal_apply_to_checkout(self):
+        bank, _ = BankInfo.objects.get_or_create(key="zarinpal", defaults={"name": "زرین‌پال"})
+        online = BankGateway.objects.create(bank=bank, merchant="12345678-1234-1234-1234-123456789012")
+        admin_url = "/api/admin/v1/Bank"
+        checkout_url = "/api/v1/Bank/GetGateways"
+
+        fields = {
+            "id": self.gateway.pk, "bankId": self.gateway.bank_id,
+            "cardNumber": self.gateway.card_number,
+        }
+        response = self.admin_client.post(f"{admin_url}/UpdateBankGateway", {
+            **fields, "displayPriority": 0,
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        response = self.admin_client.post(f"{admin_url}/UpdateBankGateway", {
+            **fields, "displayPriority": 1,
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+        rows = self.admin_client.get(f"{admin_url}/GetGateway").data["data"]["result"]
+        self.assertEqual((rows[0]["id"], rows[0]["displayPriority"]), (self.gateway.pk, 1))
+        gateways = self.customer_client.get(checkout_url).data["result"]["data"]
+        self.assertEqual([gateway["id"] for gateway in gateways], [self.gateway.pk, online.pk])
+
+        response = self.admin_client.delete(f"{admin_url}/Gateways/{self.gateway.pk}")
+        self.assertEqual(response.status_code, 200)
+        response = self.admin_client.get(f"{admin_url}/SoftDelete", {"gatewayId": self.gateway.pk, "active": "true"})
+        self.assertEqual(response.status_code, 404)
+        rows = self.admin_client.get(f"{admin_url}/GetGateway").data["data"]["result"]
+        self.assertNotIn(self.gateway.pk, [row["id"] for row in rows])
+        gateways = self.customer_client.get(checkout_url).data["result"]["data"]
+        self.assertEqual([gateway["id"] for gateway in gateways], [online.pk])
+        self.gateway.refresh_from_db()
+        self.assertIsNotNone(self.gateway.removed_at)
+
+        response = self.admin_client.post(f"{admin_url}/AddBankGateway", {
+            "bankId": self.gateway.bank_id, "cardNumber": self.gateway.card_number,
+        }, format="json")
+        self.assertEqual(response.status_code, 200)

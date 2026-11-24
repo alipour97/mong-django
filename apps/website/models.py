@@ -458,12 +458,20 @@ class PrimaryConfig(LegacyMixin):
 
 
 class Banner(LegacyMixin):
+    class ButtonSize(models.TextChoices):
+        SMALL = "small", _("کوچک")
+        MEDIUM = "medium", _("متوسط")
+        LARGE = "large", _("بزرگ")
+
     id = models.BigAutoField(primary_key=True)
     media_url = models.CharField(max_length=1024)
     link = models.CharField(max_length=1024, blank=True, default="")
     is_active = models.BooleanField(default=True)
     is_banner = models.BooleanField(default=True)
     display_priority = models.IntegerField(default=0)
+    show_button = models.BooleanField(default=True)
+    button_text = models.CharField(max_length=80, blank=True, default="")
+    button_size = models.CharField(max_length=6, choices=ButtonSize, default=ButtonSize.MEDIUM)
 
     class Meta:
         verbose_name = _("بنر")
@@ -1439,7 +1447,7 @@ class BankInfo(LegacyMixin):
 
 
 class BankGateway(LegacyMixin):
-    """A configured gateway; is_deleted means switched off in the panel."""
+    """A configured gateway with separate disabled and removed states."""
 
     id = models.BigAutoField(primary_key=True)
     bank = models.ForeignKey(BankInfo, on_delete=models.PROTECT, related_name="gateways", verbose_name=_("بانک"))
@@ -1451,6 +1459,9 @@ class BankGateway(LegacyMixin):
     mellat_password = models.CharField(max_length=255, blank=True, default="")
     card_number = models.CharField(_("شماره کارت مقصد"), max_length=16, blank=True, default="")
     instructions = models.TextField(_("توضیحات پرداخت"), blank=True, default="")
+
+    display_priority = models.PositiveIntegerField(null=True, blank=True)
+    removed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = _("درگاه پرداخت")

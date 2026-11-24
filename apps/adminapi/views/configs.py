@@ -14,6 +14,7 @@ with zero visits.
     POST ShippingMethod/default/<id>?isDefault=
     POST ShippingMethod/Types "title" | ShippingMethod/Types/<id> "title"
     GET  Bank/GetGateway | Bank/GetInfo | Bank/SoftDelete     POST Bank/AddBankGateway | Bank/UpdateBankGateway
+    DELETE Bank/Gateways/<id>
     GET  ThirdParty/LogSummary | ThirdParty/ProductReport?pageNumber=&pageSize= | ThirdParty/ProductVisitPieChart | ThirdParty/ProductVisitBarChart
 """
 from __future__ import annotations
@@ -22,7 +23,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import F, Sum
 from django.utils import timezone
 from rest_framework.response import Response
 
@@ -209,7 +210,7 @@ def _gateway(g: BankGateway, stats: dict) -> dict:
         "configurationSource": values["source"] if values else None,
         "configurationComplete": bool(values and mellat.positive_long(values["terminal"]) and values["username"] and values["password"]),
         "merchantCode": values["terminal"] if values else g.merchant or g.terminal_id, "isDelete": g.is_deleted,
-        "cardNumber": g.card_number, "instructions": g.instructions,
+        "cardNumber": g.card_number, "instructions": g.instructions, "displayPriority": g.display_priority,
         "transactionCount": count, "sumTransactionPrice": total,
         "lastTransaction": {"createDate": jalali(last.verified_at or last.created), "price": last.amount} if last else None,
     }
@@ -218,10 +219,11 @@ def _gateway(g: BankGateway, stats: dict) -> dict:
 class GatewayListView(AdminView):
     def get(self, request):
         stats = {}
-        for key in BankGateway.objects.values_list("bank__key", flat=True).distinct():
+        visible = BankGateway.objects.filter(removed_at__isnull=True)
+        for key in visible.values_list("bank__key", flat=True).distinct():
             paid = InvoicePayment.objects.filter(gateway=key, is_success=True)
             stats[key] = (paid.count(), paid.aggregate(t=Sum("amount"))["t"] or 0, paid.order_by("-id").first())
-        gateways = BankGateway.objects.select_related("bank").order_by("id")
+        gateways = visible.select_related("bank").order_by(F("display_priority").asc(nulls_last=True), "id")
         return ok({"result": [_gateway(g, stats) for g in gateways]})
 
 
@@ -237,6 +239,9 @@ def _save_gateway(request, g: BankGateway | None):
     bank = BankInfo.objects.filter(id=to_int(d.get("bankId")), is_deleted=False).first()
     if not bank:
         return fail("این بانک موجود نیست.", 400)
+    priority = d.get("displayPriority", g.display_priority if g else None)
+    if priority is not None and (type(priority) is not int or not 1 <= priority <= 2_147_483_647):
+        return fail("اولویت نمایش باید یک عدد صحیح مثبت باشد.", 400)
     merchant, terminal = str(d.get("merchant") or "").strip(), str(d.get("terminalId") or "").strip()
     card_number, instructions = "", ""
     if bank.key == CARD_TRANSFER:
@@ -254,7 +259,7 @@ def _save_gateway(request, g: BankGateway | None):
         if not positive_long(terminal):
             return fail("شماره ترمینال ملت باید یک عدد صحیح مثبت باشد.", 400)
         merchant = ""
-    if g is None and BankGateway.objects.filter(bank=bank, is_deleted=False).exists():
+    if g is None and BankGateway.objects.filter(bank=bank, is_deleted=False, removed_at__isnull=True).exists():
         return fail("این پورتال وجود دارد.", 400)
     if bank.key == "mellat" and any(key in d for key in ("sandbox", "username", "password")):
         from apps.payhub import mellat
@@ -270,10 +275,18 @@ def _save_gateway(request, g: BankGateway | None):
     if bank.key == "mellat" and any(key in d for key in ("sandbox", "username", "password")):
         g.mellat_sandbox, g.mellat_username, g.mellat_password = sandbox, username, password
     g.bank, g.merchant, g.terminal_id = bank, merchant, terminal
+    g.display_priority = priority
     g.card_number, g.instructions = card_number, instructions
     g.merchant_key = merchant or terminal
     g.last_modified = timezone.now()
-    g.save()
+    if g.pk is None:
+        g.save()
+    else:
+        g.save(update_fields=[
+            "bank", "merchant", "terminal_id", "mellat_sandbox", "mellat_username",
+            "mellat_password", "card_number", "instructions", "merchant_key", "display_priority",
+            "last_modified",
+        ])
     return ok({"result": True})
 
 
@@ -284,7 +297,7 @@ class GatewayAddView(AdminView):
 
 class GatewayUpdateView(AdminView):
     def post(self, request):
-        g = BankGateway.objects.filter(id=to_int(request.data.get("id"))).first() if isinstance(request.data, dict) else None
+        g = BankGateway.objects.filter(id=to_int(request.data.get("id")), removed_at__isnull=True).first() if isinstance(request.data, dict) else None
         if not g:
             return fail("اطلاعات اشتباه است.", 400)
         return _save_gateway(request, g)
@@ -295,9 +308,19 @@ class GatewayToggleView(AdminView):
 
     def get(self, request):
         q = request.query_params
-        n = BankGateway.objects.filter(id=to_int(q.get("gatewayId"))).update(
+        n = BankGateway.objects.filter(id=to_int(q.get("gatewayId")), removed_at__isnull=True).update(
             is_deleted=not bool(to_bool(q.get("active"))), last_modified=timezone.now())
         return ok({"result": True}) if n else fail("درگاه پرداخت موجود نیست.", 404)
+
+
+class GatewayDeleteView(AdminView):
+    def delete(self, request, gateway_id):
+        # Existing payment records can still refer to this gateway for verification.
+        now = timezone.now()
+        removed = BankGateway.objects.filter(id=gateway_id, removed_at__isnull=True).update(
+            is_deleted=True, removed_at=now, last_modified=now,
+        )
+        return ok({"result": True}) if removed else fail("درگاه پرداخت موجود نیست.", 404)
 
 
 # -----------------------------------------------------------------------------

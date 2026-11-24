@@ -205,7 +205,11 @@ class CategoryGetSliderBannerSummariesView(PublicView):
         ids = _ids(request)
         found = Banner.objects.filter(id__in=ids, is_deleted=False, is_active=True).in_bulk()
         banners = [
-            {"id": b.id, "mediaUrl": site_images.site_media_url(b.media_url), "link": b.link, "displayPriority": b.display_priority, "isBanner": b.is_banner}
+            {
+                "id": b.id, "mediaUrl": site_images.site_media_url(b.media_url), "link": b.link,
+                "displayPriority": b.display_priority, "isBanner": b.is_banner,
+                "showButton": b.show_button, "buttonText": b.button_text, "buttonSize": b.button_size,
+            }
             for b in (found[i] for i in ids if i in found)
         ]
         return ok({"banners": banners, "sliders": []}, message=MSG_FETCHED_ONE)

@@ -80,7 +80,7 @@ class SubmitCardTransferView(CustomerView):
         gateway_id = request.data.get("gatewayId", "")
         if not str(gateway_id).isascii() or not str(gateway_id).isdecimal() or len(str(gateway_id)) > 18:
             return answer(None, 400, "روش پرداخت کارت‌به‌کارت معتبر نیست.")
-        gateway = (BankGateway.objects.filter(pk=gateway_id, bank__key=CARD_TRANSFER, is_deleted=False)
+        gateway = (BankGateway.objects.filter(pk=gateway_id, bank__key=CARD_TRANSFER, is_deleted=False, removed_at__isnull=True)
                    .exclude(card_number="").first())
         if not gateway:
             return answer(None, 409, "روش پرداخت کارت‌به‌کارت فعال نیست.")

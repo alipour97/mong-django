@@ -7,7 +7,7 @@ gallery (a relative path, made absolute when answering) like the imported ones.
 
     GET  Banner/GetBannerById?id=
     POST Banner/GetAllBanners {search, isActive, pageNumber, pageSize}   isActive missing = active only
-    POST Banner/AddOrUpdateBanner {id, mediaUrl, isActive, link, displayPriority, isBanner}
+    POST Banner/AddOrUpdateBanner {id, mediaUrl, isActive, link, displayPriority, isBanner, showButton, buttonText, buttonSize}
     POST Banner/DeleteBanner?id=
     POST Banner/ToggleBannerActivation?id=&isActive=
 """
@@ -31,6 +31,7 @@ def _dto(b: Banner) -> dict:
     return {
         "id": b.id, "mediaUrl": _url(b.media_url), "isActive": b.is_active, "link": b.link,
         "displayPriority": b.display_priority, "isBanner": b.is_banner,
+        "showButton": b.show_button, "buttonText": b.button_text, "buttonSize": b.button_size,
     }
 
 
@@ -81,6 +82,19 @@ class SaveView(AdminView):
             b = Banner.objects.filter(id=bid, is_deleted=False).first()
             if not b:
                 return fail(NOT_FOUND, 404)
+        show_button = d.get("showButton", b.show_button)
+        if not isinstance(show_button, bool):
+            return fail("وضعیت نمایش دکمه نامعتبر است.", 400)
+        button_text = d.get("buttonText", b.button_text)
+        if not isinstance(button_text, str) or len(button_text.strip()) > 80:
+            return fail("متن دکمه باید حداکثر ۸۰ کاراکتر باشد.", 400)
+        button_size = d.get("buttonSize", b.button_size)
+        if button_size not in Banner.ButtonSize.values:
+            return fail("اندازه دکمه نامعتبر است.", 400)
+
+        b.show_button = show_button
+        b.button_text = button_text.strip()
+        b.button_size = button_size
         b.media_url = _stored_url(media_url, b if bid else None)
         b.is_active = bool(to_bool(d.get("isActive")))
         b.link = (d.get("link") or "").strip()

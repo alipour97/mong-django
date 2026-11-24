@@ -274,6 +274,8 @@ class MellatFlowTests(MellatCase):
             body = ET.fromstring(self.http.call_args.kwargs["data"])
             self.assertEqual(next(e.text for e in body.iter() if e.tag == "userName"), "panel-user")
             self.assertEqual(next(e.text for e in body.iter() if e.tag == "userPassword"), "panel-secret")
+            removed = self.client.delete(f"{path}/Gateways/{gateway.pk}")
+            self.assertEqual(removed.status_code, 200)
             service.mellat_return(record, self.fields(record))
             self.assertEqual(service.confirm(record, "71", 150000)["status"], "ok")
 

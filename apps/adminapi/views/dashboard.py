@@ -6,6 +6,7 @@ customers, never the branches' sales. Test orders are left out. The site's best-
 number: every branch's sales (`sales` job in apps/erp/jobs.py).
 
     GET  Dashboard/Date | Dashboard/DashboardNotif | Dashboard/SynchronizationStatus | Dashboard/Search?query=
+    GET  Dashboard/SalesSummary?period=&fromDate=&toDate=
     POST Dashboard/SyncRun {job}    GET Dashboard/SyncRun?id=   (a sync job by hand, then its result)
     POST Dashboard/GrowthRate?month=&year=&steps=           (Persian month and year)
     GET  Report/GetDashboardLablesReports
@@ -18,7 +19,8 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, time, timedelta
 
 from django.conf import settings
-from django.db.models import Q
+from django.db.models import Count, Exists, OuterRef, Q, Sum
+from django.db.models.functions import Coalesce
 from django.http import QueryDict
 from django.utils import timezone
 
@@ -108,6 +110,71 @@ class LabelsView(AdminView):
         return ok({"result": {
             "totalCustomers": customers.count(), "registeredThisMonth": customers.filter(created__gte=month_start).count(),
             "totalInvoices": _sales().count(), "invoicesThisMonth": _in_month(_sales(), jy, jm).count(),
+        }})
+
+
+def _sales_report_dates(params) -> tuple[date, date]:
+    """Inclusive dates in Tehran. The week starts Saturday and months are Persian."""
+    period = params.get("period", "today")
+    today = timezone.localdate()
+    yesterday = today - timedelta(days=1)
+    week_start = today - timedelta(days=(today.weekday() + 2) % 7)
+    daily_weekly = {
+        "today": (today, today),
+        "yesterday": (yesterday, yesterday),
+        "thisWeek": (week_start, today),
+        "lastWeek": (week_start - timedelta(days=7), week_start - timedelta(days=1)),
+    }
+    if period in daily_weekly:
+        return daily_weekly[period]
+    if period in {"thisMonth", "lastMonth"}:
+        year, month, _ = _g2j(today.year, today.month, today.day)
+        month_start = j2g(year, month, 1)
+        if period == "thisMonth":
+            return month_start, today
+        year, month = (year - 1, 12) if month == 1 else (year, month - 1)
+        return j2g(year, month, 1), month_start - timedelta(days=1)
+    if period == "custom":
+        try:
+            first = date.fromisoformat(params.get("fromDate", ""))
+            last = date.fromisoformat(params.get("toDate", ""))
+        except ValueError:
+            raise ValueError("تاریخ شروع و پایان بازه را وارد کنید.") from None
+        if first <= last < date.max:
+            return first, last
+        raise ValueError("بازهٔ تاریخ نامعتبر است.")
+    raise ValueError("بازهٔ گزارش فروش نامعتبر است.")
+
+
+class SalesSummaryView(AdminView):
+    def get(self, request):
+        try:
+            first, last = _sales_report_dates(request.query_params)
+        except ValueError as exc:
+            return fail(str(exc))
+        start, end = _aware(first), _aware(last + timedelta(days=1))
+
+        sales = _sales().alias(sale_date=Coalesce("paid_at", "created"))
+        period = sales.filter(sale_date__gte=start, sale_date__lt=end)
+        previous = sales.filter(customer_id=OuterRef("customer_id"), sale_date__lt=start)
+        buyers = period.order_by().values("customer_id").annotate(
+            purchase_count=Count("pk"), bought_before=Exists(previous),
+        )
+        buyer_counts = buyers.aggregate(
+            firstPurchases=Count("customer_id", filter=Q(bought_before=False)),
+            repeatPurchases=Count("customer_id", filter=Q(bought_before=True) | Q(purchase_count__gt=1)),
+        )
+        totals = period.aggregate(
+            invoiceCount=Count("pk"),
+            grossSales=Sum("amount", default=0),
+            discount=Sum("reduction_amount", default=0) + Sum("deduction_amount", default=0),
+            netSales=Sum("payable_amount", default=0),
+        )
+        units = InvoiceLine.objects.filter(invoice__in=period).aggregate(total=Sum("qty", default=0))["total"]
+        registrations = Customer.objects.filter(is_deleted=False, created__gte=start, created__lt=end).count()
+        return ok({"result": {
+            "fromDate": first.isoformat(), "toDate": last.isoformat(),
+            "registrations": registrations, "unitsSold": float(units), **buyer_counts, **totals,
         }})
 
 

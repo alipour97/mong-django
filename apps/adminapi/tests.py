@@ -10,7 +10,7 @@ from rest_framework.test import APIClient
 from apps.adminapi.models import AdminUser
 from apps.storefront import blog
 from apps.website import article_html
-from apps.website.models import Article, ArticleTag, BlogCategory, FileFormat, FileMedia, Product
+from apps.website.models import Article, ArticleTag, Banner, BlogCategory, FileFormat, FileMedia, Product
 
 
 def photo(color="red", size=(1200, 800), fmt="JPEG") -> bytes:
@@ -329,3 +329,34 @@ class BlogWriterTests(TestCase):
         self.assertEqual([a["id"] for a in data["articles"]], [self.own.id])
         items = blog.sitemap_items(lambda loc, m: loc)
         self.assertIn(f"author/{self.writer.id}", items)
+
+
+class BannerButtonTests(TestCase):
+    def test_button_settings_are_saved_and_returned_to_the_storefront(self):
+        panel = APIClient()
+        panel.force_authenticate(AdminUser.objects.create(username="banner-admin", cellphone="09120000002"))
+        banner = Banner.objects.create(media_url="/banner.webp", link="/collections")
+        save_url = "/api/admin/v1/Banner/AddOrUpdateBanner"
+        banner_data = {
+            "id": banner.pk, "mediaUrl": banner.media_url, "link": banner.link,
+            "isActive": True, "isBanner": True,
+        }
+        settings = {"showButton": False, "buttonText": "  خرید مجموعه  ", "buttonSize": "small"}
+
+        response = panel.post(save_url, {**banner_data, "buttonSize": "extra"}, format="json")
+        self.assertEqual(response.status_code, 400)
+        banner.refresh_from_db()
+        self.assertEqual((banner.show_button, banner.button_text, banner.button_size), (True, "", "medium"))
+
+        response = panel.post(save_url, {**banner_data, **settings}, format="json")
+        self.assertEqual(response.status_code, 200)
+        # An older client saving a banner without the new keys keeps its settings.
+        self.assertEqual(panel.post(save_url, banner_data, format="json").status_code, 200)
+        detail = panel.get("/api/admin/v1/Banner/GetBannerById", {"id": banner.pk}).json()["data"]["result"]
+        response = self.client.post("/api/v1/Category/GetSliderBannerSummaries", {"items": [banner.pk]}, format="json")
+        self.assertEqual(response.status_code, 200)
+        published, = response.json()["result"]["data"]["banners"]
+
+        expected = {**settings, "buttonText": "خرید مجموعه"}
+        for row in (detail, published):
+            self.assertEqual({key: row[key] for key in expected}, expected)

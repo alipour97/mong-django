@@ -56,7 +56,7 @@ OFFER_SECONDS = 300  # product pages share the answer: one customer view is not 
 
 def _active(key: str) -> BankGateway | None:
     """The gateway switched on in the panel's configs page for this bank key."""
-    return BankGateway.objects.filter(bank__key=key, is_deleted=False).select_related("bank").order_by("-id").first()
+    return BankGateway.objects.filter(bank__key=key, is_deleted=False, removed_at__isnull=True).select_related("bank").order_by("-id").first()
 
 
 def zarinpal_merchant() -> str:
@@ -116,15 +116,20 @@ def _back_here(success: bool) -> str:
 
 class GatewaysView(CustomerView):
     def get(self, request):
-        out = []
+        gateways = []
         for key in SUPPORTED:
-            if _enabled(key):
-                g = _active(key)
-                out.append({"id": g.id, "name": g.bank.name, "iconUrl": _icon_url(g.bank.icon), "gatewayKey": key})
-        if (g := _active(CARD_TRANSFER)) and g.card_number:
-            out.append({"id": g.id, "name": g.bank.name, "iconUrl": "", "gatewayKey": CARD_TRANSFER,
-                        "cardNumber": g.card_number, "instructions": g.instructions})
-        return answer(out)
+            if (gateway := _active(key)) and _enabled(key):
+                gateways.append((gateway, {
+                    "id": gateway.id, "name": gateway.bank.name, "iconUrl": _icon_url(gateway.bank.icon),
+                    "gatewayKey": key,
+                }))
+        if (gateway := _active(CARD_TRANSFER)) and gateway.card_number:
+            gateways.append((gateway, {
+                "id": gateway.id, "name": gateway.bank.name, "iconUrl": "", "gatewayKey": CARD_TRANSFER,
+                "cardNumber": gateway.card_number, "instructions": gateway.instructions,
+            }))
+        gateways.sort(key=lambda item: (item[0].display_priority is None, item[0].display_priority or 0))
+        return answer([payload for _, payload in gateways])
 
 
 def _payable_invoice(request, invoice_id) -> Invoice | None:
@@ -263,7 +268,7 @@ class PayView(CustomerView):
             return answer(None, 404, "فاکتور یافت نشد")
         if inv.payable_amount <= 0:
             return answer(None, 400, "این فاکتور مبلغی برای پرداخت ندارد.")
-        g = BankGateway.objects.filter(id=to_int(q.get("GateWayId")), is_deleted=False).select_related("bank").first()
+        g = BankGateway.objects.filter(id=to_int(q.get("GateWayId")), is_deleted=False, removed_at__isnull=True).select_related("bank").first()
         key = g.bank.key if g else None
         if key not in SUPPORTED or not _enabled(key):
             return answer(None, 400, "درگاه پرداخت انتخاب‌شده فعال نیست.")

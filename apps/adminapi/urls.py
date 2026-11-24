@@ -24,6 +24,7 @@ urlpatterns = [
     path("Auth/ChangePassword", auth.ChangePasswordView.as_view()),
 
     path("Dashboard/Date", dashboard.DateView.as_view()),
+    path("Dashboard/SalesSummary", dashboard.SalesSummaryView.as_view()),
     path("Dashboard/DashboardNotif", dashboard.NotifView.as_view()),
     path("Dashboard/GrowthRate", dashboard.GrowthRateView.as_view()),
     path("Dashboard/SynchronizationStatus", dashboard.SyncStatusView.as_view()),
@@ -157,6 +158,7 @@ urlpatterns = [
     path("Bank/GetInfo", configs.BankInfoView.as_view()),
     path("Bank/AddBankGateway", configs.GatewayAddView.as_view()),
     path("Bank/UpdateBankGateway", configs.GatewayUpdateView.as_view()),
+    path("Bank/Gateways/<int:gateway_id>", configs.GatewayDeleteView.as_view()),
     path("Bank/SoftDelete", configs.GatewayToggleView.as_view()),
 
     path("ThirdParty/LogSummary", configs.TorobSummaryView.as_view()),
