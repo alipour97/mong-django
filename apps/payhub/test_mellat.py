@@ -232,6 +232,40 @@ class MellatFlowTests(MellatCase):
         response = self.client.get(f"/GoToPayPage/{token}/71/150000")
         self.assertEqual(response["Location"], HUB + f"/mellat/pay/{token}")
 
+    def test_panel_credentials_are_used_and_password_is_never_returned(self):
+        bank = BankInfo.objects.get(key="mellat")
+        self.client.force_authenticate(AdminUser.objects.create(username="mellat-admin", cellphone="09120000009"))
+        path = "/api/admin/v1/Bank"
+        response = self.client.post(path + "/AddBankGateway", {
+            "bankId": bank.pk, "terminalId": "5678", "sandbox": True,
+            "username": "panel-user", "password": "panel-secret",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+        gateway = BankGateway.objects.get(bank=bank)
+        listing = self.client.get(path + "/GetGateway").json()
+        self.assertNotIn("panel-secret", str(listing))
+        row = next(row for row in listing["data"]["result"] if row["id"] == gateway.pk)
+        self.assertEqual((row["username"], row["sandbox"], row["hasPassword"], row["configurationSource"]),
+                         ("panel-user", True, True, "panel"))
+        self.assertTrue(row["configurationComplete"])
+        response = self.client.post(path + "/UpdateBankGateway", {
+            "id": gateway.pk, "bankId": bank.pk, "terminalId": "5678", "sandbox": True,
+            "username": "panel-user", "password": "",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+        gateway.refresh_from_db()
+        self.assertEqual(gateway.mellat_password, "panel-secret")
+        with override_settings(MELLAT_USERNAME="", MELLAT_PASSWORD="", MELLAT_SANDBOX=False):
+            self.assertTrue(mellat.configured())
+            record = self.started()
+            self.assertTrue(record.mellat_sandbox)
+            self.assertEqual(record.merchant_id, "5678")
+            body = ET.fromstring(self.http.call_args.kwargs["data"])
+            self.assertEqual(next(e.text for e in body.iter() if e.tag == "userName"), "panel-user")
+            self.assertEqual(next(e.text for e in body.iter() if e.tag == "userPassword"), "panel-secret")
+            service.mellat_return(record, self.fields(record))
+            self.assertEqual(service.confirm(record, "71", 150000)["status"], "ok")
+
     def test_admin_can_add_and_edit_terminal_and_get_stable_gateway_key(self):
         bank = BankInfo.objects.get(key="mellat")
         self.client.force_authenticate(AdminUser.objects.create(username="test-admin", cellphone="09120000000"))

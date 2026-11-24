@@ -1446,6 +1446,9 @@ class BankGateway(LegacyMixin):
     merchant = models.CharField(_("مرچنت"), max_length=255, blank=True, default="")
     terminal_id = models.CharField(_("ترمینال"), max_length=255, blank=True, default="")
     merchant_key = models.CharField(_("کلید مرچنت"), max_length=255, blank=True, default="")
+    mellat_sandbox = models.BooleanField(null=True, blank=True, default=None)
+    mellat_username = models.CharField(max_length=255, blank=True, default="")
+    mellat_password = models.CharField(max_length=255, blank=True, default="")
     card_number = models.CharField(_("شماره کارت مقصد"), max_length=16, blank=True, default="")
     instructions = models.TextField(_("توضیحات پرداخت"), blank=True, default="")
 

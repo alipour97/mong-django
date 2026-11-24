@@ -844,26 +844,13 @@ class SearchEngineSiteMapsView(PublicView):
         if entity_type in data:
             data = {entity_type: data[entity_type]}
 
-        # Log Sitemap access for SnappPay / Crawlers
-        caller_ip = (
-            request.META.get("HTTP_X_CALLER_IP")
-            or request.query_params.get("callerIp")
-            or request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")[0].strip()
-            or request.META.get("REMOTE_ADDR")
-        )
-        caller_ua = (
-            request.META.get("HTTP_X_CALLER_UA")
-            or request.query_params.get("callerUa")
-            or request.META.get("HTTP_USER_AGENT", "")
-        )
         count = len(listed) if not entity_type or entity_type == "product" else len(data.get(entity_type, {}).get("items", []))
         log_snappay_access(
             method_name="Method 1: Sitemap (/sitemap.xml)",
             request=request,
             status_code=200,
             items_count=count,
-            client_ip=caller_ip,
-            user_agent=caller_ua,
+            user_agent=request.META.get("HTTP_X_CALLER_UA"),
             params={"entityType": entity_type or "all"},
         )
 

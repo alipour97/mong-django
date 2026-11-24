@@ -188,14 +188,18 @@ def start_mellat(record: PayRecord, transaction_id: str, pay_amount: int) -> str
     record.transaction_id = transaction_id
     # One bank order per payment attempt, never the invoice id (which can be retried).
     record.gateway_transaction_id = str(record.pk)
-    record.merchant_id = record.merchant_id or mellat.terminal_id()
+    values = mellat.config()
+    record.merchant_id = record.merchant_id or values["terminal"]
+    record.mellat_gateway = values["gateway"]
+    record.mellat_sandbox = values["sandbox"]
     record.save()
-    if not mellat.positive_long(record.merchant_id) or not settings.MELLAT_USERNAME or not settings.MELLAT_PASSWORD:
+    if not mellat.positive_long(record.merchant_id) or not values["username"] or not values["password"]:
         _set(record, S.FAILED, "درگاه به‌پرداخت ملت تنظیم نشده است.")
         raise Refused(record.error)
     result = mellat.request(record.merchant_id, record.mellat_sandbox, record.gateway_transaction_id, record.amount,
                             f"{settings.PAYHUB_PUBLIC_URL}/mellat/callback/{record.token}",
-                            f"پرداخت فاکتور شماره {transaction_id} - فروشگاه مانگ")
+                            f"پرداخت فاکتور شماره {transaction_id} - فروشگاه مانگ",
+                            credentials=(values["username"], values["password"]))
     note(record, "mellat_request", code=result.code, sandbox=record.mellat_sandbox)
     if result.code != 0 or not result.authority:
         _set(record, S.FAILED, result.message)

@@ -71,28 +71,41 @@ def positive_long(value) -> bool:
     return bool(re.fullmatch(r"[0-9]{1,19}", str(value))) and 0 < int(value) <= LONG_MAX
 
 
-def terminal_id() -> str:
-    """The active panel terminal, otherwise the server's configured terminal."""
+def config(gateway=None) -> dict:
     from apps.website.models import BankGateway
 
-    gateway = BankGateway.objects.filter(bank__key="mellat", is_deleted=False).order_by("-id").first()
-    return (gateway.terminal_id.strip() if gateway else "") or settings.MELLAT_TERMINAL_ID
+    if gateway is None:
+        gateway = BankGateway.objects.filter(bank__key="mellat", is_deleted=False).order_by("-id").first()
+    panel = gateway is not None and gateway.mellat_sandbox is not None
+    return {
+        "gateway": gateway,
+        "terminal": (gateway.terminal_id if gateway else "") or settings.MELLAT_TERMINAL_ID,
+        "username": gateway.mellat_username if panel else settings.MELLAT_USERNAME,
+        "password": gateway.mellat_password if panel else settings.MELLAT_PASSWORD,
+        "sandbox": gateway.mellat_sandbox if panel else settings.MELLAT_SANDBOX,
+        "source": "panel" if panel else "environment",
+    }
+
+
+def terminal_id() -> str:
+    return config()["terminal"]
 
 
 def configured() -> bool:
-    return bool(positive_long(terminal_id()) and settings.MELLAT_USERNAME and settings.MELLAT_PASSWORD)
+    values = config()
+    return bool(positive_long(values["terminal"]) and values["username"] and values["password"])
 
 
 def base(sandbox: bool) -> str:
     return TEST_BASE if sandbox else LIVE_BASE
 
 
-def _post(method: str, terminal: str, sandbox: bool, fields: dict) -> Result:
+def _post(method: str, terminal: str, sandbox: bool, fields: dict, credentials=None) -> Result:
     envelope = ET.Element(f"{{{SOAP}}}Envelope")
     body = ET.SubElement(envelope, f"{{{SOAP}}}Body")
     operation = ET.SubElement(body, f"{{{NAMESPACE}}}{method}")
-    params = {"terminalId": terminal, "userName": settings.MELLAT_USERNAME,
-              "userPassword": settings.MELLAT_PASSWORD, **fields}
+    username, password = credentials if credentials is not None else (settings.MELLAT_USERNAME, settings.MELLAT_PASSWORD)
+    params = {"terminalId": terminal, "userName": username, "userPassword": password, **fields}
     for name, value in params.items():
         ET.SubElement(operation, name).text = str(value)
     try:
@@ -105,44 +118,57 @@ def _post(method: str, terminal: str, sandbox: bool, fields: dict) -> Result:
         logger.warning("mellat %s: %s", method, type(exc).__name__)
         return Result(NO_ANSWER)
     content = response.content
+
+    def bad_reply(reason: str) -> Result:
+        logger.warning("mellat %s: invalid response reason=%s http=%s sandbox=%s bytes=%s",
+                       method, reason, response.status_code, sandbox, len(content))
+        return Result(BAD_REPLY)
+
+    if not 200 <= response.status_code < 300:
+        return bad_reply("http_status")
     # The service only returns small UTF-8 XML documents. Reject DTD/entity
     # declarations (including UTF-16 input) before parsing external input.
-    if (not 200 <= response.status_code < 300 or len(content) > 65536 or b"\x00" in content
-            or b"<!DOCTYPE" in content.upper() or b"<!ENTITY" in content.upper()):
-        return Result(BAD_REPLY)
+    if (len(content) > 65536 or b"\x00" in content or b"<!DOCTYPE" in content.upper()
+            or b"<!ENTITY" in content.upper()):
+        return bad_reply("unsupported_xml")
     try:
         root = ET.fromstring(content)
-        reply = root.find(f"{{{SOAP}}}Body/{{{NAMESPACE}}}{method}Response")
-        values = [child.text or "" for child in reply if child.tag in ("return", f"{{{NAMESPACE}}}return")]
-        if len(values) != 1:
-            return Result(BAD_REPLY)
-        parts = values[0].strip().split(",")
-        if not re.fullmatch(r"[0-9]{1,4}", parts[0]):
-            return Result(BAD_REPLY)
-        code = int(parts[0])
-        if method == "bpPayRequest" and code == 0:
-            if len(parts) != 2 or not re.fullmatch(r"[A-Za-z0-9]{1,255}", parts[1].strip()):
-                return Result(BAD_REPLY)
-            return Result(code, parts[1].strip())
-        return Result(code) if len(parts) == 1 else Result(BAD_REPLY)
-    except (ET.ParseError, TypeError):
-        return Result(BAD_REPLY)
+    except ET.ParseError:
+        return bad_reply("malformed_xml")
+    if root.find(f"{{{SOAP}}}Body/{{{SOAP}}}Fault") is not None:
+        return bad_reply("soap_fault")
+    reply = root.find(f"{{{SOAP}}}Body/{{{NAMESPACE}}}{method}Response")
+    if reply is None:
+        return bad_reply("missing_operation_response")
+    values = [child.text or "" for child in reply if child.tag in ("return", f"{{{NAMESPACE}}}return")]
+    if len(values) != 1:
+        return bad_reply("missing_or_duplicate_return")
+    parts = values[0].strip().split(",")
+    if not re.fullmatch(r"[0-9]{1,4}", parts[0]):
+        return bad_reply("invalid_result_code")
+    code = int(parts[0])
+    if method == "bpPayRequest" and code == 0:
+        if len(parts) != 2 or not re.fullmatch(r"[A-Za-z0-9]{1,255}", parts[1].strip()):
+            return bad_reply("invalid_ref_id")
+        return Result(code, parts[1].strip())
+    return Result(code) if len(parts) == 1 else bad_reply("unexpected_result_fields")
 
 
-def request(terminal: str, sandbox: bool, order_id: str, amount: int, callback: str, description: str) -> Result:
+def request(terminal: str, sandbox: bool, order_id: str, amount: int, callback: str, description: str, credentials=None) -> Result:
     now = timezone.localtime()
     return _post("bpPayRequest", terminal, sandbox, {
         "orderId": order_id, "amount": amount, "localDate": now.strftime("%Y%m%d"),
         "localTime": now.strftime("%H%M%S"), "additionalData": description[:1000],
         "callBackUrl": callback, "payerId": "0",
-    })
+    }, credentials)
 
 
 def transaction(method: str, record) -> Result:
     """Use only the original terminal, environment, sale id and reference."""
     if method not in ("bpVerifyRequest", "bpSettleRequest", "bpInquiryRequest", "bpReversalRequest"):
         raise ValueError("Unsupported Mellat operation")
+    values = config(record.mellat_gateway) if record.mellat_gateway_id else None
     return _post(method, record.merchant_id, record.mellat_sandbox, {
         "orderId": record.gateway_transaction_id, "saleOrderId": record.gateway_transaction_id,
         "saleReferenceId": record.ref_id,
-    })
+    }, (values["username"], values["password"]) if values else None)

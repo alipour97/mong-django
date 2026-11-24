@@ -199,10 +199,16 @@ class ShippingTypeUpdateView(AdminView):
 # -----------------------------------------------------------------------------
 def _gateway(g: BankGateway, stats: dict) -> dict:
     count, total, last = stats.get(g.bank.key, (0, 0, None))
+    from apps.payhub import mellat
+    values = mellat.config(g) if g.bank.key == "mellat" else None
     return {
         "id": g.id, "bankId": g.bank_id, "bankName": g.bank.name, "icon": g.bank.icon or None,
-        "gatewayKey": g.bank.key, "sandbox": settings.MELLAT_SANDBOX if g.bank.key == "mellat" else None,
-        "merchantCode": g.merchant or g.terminal_id, "isDelete": g.is_deleted,
+        "gatewayKey": g.bank.key, "sandbox": values["sandbox"] if values else None,
+        "username": values["username"] if values else "",
+        "hasPassword": bool(values and values["password"]),
+        "configurationSource": values["source"] if values else None,
+        "configurationComplete": bool(values and mellat.positive_long(values["terminal"]) and values["username"] and values["password"]),
+        "merchantCode": values["terminal"] if values else g.merchant or g.terminal_id, "isDelete": g.is_deleted,
         "cardNumber": g.card_number, "instructions": g.instructions,
         "transactionCount": count, "sumTransactionPrice": total,
         "lastTransaction": {"createDate": jalali(last.verified_at or last.created), "price": last.amount} if last else None,
@@ -250,7 +256,19 @@ def _save_gateway(request, g: BankGateway | None):
         merchant = ""
     if g is None and BankGateway.objects.filter(bank=bank, is_deleted=False).exists():
         return fail("این پورتال وجود دارد.", 400)
+    if bank.key == "mellat" and any(key in d for key in ("sandbox", "username", "password")):
+        from apps.payhub import mellat
+        current = mellat.config(g)
+        sandbox = d.get("sandbox", current["sandbox"])
+        username = str(d.get("username", current["username"]) or "").strip()
+        password = d.get("password") or current["password"]
+        if not isinstance(sandbox, bool):
+            return fail("حالت آزمایشی باید بله یا خیر باشد.", 400)
+        if not username or not isinstance(password, str) or not password or len(username) > 255 or len(password) > 255:
+            return fail("نام کاربری و رمز ملت را کامل وارد کنید (حداکثر ۲۵۵ کاراکتر).", 400)
     g = g or BankGateway(created=timezone.now())
+    if bank.key == "mellat" and any(key in d for key in ("sandbox", "username", "password")):
+        g.mellat_sandbox, g.mellat_username, g.mellat_password = sandbox, username, password
     g.bank, g.merchant, g.terminal_id = bank, merchant, terminal
     g.card_number, g.instructions = card_number, instructions
     g.merchant_key = merchant or terminal

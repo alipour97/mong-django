@@ -21,6 +21,7 @@ from typing import Any
 
 from django.conf import settings
 from django.core.cache import cache
+from django.utils.html import escape
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -1014,29 +1015,19 @@ class SnappPayLogsView(View):
     GET /api/snappay/logs?limit=50&snappay_only=1
     """
     def get(self, request: HttpRequest, *args, **kwargs):
-        from apps.storefront.snappay_logger import ACCESS_JSONL_FILE
+        from collections import deque
+        from apps.storefront.snappay_logger import read_access_logs
+
         limit = max(1, min(200, int(request.GET.get("limit", 50))))
         snappay_only = request.GET.get("snappay_only", "").lower() in ("1", "true", "yes")
+        try:
+            records = list(reversed(deque(
+                (entry for entry in read_access_logs() if not snappay_only or entry.get("is_snappay_ip")),
+                maxlen=limit,
+            )))
+        except OSError as exc:
+            return JsonResponse({"error": str(exc)}, status=500)
 
-        records = []
-        if ACCESS_JSONL_FILE.exists():
-            try:
-                with open(ACCESS_JSONL_FILE, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        try:
-                            rec = json.loads(line)
-                            if snappay_only and not rec.get("is_snappay_ip"):
-                                continue
-                            records.append(rec)
-                        except Exception:
-                            pass
-            except Exception as e:
-                return JsonResponse({"error": str(e)}, status=500)
-
-        records = records[-limit:][::-1]  # Newest first
         return JsonResponse({"total": len(records), "logs": records}, json_dumps_params={"ensure_ascii": False})
 
 
@@ -1046,22 +1037,13 @@ class SnappPayLogsHtmlView(View):
     GET /api/snappay/logs/view
     """
     def get(self, request: HttpRequest, *args, **kwargs):
-        from apps.storefront.snappay_logger import ACCESS_JSONL_FILE, SNAPPAY_OFFICIAL_IPS
-        records = []
-        if ACCESS_JSONL_FILE.exists():
-            try:
-                with open(ACCESS_JSONL_FILE, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line:
-                            try:
-                                records.append(json.loads(line))
-                            except Exception:
-                                pass
-            except Exception:
-                pass
+        from collections import deque
+        from apps.storefront.snappay_logger import read_access_logs
 
-        records = records[-100:][::-1]  # Newest first 100
+        try:
+            records = list(reversed(deque(read_access_logs(), maxlen=100)))
+        except OSError:
+            records = []
         total_snappay = sum(1 for r in records if r.get("is_snappay_ip"))
 
         rows_html = []
@@ -1072,14 +1054,14 @@ class SnappPayLogsHtmlView(View):
             st_color = "#16a34a" if status == 200 else ("#dc2626" if status >= 400 else "#d97706")
             rows_html.append(f"""
             <tr style="border-bottom:1px solid #e2e8f0;{'background:#f0fdf4;' if is_sp else ''}">
-                <td style="padding:10px;font-family:monospace;direction:ltr;text-align:left;">{r.get('timestamp')}</td>
-                <td style="padding:10px;font-family:monospace;direction:ltr;text-align:left;font-weight:bold;">{r.get('ip')}</td>
+                <td style="padding:10px;font-family:monospace;direction:ltr;text-align:left;">{escape(r.get('timestamp'))}</td>
+                <td style="padding:10px;font-family:monospace;direction:ltr;text-align:left;font-weight:bold;">{escape(r.get('ip'))}</td>
                 <td style="padding:10px;">{badge}</td>
-                <td style="padding:10px;font-weight:600;">{r.get('channel')}</td>
-                <td style="padding:10px;font-family:monospace;direction:ltr;text-align:left;">{r.get('verb')} {r.get('path')}</td>
-                <td style="padding:10px;color:{st_color};font-weight:bold;">{status}</td>
-                <td style="padding:10px;">{r.get('items_count', '-')}</td>
-                <td style="padding:10px;font-size:11px;color:#64748b;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{r.get('user_agent','')}">{r.get('user_agent','')}</td>
+                <td style="padding:10px;font-weight:600;">{escape(r.get('channel'))}</td>
+                <td style="padding:10px;font-family:monospace;direction:ltr;text-align:left;">{escape(r.get('verb'))} {escape(r.get('path'))}</td>
+                <td style="padding:10px;color:{st_color};font-weight:bold;">{escape(status)}</td>
+                <td style="padding:10px;">{escape(r.get('items_count', '-'))}</td>
+                <td style="padding:10px;font-size:11px;color:#64748b;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{escape(r.get('user_agent',''))}">{escape(r.get('user_agent',''))}</td>
             </tr>
             """)
 

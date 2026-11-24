@@ -12,7 +12,7 @@ import logging
 import os
 import time
 from datetime import datetime
-from pathlib import Path
+from ipaddress import ip_address
 from typing import Any
 
 from django.conf import settings
@@ -28,35 +28,52 @@ SNAPPAY_OFFICIAL_IPS = {
     "188.121.106.231",
 }
 
-LOGS_DIR = Path(getattr(settings, "BASE_DIR", "/mnt/sda2/mong/back")) / "logs"
+LOGS_DIR = settings.LOGS_DIR
+LEGACY_JSONL_FILE = settings.BASE_DIR / "logs" / "snappay_access.jsonl"
 ACCESS_LOG_FILE = LOGS_DIR / "snappay_access.log"
 ACCESS_JSONL_FILE = LOGS_DIR / "snappay_access.jsonl"
 
 
-def get_real_ip(request: HttpRequest | Any) -> str:
-    """Extract real client IP considering forward proxies and Cloudflare."""
-    if not hasattr(request, "META"):
-        if isinstance(request, dict):
-            return request.get("ip") or "unknown"
-        return "unknown"
+def read_access_logs():
+    """Keep pre-existing logs visible after moving writes to the persistent volume."""
+    for path in dict.fromkeys((LEGACY_JSONL_FILE, ACCESS_JSONL_FILE)):
+        if not path.exists():
+            continue
+        with path.open(encoding="utf-8") as file:
+            for line in file:
+                try:
+                    entry = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(entry, dict):
+                    yield entry
 
+
+def _valid_ips(header: str):
+    for value in header.split(",", 16)[:16]:
+        try:
+            yield ip_address(value.strip())
+        except ValueError:
+            continue
+
+
+def get_real_ip(request: HttpRequest) -> str:
+    """Use the frontend's ingress metadata before considering the backend hop."""
     meta = request.META
-    # 1. Cloudflare header
-    cf_ip = meta.get("HTTP_CF_CONNECTING_IP")
-    if cf_ip:
-        return cf_ip.strip()
+    forwarded = list(_valid_ips(meta.get("HTTP_X_SEARCHWISE_CLIENT_IP", "")))
+    if not forwarded and request.path.endswith("/SearchEngine/SiteMaps"):
+        forwarded = list(_valid_ips(meta.get("HTTP_X_CALLER_IP", "")))  # older frontend
+    for address in forwarded:
+        if address.is_global and not address.is_multicast:
+            return str(address)
 
-    # 2. Forwarded for
-    x_forwarded_for = meta.get("HTTP_X_FORWARDED_FOR")
-    if x_forwarded_for:
-        return x_forwarded_for.split(",")[0].strip()
-
-    # 3. Real IP header from Nginx
-    x_real_ip = meta.get("HTTP_X_REAL_IP")
-    if x_real_ip:
-        return x_real_ip.strip()
-
-    return meta.get("REMOTE_ADDR", "").strip() or "unknown"
+    direct = [address for name in ("HTTP_CF_CONNECTING_IP", "HTTP_X_REAL_IP", "HTTP_X_FORWARDED_FOR", "REMOTE_ADDR")
+              for address in _valid_ips(meta.get(name, ""))]
+    for address in direct:
+        if address.is_global and not address.is_multicast:
+            return str(address)
+    candidates = forwarded or direct
+    return str(candidates[0]) if candidates else "unknown"
 
 
 def log_snappay_access(
@@ -87,6 +104,7 @@ def log_snappay_access(
         verb = getattr(request, "method", "GET") if request else "GET"
         path = getattr(request, "path", "") if request else ""
         ua = user_agent or (request.META.get("HTTP_USER_AGENT", "") if request else "")
+        ua = " ".join(ua.splitlines())[:512]
 
         # Summary of params
         query_str = ""

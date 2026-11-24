@@ -32,6 +32,7 @@ class PayRecord(models.Model):
     customer_key = models.CharField(max_length=64, blank=True, default="")
     company_id = models.BigIntegerField(default=0)
     merchant_id = models.CharField(max_length=64, blank=True, default="")
+    mellat_gateway = models.ForeignKey("website.BankGateway", null=True, blank=True, on_delete=models.PROTECT)
     mellat_sandbox = models.BooleanField(default=True)  # pin the environment for the entire Mellat payment
     transaction_id = models.CharField(max_length=64, blank=True, default="", db_index=True)  # the caller's invoice id
     authority = models.CharField(max_length=255, blank=True, default="", db_index=True)  # Zarinpal
