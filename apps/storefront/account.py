@@ -2,8 +2,8 @@
 Customer sign-in and account (Authentication/*, Customer/*), as api.mong.ir.
 
 Sign-in is by SMS code or, once the customer has set one, by password. A code
-lasts 5 minutes; while it is valid no new one is sent (409 with the seconds
-left, which the site uses to resume the code step), and it allows 5 tries.
+lasts 5 minutes; another can be requested after 2 minutes (409 with the seconds
+left before resend), and it allows 5 tries.
 Sign-up needs a code too. Tokens are HS512 JWTs valid 30 days, sent back as
 "Authorization: Bearer"; a missing or bad token answers 401, on which the site
 signs the customer out.
@@ -46,6 +46,7 @@ from .envelope import MSG_FETCHED, envelope
 from .views import PublicView
 
 OTP_MINUTES = 5
+OTP_RESEND_SECONDS = 120
 OTP_MAX_ATTEMPTS = 5
 TOKEN_DAYS = 30
 ISSUER = "mong-site"
@@ -165,15 +166,17 @@ class SendOtpView(PublicView):
             return answer({"messageStatus": False, "seconds": 0, "userIsExist": False, "hasPassword": False}, 400, MSG_BAD_MOBILE)
         now = timezone.now()
         if live := _live_code(mobile):
-            left = int((live.expires - now).total_seconds()) + 1
-            return answer({"messageStatus": False, "seconds": left, **_who(mobile)}, 409, "کد قبلا برای شما ارسال شده است.")
+            left = OTP_RESEND_SECONDS - (now - live.created).total_seconds()
+            if left > 0:
+                return answer({"messageStatus": False, "seconds": int(left) + 1, **_who(mobile)}, 409, "کد قبلا برای شما ارسال شده است.")
         code = f"{secrets.randbelow(10_000):04d}"
         otp = CustomerOtp.objects.create(cellphone=mobile, code_hash=make_password(code), expires=now + timedelta(minutes=OTP_MINUTES))
         CustomerOtp.objects.filter(created__lt=now - timedelta(days=1)).delete()
         if not smsir.send_otp(mobile, code):
             otp.delete()
             return answer({"messageStatus": False, "seconds": 0, **_who(mobile)}, 500, "هنگام ارسال پیامک خطای نامشخصی رخ داده است.")
-        return answer({"messageStatus": True, "seconds": OTP_MINUTES * 60, **_who(mobile)}, message="کد تایید ارسال شد.")
+        CustomerOtp.objects.filter(cellphone=mobile, used=False).exclude(pk=otp.pk).update(used=True)
+        return answer({"messageStatus": True, "seconds": OTP_RESEND_SECONDS, **_who(mobile)}, message="کد تایید ارسال شد.")
 
 
 class AuthenticateView(PublicView):
