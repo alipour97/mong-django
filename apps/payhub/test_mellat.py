@@ -111,11 +111,22 @@ class MellatFlowTests(MellatCase):
             page = self.client.get(f"/mellat/pay/{record.token}")
         self.assertContains(page, 'method="post"')
         self.assertContains(page, mellat.TEST_BASE + "/startpay.mellat")
+        self.assertIn(f"form-action {mellat.TEST_BASE}/startpay.mellat;", page["Content-Security-Policy"])
         self.assertContains(page, 'name="RefId" value="AbCd123"')
         self.assertNotContains(page, "bpm.shaparak.ir")
         self.assertEqual(page["Cache-Control"], "no-store")
         self.assertEqual(self.methods, ["bpPayRequest"])
         self.assertEqual(service.start_mellat(record, "71", 150000), service.mellat_page_url(record))
+        self.assertEqual(self.methods, ["bpPayRequest"])
+
+    def test_live_form_policy_allows_the_exact_post_target(self):
+        record = self.started()
+        PayRecord.objects.filter(pk=record.pk).update(mellat_sandbox=False)
+        page = self.client.get(f"/mellat/pay/{record.token}")
+        action = f"{mellat.LIVE_BASE}/startpay.mellat"
+        self.assertContains(page, f'action="{action}"')
+        self.assertIn(f"form-action {action};", page["Content-Security-Policy"])
+        self.assertNotIn(mellat.TEST_BASE, page["Content-Security-Policy"])
         self.assertEqual(self.methods, ["bpPayRequest"])
 
     def test_success_verifies_then_settles_exactly_once(self):

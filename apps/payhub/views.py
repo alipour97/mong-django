@@ -247,7 +247,7 @@ class MellatPayView(HubView):
         response["Cache-Control"] = "no-store"
         response["Referrer-Policy"] = "no-referrer"
         response["Content-Security-Policy"] = (
-            f"default-src 'none'; script-src 'nonce-{nonce}'; form-action {mellat.base(record.mellat_sandbox)}; "
+            f"default-src 'none'; script-src 'nonce-{nonce}'; form-action {action}; "
             "base-uri 'none'; frame-ancestors 'none'"
         )
         return response
