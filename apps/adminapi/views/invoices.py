@@ -218,6 +218,8 @@ def _site_header(inv: Invoice) -> dict:
         "qty": float(sum(ln.qty for ln in lines)), "createDate": inv.invoice_date.isoformat(),
         "createDatePersian": jalali(inv.invoice_date, with_time=False), "branchId": None, "branchTitle": None,
         "invoiceState": inv.state, "invoiceType": inv.state,
+        "checkoutStage": inv.checkout_stage,
+        "checkoutStageTitle": inv.get_checkout_stage_display() if inv.state == PRE_INVOICE else inv.get_state_display(),
         "shippingMethodId": inv.shipping_method_id or 0, "shippingMethodName": m.name if m else "",
         "shippingMethodTypeId": m.type_id if m else 0, "shippingMethodTypeTitle": m.type.name if m and m.type else "",
         "deliveryAmount": inv.delivery_amount, "customerAddressId": inv.address_id or 0, "storeOrderId": inv.id,

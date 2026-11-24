@@ -38,7 +38,8 @@ logger = logging.getLogger(__name__)
 
 GIFT_CARD_BANK = 13
 BLU_BANK_ID = 3
-BANKS = {"zarinpal": 1, "snapppay": 14, "PayTypeGiftCard": GIFT_CARD_BANK}
+# BankInfos identifiers from the legacy shop's SeedData/BankInfoData.json.
+BANKS = {"zarinpal": 1, "mellat": 5, "snapppay": 14, "PayTypeGiftCard": GIFT_CARD_BANK}
 SYSTEM = "Created By System"
 TEST_MARK = "سفارش تست: پولی جابه‌جا نشده"
 # Description is nvarchar(300); the payment columns are 64, CellPhone 16 and FullName 80.

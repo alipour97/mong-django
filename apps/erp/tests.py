@@ -426,6 +426,40 @@ class WriteTests(TestCase):
         self.assertIsNotNone(self.invoice.erp_sent_at)
         self.assertEqual((head["CreatedBy"], head["LastModified"], head["Description"]), (f"site:{self.invoice.pk}", head["Created"], "سریع"))
 
+    def test_mellat_payment_uses_the_legacy_bank_and_preserves_tracking_codes(self):
+        self.invoice.payments.update(gateway="mellat", authority="RefId123", reference="987654321", transaction_id="194")
+        self.push()
+        pay = self.db.row("InvoicePayments")
+        self.assertEqual(
+            (pay["BankId"], pay["TraceNumber"], pay["Authority"], pay["TransactionId"], pay["PaymentAmount"]),
+            (5, "987654321", "987654321", "194", 1900000),
+        )
+        self.assertIsNotNone(self.invoice.erp_sent_at)
+        self.assertFalse(outbox.waiting().filter(pk=self.invoice.pk).exists())
+
+    def test_a_previously_failed_mellat_invoice_can_be_sent_from_the_outbox(self):
+        self.invoice.payments.update(gateway="mellat", reference="987654321", transaction_id="194")
+        engine = mock.Mock()
+        engine.begin.return_value = self.db
+        connector = mock.Mock(push=write.push)
+        with mock.patch("apps.erp.dadehfa_write.get_engine", return_value=engine), \
+                mock.patch("apps.erp.outbox.get_connector", return_value=connector):
+            # Reproduce the missing mapping that left the paid invoice queued.
+            with mock.patch.dict(write.BANKS, {"zarinpal": 1}, clear=True):
+                self.assertFalse(outbox.send(self.invoice))
+            self.invoice.refresh_from_db()
+            self.assertIn("unknown gateway 'mellat'", self.invoice.erp_error)
+            self.assertTrue(outbox.waiting().filter(pk=self.invoice.pk).exists())
+            self.assertEqual(self.db.tables(), [])
+            self.assertTrue(outbox.send(self.invoice))
+
+        self.invoice.refresh_from_db()
+        self.assertEqual(self.invoice.erp_error, "")
+        self.assertIsNotNone(self.invoice.erp_sent_at)
+        self.assertEqual(self.db.row("InvoicePayments")["BankId"], 5)
+        self.assertEqual(self.db.tables().count("Invoices"), 1)
+        self.assertFalse(outbox.waiting().filter(pk=self.invoice.pk).exists())
+
     @override_settings(DADEHFA_CARD_TRANSFER_BANK_ID=0)
     def test_card_transfer_payment_uses_blu_in_dadehfa(self):
         self.invoice.payments.update(gateway=CARD_TRANSFER, authority="", reference="card-transfer-45")

@@ -1325,6 +1325,13 @@ class ArticleLike(LegacyMixin):
 # be built: until then samian_transaction_id stays empty.
 # -----------------------------------------------------------------------------
 class Invoice(models.Model):
+    class CheckoutStage(models.TextChoices):
+        CART = "cart", _("در جریان")
+        CHECKOUT = "checkout", _("ثبت سفارش")
+        READY = "ready", _("آماده پرداخت")
+        PAYING = "paying", _("در حال پرداخت")
+        FAILED = "failed", _("خطا در پرداخت")
+
     class State(models.IntegerChoices):
         PRE_INVOICE = 1, _("پیش‌فاکتور")
         SUSPENDED = 2, _("معلق")
@@ -1333,6 +1340,7 @@ class Invoice(models.Model):
 
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name="invoices", verbose_name=_("مشتری"))
     state = models.IntegerField(_("وضعیت"), choices=State.choices, default=State.PRE_INVOICE, db_index=True)
+    checkout_stage = models.CharField(_("مرحله خرید"), max_length=16, choices=CheckoutStage.choices, default=CheckoutStage.CART, db_index=True)
     shipping_method = models.ForeignKey(ShippingMethod, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
                                         verbose_name=_("روش ارسال"))
     address = models.ForeignKey("CustomerAddress", null=True, blank=True, on_delete=models.SET_NULL, related_name="+",

@@ -22,7 +22,8 @@ from collections import Counter
 from datetime import timedelta
 from urllib.parse import quote
 
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Value
+from django.db.models.functions import Concat, Trim
 from django.utils import timezone
 
 from apps.samian.models import SamianSalesTransaction
@@ -95,8 +96,14 @@ class ListView(AdminView):
             qs = qs.filter(job_id=job)
         if (active := to_bool(q.get("IsActive"))) is not None:
             qs = qs.filter(is_active=active)
+        if (customer_id := to_int(q.get("CustomerId"))) is not None:
+            qs = qs.filter(pk=customer_id)
         if search := (q.get("SearchText") or "").strip():
-            qs = qs.filter(Q(first_name__icontains=search) | Q(last_name__icontains=search) | Q(cellphone__icontains=search) | Q(email__icontains=search))
+            search = " ".join(search.split())
+            qs = qs.annotate(full_name=Trim(Concat("first_name", Value(" "), "last_name"))).filter(
+                Q(first_name__icontains=search) | Q(last_name__icontains=search) | Q(full_name__icontains=search)
+                | Q(cellphone__icontains=search) | Q(email__icontains=search)
+            )
         customers = list(qs.order_by("-created", "-id"))
         purchases = _purchases(customers)
         low, high = to_int(q.get("InvoiceNumberFrom")), to_int(q.get("InvoiceNumberTo"))

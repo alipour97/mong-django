@@ -158,6 +158,24 @@ def _pre_invoice(customer) -> Invoice | None:
     return customer.invoices.filter(state=S.PRE_INVOICE, is_deleted=False).order_by("-id").first()
 
 
+class CheckoutStageView(CustomerView):
+    def post(self, request):
+        stage = request.data.get("stage")
+        if stage not in (Invoice.CheckoutStage.CHECKOUT, Invoice.CheckoutStage.READY):
+            return answer(None, 400, "مرحله خرید نامعتبر است.")
+        invoice_id = _int(request.data.get("invoiceId"))
+        qs = request.user.invoices.filter(state=S.PRE_INVOICE, is_deleted=False)
+        if invoice_id is not None:
+            qs = qs.filter(pk=invoice_id)
+        inv = qs.order_by("-id").first()
+        if not inv:
+            return answer(None, 404, "سبد خرید یافت نشد.")
+        # Never let a delayed browser event overwrite a gateway outcome.
+        allowed = [Invoice.CheckoutStage.CART, Invoice.CheckoutStage.CHECKOUT, Invoice.CheckoutStage.READY]
+        qs.filter(pk=inv.pk, checkout_stage__in=allowed).update(checkout_stage=stage)
+        return answer(True)
+
+
 class AddView(CustomerView):
     def post(self, request):
         d = request.data if isinstance(request.data, dict) else {}

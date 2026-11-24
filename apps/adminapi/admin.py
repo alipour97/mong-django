@@ -2,7 +2,7 @@ from django import forms
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
 
-from .models import AdminRole, AdminUser
+from .models import AdminRole, AdminUser, SmsLog
 from .passwords import problems
 
 
@@ -67,3 +67,21 @@ class AdminUserAdmin(admin.ModelAdmin):
     @admin.display(boolean=True, description=_("رمز دارد"))
     def has_password(self, obj: AdminUser) -> bool:
         return obj.has_password
+
+
+@admin.register(SmsLog)
+class SmsLogAdmin(admin.ModelAdmin):
+    list_display = ("created", "mobile", "template_id", "accepted", "http_status", "result")
+    list_filter = ("accepted", "result", "created", "template_id")
+    search_fields = ("mobile",)
+    readonly_fields = ("created", "mobile", "template_id", "accepted", "http_status", "result")
+    date_hierarchy = "created"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

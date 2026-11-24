@@ -122,7 +122,7 @@ class CustomerView(APIView):
 # -----------------------------------------------------------------------------
 def _mobile(value) -> str | None:
     mobile = smsir.normalize_mobile("".join(ch for ch in str(value or "") if ch.isdigit() or ch == "+"))
-    return mobile if len(mobile) == 11 and mobile.startswith("09") else None
+    return mobile if re.fullmatch(r"09[0-9]{9}", mobile) else None
 
 
 def _customer(mobile: str) -> Customer | None:
@@ -142,7 +142,7 @@ def _check_code(mobile: str, code) -> bool:
     otp = _live_code(mobile)
     if not otp or otp.attempts >= OTP_MAX_ATTEMPTS:
         return False
-    if not check_password(str(code or "").strip(), otp.code_hash):
+    if not check_password(str(code or "").strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")), otp.code_hash):
         otp.attempts += 1
         otp.save(update_fields=["attempts"])
         return False
@@ -193,7 +193,9 @@ class AuthenticateView(PublicView):
             if not _check_code(mobile, password):
                 return answer(None, 404, "اطلاعات ورود صحیح نمی باشد")
         elif not customer.check_password(password):
-            return answer(None, 404, "رمز عبور اشتباه است.")
+            normalized = password.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789"))
+            if normalized == password or not customer.check_password(normalized):
+                return answer(None, 404, "رمز عبور اشتباه است.")
         return answer(issue_token(customer), message="ورود شما موفقیت آمیز بود")
 
 

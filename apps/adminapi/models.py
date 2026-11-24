@@ -128,3 +128,22 @@ class AdminOtp(models.Model):
         verbose_name = _("کد ورود ادمین")
         verbose_name_plural = _("کدهای ورود ادمین")
         ordering = ("-created",)
+
+
+class SmsLog(models.Model):
+    """A provider submission attempt; message parameters are deliberately not stored."""
+
+    created = models.DateTimeField(_("زمان ارسال"), default=timezone.now, db_index=True)
+    mobile = models.CharField(_("شماره موبایل"), max_length=32, db_index=True)
+    template_id = models.BigIntegerField(_("شناسه قالب"))
+    accepted = models.BooleanField(_("پذیرفته‌شده توسط سرویس"), default=False)
+    http_status = models.PositiveSmallIntegerField(_("کد پاسخ HTTP"), null=True, blank=True)
+    result = models.CharField(_("نتیجه"), max_length=40)
+
+    class Meta:
+        verbose_name = _("لاگ پیامک")
+        verbose_name_plural = _("لاگ‌های پیامک")
+        ordering = ("-created", "-id")
+
+    def __str__(self):
+        return f"{self.mobile} - {self.created}"

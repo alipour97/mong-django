@@ -50,6 +50,7 @@ urlpatterns = [
 
     # Cart, orders and payment
     path("Invoice/Add", orders.AddView.as_view()),
+    path("Invoice/CheckoutStage", orders.CheckoutStageView.as_view()),
     path("Invoice/GetLastPreInvoice", orders.LastPreInvoiceView.as_view()),
     path("Invoice/SoftDelete/<int:invoice_id>", orders.DeletePreInvoiceView.as_view()),
     path("Invoice/ClearCart", orders.ClearCartView.as_view()),

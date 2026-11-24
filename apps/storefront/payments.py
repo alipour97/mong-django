@@ -278,13 +278,16 @@ class PayView(CustomerView):
             _hold_voucher(inv)
         except Refused as exc:
             return answer(None, 409, str(exc))
+        Invoice.objects.filter(pk=inv.pk, state=S.PRE_INVOICE).update(checkout_stage=Invoice.CheckoutStage.PAYING)
         try:
             url = _start_payment(inv, key)
         except hub.Refused as exc:
+            Invoice.objects.filter(pk=inv.pk, state=S.PRE_INVOICE, checkout_stage=Invoice.CheckoutStage.PAYING).update(checkout_stage=Invoice.CheckoutStage.FAILED)
             logger.warning("pay request refused for invoice %s: %s", inv.id, exc)
             _release_voucher(inv)
             return answer(None, 502, exc.message)
         except Exception:
+            Invoice.objects.filter(pk=inv.pk, state=S.PRE_INVOICE, checkout_stage=Invoice.CheckoutStage.PAYING).update(checkout_stage=Invoice.CheckoutStage.FAILED)
             logger.exception("pay request failed for invoice %s", inv.id)
             _release_voucher(inv)
             return answer(None, 502, hub.CONNECTION_FAILED)
@@ -360,6 +363,8 @@ def _finish(payment: InvoicePayment, success: bool, reference: str = "", card: s
         if won and success and payment.invoice.state == S.PRE_INVOICE:
             _mark_paid(payment.invoice, test=_test_money(payment.gateway) if test is None else test)
         elif won and not success and payment.invoice.state == S.PRE_INVOICE:
+            if not InvoicePayment.objects.filter(invoice_id=payment.invoice_id, pk__gt=payment.pk).exists():
+                Invoice.objects.filter(pk=payment.invoice_id, state=S.PRE_INVOICE).update(checkout_stage=Invoice.CheckoutStage.FAILED)
             _release_voucher(payment.invoice)
 
 
