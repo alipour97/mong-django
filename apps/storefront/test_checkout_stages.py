@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.adminapi.views.invoices import _site, _site_header
@@ -80,3 +81,25 @@ class CheckoutStagesTests(TestCase):
         mark_paid.assert_called_once()
         payment.refresh_from_db()
         self.assertTrue(payment.is_success)
+
+    def test_purchase_total_exposes_only_confirmed_non_test_sales_to_the_buyer(self):
+        self.invoice.number = "40508101"
+        self.invoice.payable_amount = 850000
+        self.invoice.delivery_amount = 50000
+        self.invoice.save()
+        url = f"/api/v1/Invoice/GetPurchaseTotal/{self.invoice.number}"
+        self.assertEqual(self.client.get(url).json()["statusCode"], 404)
+
+        self.invoice.state = Invoice.State.SUCCESSFUL
+        self.invoice.paid_at = timezone.now()
+        self.invoice.save()
+        self.assertEqual(self.client.get(url).json()["result"]["data"], {
+            "payable_amount": 850000, "delivery_amount": 50000,
+        })
+        self.client.force_authenticate(self.other)
+        self.assertEqual(self.client.get(url).json()["statusCode"], 404)
+
+        self.client.force_authenticate(self.customer)
+        self.invoice.is_test = True
+        self.invoice.save()
+        self.assertEqual(self.client.get(url).json()["statusCode"], 404)

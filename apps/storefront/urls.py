@@ -56,6 +56,7 @@ urlpatterns = [
     path("Invoice/ClearCart", orders.ClearCartView.as_view()),
     path("Invoice/GetAllCustomerInvoice", orders.CustomerInvoicesView.as_view()),
     path("Invoice/GetCustomerInvoiceById/<int:invoice_id>", orders.CustomerInvoiceView.as_view()),
+    path("Invoice/GetPurchaseTotal/<str:invoice_number>", orders.PurchaseTotalView.as_view()),
     path("ShipingMethod/GetAllShipingMethod", orders.ShippingMethodsView.as_view()),
     path("Coupon/Validation", orders.CouponValidationView.as_view()),
     path("GiftCard/GetAll", orders.GiftCardsView.as_view()),

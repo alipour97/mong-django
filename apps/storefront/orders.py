@@ -501,3 +501,14 @@ class CustomerInvoiceView(CustomerView):
         if not inv:
             return reply(None, 404, "فاکتور یافت نشد")
         return reply(full_invoice(inv))
+
+
+class PurchaseTotalView(CustomerView):
+    def get(self, request, invoice_number: str):
+        total = request.user.invoices.filter(
+            number=invoice_number, state=S.SUCCESSFUL, paid_at__isnull=False,
+            is_test=False, is_deleted=False,
+        ).values("payable_amount", "delivery_amount").first()
+        response = reply(total) if total is not None else reply(None, 404)
+        response["Cache-Control"] = "private, no-store"
+        return response
