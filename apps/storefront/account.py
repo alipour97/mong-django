@@ -39,10 +39,11 @@ from rest_framework.permissions import BasePermission
 from rest_framework.views import APIView
 
 from apps import smsir
-from apps.website.models import City, Customer, CustomerAddress, CustomerFavoriteProduct, CustomerOtp, Job, Product, Province
+from apps.website.models import City, Customer, CustomerAddress, CustomerFavoriteProduct, CustomerOtp, Job, Product, Province, StoreActivity
 
 from . import catalog
 from .envelope import MSG_FETCHED, envelope
+from .journey import identify_visitor
 from .views import PublicView
 
 OTP_MINUTES = 5
@@ -196,6 +197,7 @@ class AuthenticateView(PublicView):
             normalized = password.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789"))
             if normalized == password or not customer.check_password(normalized):
                 return answer(None, 404, "رمز عبور اشتباه است.")
+        identify_visitor(d.get("visitorId"), customer)
         return answer(issue_token(customer), message="ورود شما موفقیت آمیز بود")
 
 
@@ -225,6 +227,7 @@ class SignUpView(PublicView):
                 return answer(None, 400, "هنگام ثبت نام خطایی رخ داده است.")
         if not customer.is_active:
             return answer(None, 403, "دسترسی شما مسدود شده است")
+        identify_visitor(d.get("visitorId"), customer)
         return answer(issue_token(customer), message="ثبت نام با موفقیت انجام شد.")
 
 
@@ -356,6 +359,7 @@ def _fill_address(a: CustomerAddress, d: dict):
 
 
 def _save_address(customer: Customer, a: CustomerAddress) -> None:
+    kind = StoreActivity.Kind.ADDRESS_EDIT if a.pk else StoreActivity.Kind.ADDRESS_ADD
     with transaction.atomic():
         has_default = customer.addresses.filter(is_deleted=False, is_default=True).exclude(id=a.id).exists()
         if a.is_default:
@@ -363,6 +367,7 @@ def _save_address(customer: Customer, a: CustomerAddress) -> None:
         elif not has_default:
             a.is_default = True  # the first address is the default one
         a.save()
+        StoreActivity.objects.create(customer=customer, kind=kind)
 
 
 class AddressesView(CustomerView):

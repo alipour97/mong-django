@@ -12,6 +12,7 @@ configs (sortRowsConfig, webSortOrder), URLs, carts and favorites stay valid.
 from __future__ import annotations
 
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 
@@ -1341,6 +1342,7 @@ class Invoice(models.Model):
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name="invoices", verbose_name=_("مشتری"))
     state = models.IntegerField(_("وضعیت"), choices=State.choices, default=State.PRE_INVOICE, db_index=True)
     checkout_stage = models.CharField(_("مرحله خرید"), max_length=16, choices=CheckoutStage.choices, default=CheckoutStage.CART, db_index=True)
+    status_changed_at = models.DateTimeField(null=True, blank=True)
     shipping_method = models.ForeignKey(ShippingMethod, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
                                         verbose_name=_("روش ارسال"))
     address = models.ForeignKey("CustomerAddress", null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
@@ -1384,6 +1386,35 @@ class Invoice(models.Model):
 
     def __str__(self) -> str:
         return f"#{self.number or self.id} {self.customer_id} ({self.get_state_display()})"
+
+
+class StoreVisitor(models.Model):
+    browser_id = models.UUIDField(unique=True, editable=False)
+    customer = models.ForeignKey(Customer, null=True, on_delete=models.SET_NULL, related_name="+")
+    identified_at = models.DateTimeField(null=True, db_index=True)
+
+
+class StoreActivity(models.Model):
+    class Kind(models.TextChoices):
+        PRODUCT_VIEW = "product_view", _("مشاهده کالا")
+        CART_ADD = "cart_add", _("افزودن به سبد")
+        ADDRESS_ADD = "address_add", _("افزودن آدرس")
+        ADDRESS_EDIT = "address_edit", _("ویرایش آدرس")
+        STATUS = "status", _("تغییر وضعیت سفارش")
+
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    visitor = models.ForeignKey(StoreVisitor, null=True, on_delete=models.CASCADE, related_name="activities")
+    customer = models.ForeignKey(Customer, null=True, on_delete=models.CASCADE, related_name="+")
+    invoice = models.ForeignKey(Invoice, null=True, on_delete=models.CASCADE, related_name="activities")
+    detail = models.CharField(max_length=512, blank=True)
+    occurred_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["customer", "occurred_at"]),
+            models.Index(fields=["invoice", "occurred_at"]),
+            models.Index(fields=["visitor", "kind", "occurred_at"]),
+        ]
 
 
 class InvoiceLine(models.Model):

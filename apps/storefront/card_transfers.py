@@ -16,6 +16,7 @@ from apps.erp.connector import Refused
 from apps.website.models import CARD_TRANSFER, BankGateway, CardTransferReceipt, Customer, Invoice, InvoicePayment
 
 from .account import CustomerView, answer
+from .journey import record_status
 from .payments import _hold_voucher, _mark_paid, _out_of_stock, _release_voucher, invoice_sms_admin_mobiles
 
 logger = logging.getLogger(__name__)
@@ -99,7 +100,9 @@ class SubmitCardTransferView(CustomerView):
         )
         CardTransferReceipt.objects.create(payment=payment, image=image)
         invoice.state = S.SUSPENDED
-        invoice.save(update_fields=["state", "last_modified"])
+        invoice.status_changed_at = timezone.now()
+        invoice.save(update_fields=["state", "status_changed_at", "last_modified"])
+        record_status(invoice, "ارسال رسید کارت‌به‌کارت")
         _notify(settings.SMSIR_CARD_TRANSFER_RECEIVED_TEMPLATE_ID, invoice, include_admins=True)
         return answer(result, message=PENDING_MESSAGE)
 
@@ -135,5 +138,7 @@ def review(payment_id: int, approved: bool, reviewer) -> None:
         _notify(settings.SMSIR_CARD_TRANSFER_APPROVED_TEMPLATE_ID, invoice)
     else:
         invoice.state = S.CANCELLED
-        invoice.save(update_fields=["state", "last_modified"])
+        invoice.status_changed_at = timezone.now()
+        invoice.save(update_fields=["state", "status_changed_at", "last_modified"])
+        record_status(invoice, "رد رسید کارت‌به‌کارت و لغو سفارش")
         _release_voucher(invoice)

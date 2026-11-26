@@ -12,7 +12,7 @@ from apps.storefront import views as storefront
 from apps.website.models import MediaAttachment
 
 from .views import (
-    auth, banners, blog, categories, collections, comments, configs, cooperation, coupons, customers, customize, dashboard, gallery,
+    activity, auth, banners, blog, categories, collections, comments, configs, cooperation, coupons, customers, customize, dashboard, gallery,
     invoices, products, tags, users,
 )
 
@@ -33,6 +33,9 @@ urlpatterns = [
     path("Report/GetDashboardLablesReports", dashboard.LabelsView.as_view()),
     path("Invoice/DailyCounts", dashboard.DailyCountsView.as_view()),
     path("Invoice/InvoiceCountByHour", dashboard.CountByHourView.as_view()),
+    path("Invoice/Activity/<int:invoice_id>", activity.InvoiceActivityView.as_view()),
+    path("Invoice/GuestVisitors", activity.GuestVisitorsView.as_view()),
+    path("Invoice/GuestVisitors/<int:visitor_id>/Activity", activity.GuestActivityView.as_view()),
     path("Invoice/GetFilteredInvoices", invoices.ListView.as_view()),
     path("Invoice/GetInvoiceStatistics", invoices.StatisticsView.as_view()),
     path("Invoice/InvoiceAmountRange", invoices.AmountRangeView.as_view()),

@@ -44,6 +44,7 @@ from apps.website.models import CARD_TRANSFER, City, Customer, CustomerAddress, 
 from . import catalog
 from .account import CustomerView, answer
 from .envelope import MSG_FETCHED, _g2j, envelope, jalali
+from .journey import change_checkout_stage
 
 S = Invoice.State
 
@@ -154,8 +155,9 @@ class ShippingMethodsView(CustomerView):
 # -----------------------------------------------------------------------------
 # Pre-invoice
 # -----------------------------------------------------------------------------
-def _pre_invoice(customer) -> Invoice | None:
-    return customer.invoices.filter(state=S.PRE_INVOICE, is_deleted=False).order_by("-id").first()
+def _pre_invoice(customer, *, lock=False) -> Invoice | None:
+    invoices = customer.invoices.filter(state=S.PRE_INVOICE, is_deleted=False).order_by("-id")
+    return (invoices.select_for_update() if lock else invoices).first()
 
 
 class CheckoutStageView(CustomerView):
@@ -172,7 +174,7 @@ class CheckoutStageView(CustomerView):
             return answer(None, 404, "سبد خرید یافت نشد.")
         # Never let a delayed browser event overwrite a gateway outcome.
         allowed = [Invoice.CheckoutStage.CART, Invoice.CheckoutStage.CHECKOUT, Invoice.CheckoutStage.READY]
-        qs.filter(pk=inv.pk, checkout_stage__in=allowed).update(checkout_stage=stage)
+        change_checkout_stage(qs.filter(pk=inv.pk, checkout_stage__in=allowed), stage)
         return answer(True)
 
 
@@ -235,7 +237,7 @@ class AddView(CustomerView):
             return reply(None, 400, str(exc))
         with transaction.atomic():
             Customer.objects.select_for_update().get(pk=customer.pk)
-            inv = _pre_invoice(customer) or Invoice(customer=customer)
+            inv = _pre_invoice(customer, lock=True) or Invoice(customer=customer)
             is_new = inv.pk is None
             inv.shipping_method, inv.address = method, address
             snapshot_address(inv, address)

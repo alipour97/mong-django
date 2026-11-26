@@ -6,6 +6,7 @@ base URLs point here for now.
 from django.urls import path, re_path
 
 from . import account as acc
+from .activity import ProductActivityView
 from . import blog
 from . import interactions as act
 from . import orders
@@ -38,6 +39,8 @@ urlpatterns = [
     path("Customer/GetCustomerFavoriteProduct", acc.FavoritesView.as_view()),
     path("Customer/AddFavoriteProduct", acc.AddFavoriteView.as_view()),
     path("Customer/DeleteFavoriteProduct", acc.DeleteFavoriteView.as_view()),
+
+    path("Activity/Product", ProductActivityView.as_view()),
 
     # Comments, likes, forms
     path("Comment/add", act.ProductCommentAddView.as_view()),

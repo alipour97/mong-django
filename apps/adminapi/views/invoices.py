@@ -44,6 +44,7 @@ from apps.erp.connector import Refused
 from apps.samian.models import SamianColor, SamianProduct, SamianSalesRow, SamianSalesTransaction
 from apps.storefront.envelope import jalali
 from apps.storefront.card_transfers import review as review_card_transfer
+from apps.storefront.journey import record_status, status_time
 from apps.storefront.orders import coupon_deduction
 from apps.storefront.payments import SNAPPPAY, snapp_order
 from apps.website.models import CARD_TRANSFER, CardTransferReceipt, City, CompanyInfo, Customer, Invoice, InvoicePayment, Product, ProductComment, ProductSamianLink, Province
@@ -213,11 +214,14 @@ def _site_header(inv: Invoice) -> dict:
     lines = list(inv.lines.all())
     after = inv.amount - inv.reduction_amount
     snapp, paid = _snapp_payment(inv), _paid_by(inv)
+    changed_at = status_time(inv)
     return {
         "id": inv.id, "invoiceNumber": inv.number, "customerId": c.id, "customerName": c.first_name, "customerLastName": c.last_name,
         "qty": float(sum(ln.qty for ln in lines)), "createDate": inv.invoice_date.isoformat(),
         "createDatePersian": jalali(inv.invoice_date, with_time=False), "branchId": None, "branchTitle": None,
         "invoiceState": inv.state, "invoiceType": inv.state,
+        "siteInvoiceId": inv.pk,
+        "statusChangedAt": changed_at.isoformat() if changed_at else None,
         "checkoutStage": inv.checkout_stage,
         "checkoutStageTitle": inv.get_checkout_stage_display() if inv.state == PRE_INVOICE else inv.get_state_display(),
         "shippingMethodId": inv.shipping_method_id or 0, "shippingMethodName": m.name if m else "",
@@ -302,7 +306,7 @@ def _site_customers(txs) -> dict[int, Customer]:
     return {c.samian_customer_id: c for c in Customer.objects.filter(samian_customer_id__in=ids, is_deleted=False)}
 
 
-def _header(t: SamianSalesTransaction, site: dict, commented_rows: dict) -> dict:
+def _header(t: SamianSalesTransaction, site: dict, commented_rows: dict, invoice: Invoice | None) -> dict:
     sc, cu = t.samian_customer, site.get(t.samian_customer_id)
     first = (cu.first_name if cu else "") or (sc.first_name if sc else "")
     last = (cu.last_name if cu else "") or (sc.last_name if sc else "")
@@ -310,6 +314,7 @@ def _header(t: SamianSalesTransaction, site: dict, commented_rows: dict) -> dict
         first = sc.display_name
     payable = t.revenue + t.vat_amount + t.shipment_price
     state = _state(t)
+    changed_at = status_time(invoice) if invoice and invoice.state == state and state != PRE_INVOICE else None
     return {
         "id": t.samian_id, "invoiceNumber": t.transaction_code or str(t.samian_id),
         "customerId": cu.id if cu else 0, "customerName": first, "customerLastName": last,
@@ -317,6 +322,8 @@ def _header(t: SamianSalesTransaction, site: dict, commented_rows: dict) -> dict
         "createDatePersian": jalali(t.invoice_date, with_time=False),
         "branchId": t.warehouse_id, "branchTitle": t.warehouse or None,
         "invoiceState": state, "invoiceType": state,
+        "siteInvoiceId": invoice.pk if invoice else None,
+        "statusChangedAt": changed_at.isoformat() if changed_at else None,
         "shippingMethodId": t.shipment_type_id or 0, "shippingMethodName": t.shipment_type,
         "shippingMethodTypeId": t.shipment_type_id or 0, "shippingMethodTypeTitle": t.shipment_type,
         "deliveryAmount": t.shipment_price, "customerAddressId": 0, "storeOrderId": t.store_order_id,
@@ -338,7 +345,10 @@ def _headers(txs: list) -> list[dict]:
     counts: dict[int, int] = {}
     for tid in SamianSalesRow.objects.filter(transaction_id__in=[t.pk for t in txs], samian_product_id__in=commented).values_list("transaction_id", flat=True):
         counts[tid] = counts.get(tid, 0) + 1
-    return [_header(t, site, counts) for t in txs]
+    linked = {}
+    for invoice in Invoice.objects.filter(samian_transaction_id__in=[t.samian_id for t in txs], is_deleted=False).order_by("id"):
+        linked[invoice.samian_transaction_id] = invoice
+    return [_header(t, site, counts, linked.get(t.samian_id)) for t in txs]
 
 
 def _page(qs, q, site_qs=None) -> dict:
@@ -548,8 +558,13 @@ class CancelView(AdminView):
         done, message = payhub.cancel(payment.authority)
         if not done:
             return _refused(message)
-        inv.state = CANCELLED
-        inv.save(update_fields=["state", "last_modified"])
+        with transaction.atomic():
+            inv = Invoice.objects.select_for_update().get(pk=inv.pk)
+            if inv.state != CANCELLED:
+                inv.state = CANCELLED
+                inv.status_changed_at = timezone.now()
+                inv.save(update_fields=["state", "status_changed_at", "last_modified"])
+                record_status(inv)
         return ok({"result": {"successful": True}})
 
 
