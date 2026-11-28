@@ -63,9 +63,9 @@ class SiteGiftCardAdmin(admin.ModelAdmin):
 class ErpWriteLogAdmin(ReadOnlyAdmin):
     """Everything this site wrote in the sales software. Read only: it is the record of what happened."""
 
-    list_display = ("id", "invoice_id", "software", "action", "result", "ok", "created")
+    list_display = ("id", "invoice_id", "customer_id", "software", "action", "result", "ok", "created")
     list_filter = ("ok", "software", "action")
-    search_fields = ("invoice_id", "error")
+    search_fields = ("invoice_id", "customer_id", "error")
 
 
 class ManualPhotoForm(forms.ModelForm):

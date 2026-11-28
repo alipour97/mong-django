@@ -367,7 +367,10 @@ def _samian_steps() -> list[dict]:
 class SyncStatusView(AdminView):
     def get(self, request):
         incoming = [_job_status(j) for j in jobs.JOBS.values() if j.direction == "in"]
-        outgoing = [_job_status(j) for j in jobs.JOBS.values() if j.direction == "out"] + [_pending()]
+        outgoing = [
+            _job_status(j) for j in jobs.JOBS.values()
+            if j.direction == "out" and (j.key != "customers" or settings.ERP_CONNECTOR == "dadehfa")
+        ] + [_pending()]
         if settings.ERP_CONNECTOR == "samian":
             incoming += _samian_steps()
         states_in = [i.get("state") or ("ok" if i["operationDone"] else "error") for i in incoming]

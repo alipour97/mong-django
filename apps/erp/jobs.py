@@ -125,11 +125,18 @@ def _outbox(log) -> list[str]:
     return lines
 
 
+def _customers(log) -> list[str]:
+    from . import customer_sync
+
+    return customer_sync.run(log)
+
+
 JOBS = {job.key: job for job in (
     Job("erp", "کالا، قیمت، موجودی، کوپن و کارت هدیه", "in", "هر ۵ دقیقه", timedelta(minutes=5), _erp),
     Job("lebazai", "عکس و اطلاعات محصولات از LEBAZAI", "in", "هر شب", timedelta(days=1), _lebazai),
     Job("sales", "داده‌های فروش", "in", "هر ساعت", timedelta(hours=1), _sales),
     Job("outbox", "ارسال فاکتورهای پرداخت‌شده", "out", "هر دقیقه", timedelta(minutes=1), _outbox),
+    Job("customers", "ارسال حساب مشتریان به داده‌فا", "out", "هر دقیقه", timedelta(minutes=1), _customers),
 )}
 
 

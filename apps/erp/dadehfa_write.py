@@ -1,5 +1,5 @@
 """
-Paid invoices into DadehfaOnlineShop, the one way this project writes there. The row shapes
+Paid invoices and customer accounts into DadehfaOnlineShop. The invoice row shapes
 copy what the .NET site (api.mongnew.ir) leaves for a paid invoice: PaymentVerificationHandler
 after a gateway, PayInvoiceByIdHandler when the voucher paid it all. InvoiceType 3 with an
 empty MapId is what its SyncInvoices job picks up and carries to the ERP.
@@ -30,7 +30,7 @@ from django.utils import timezone
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import URL, Engine
 
-from apps.website.models import CARD_TRANSFER, Invoice
+from apps.website.models import CARD_TRANSFER, Customer, Invoice
 
 from .models import ErpWriteLog, SiteCoupon
 
@@ -94,10 +94,11 @@ def get_engine() -> Engine:
 
 
 class _Logged:
-    """Sends one invoice's statements and keeps a record of those that write."""
+    """Sends a transaction's statements and keeps a record of those that write."""
 
-    def __init__(self, invoice_id: int):
-        self.invoice_id, self.db, self.rows = invoice_id, None, []
+    def __init__(self, *, invoice_id: int | None = None, customer_id: int | None = None):
+        self.subject = {"invoice_id": invoice_id, "customer_id": customer_id, "software": "dadehfa"}
+        self.db, self.rows = None, []
 
     def execute(self, statement, params=None):
         sql = str(statement)
@@ -105,17 +106,18 @@ class _Logged:
         if words[0].upper() == "SELECT":
             return self.db.execute(statement, params)
         table = words[2] if words[0].upper() == "INSERT" else words[1]
-        row = ErpWriteLog(invoice_id=self.invoice_id, software="dadehfa", action=f"{words[0].upper()} {table}", statement=sql,
-                          params=json.loads(json.dumps(params or {}, default=str)))
+        audited = {key: value for key, value in (params or {}).items() if key not in ("PublicKey", "SecretKey", "RefreshToken")}
+        row = ErpWriteLog(**self.subject, action=f"{words[0].upper()} {table}", statement=sql,
+                          params=json.loads(json.dumps(audited, default=str)))
         self.rows.append(row)
         return _Recorded(self.db.execute(statement, params), row)
 
     def save(self, error: str = "") -> None:
         """Called once the transaction has ended: its rows all went in, or none did."""
-        rows = self.rows or ([ErpWriteLog(invoice_id=self.invoice_id, software="dadehfa")] if error else [])
+        rows = self.rows or ([ErpWriteLog(**self.subject)] if error else [])
         for row in rows:
             row.ok, row.error = not error, error[:2000]
-            logger.info("dadehfa write: invoice %s %s %s %s", self.invoice_id, row.action, row.result, "ok" if row.ok else error)
+            logger.info("dadehfa write: %s %s %s %s", self.subject, row.action, row.result, "ok" if row.ok else error)
         ErpWriteLog.objects.bulk_create(rows)
 
 
@@ -241,9 +243,10 @@ def _stamp(at, by: str = SYSTEM) -> dict:
     return {"Created": at.isoformat(sep=" ", timespec="seconds"), "CreatedBy": by}
 
 
-def _customer_id(db, invoice: Invoice, at) -> int:
-    customer = invoice.customer
-    found = db.execute(text("SELECT TOP 1 Id FROM Customers WHERE CellPhone = :c AND IsDeleted = 0 ORDER BY Id"),
+def _customer_id(db, customer: Customer, at) -> int:
+    # Both the signup worker and invoice delivery can be first to see the number.
+    found = db.execute(text("SELECT TOP 1 Id FROM Customers WITH (UPDLOCK, HOLDLOCK) "
+                            "WHERE CellPhone = :c AND IsDeleted = 0 ORDER BY Id"),
                        {"c": customer.cellphone}).scalar()
     if found:
         return found
@@ -252,9 +255,24 @@ def _customer_id(db, invoice: Invoice, at) -> int:
         "FirstName": customer.first_name[:40] or None, "LastName": customer.last_name[:40] or None,
         "CellPhone": customer.cellphone, "IsTowFactorAuthentication": 0, "Password": "", "IsActive": 1,
         "PublicKey": secrets.token_hex(16), "SecretKey": secrets.token_hex(25), "RefreshToken": secrets.token_hex(16),
+        "Email": customer.email if 0 < len(customer.email) <= 100 else None,
         "NationalCode": customer.national_code[:11] or None, "IsDeleted": 0, "TsCodeId": 0, "AnnualPurchaseAmount": 0,
         **_stamp(at),
     })
+
+
+def push_customer(customer: Customer) -> int:
+    if not settings.ERP_WRITES_ENABLED:
+        raise NotAllowed("ERP_WRITES_ENABLED is off")
+    db = _Logged(customer_id=customer.pk)
+    try:
+        with get_engine().begin() as db.db:
+            customer_id = _customer_id(db, customer, timezone.localtime())
+    except Exception as exc:
+        db.save(str(exc))
+        raise
+    db.save()
+    return customer_id
 
 
 def _address_id(db, invoice: Invoice, customer_id: int, at) -> int:
@@ -331,7 +349,7 @@ def push(invoice: Invoice) -> None:
         return
     at = timezone.localtime()
     mark = f"site:{invoice.pk}"
-    db = _Logged(invoice.pk)
+    db = _Logged(invoice_id=invoice.pk)
     try:
         with get_engine().begin() as db.db:
             invoice_id = db.execute(
@@ -355,7 +373,7 @@ def push(invoice: Invoice) -> None:
                         if not card_transfer_bank_id:
                             raise CannotSend("Blu (BankInfo Id 3, key blu) was not found in Dadehfa BankInfos.")
                 rows = plan(invoice, card_transfer_bank_id=card_transfer_bank_id)
-                customer_id = _customer_id(db, invoice, at)
+                customer_id = _customer_id(db, invoice.customer, at)
                 address_id = _address_id(db, invoice, customer_id, at)
                 invoice_id = _insert(db, "Invoices", {
                     **rows.invoice, "CustomerId": customer_id, "CustomerAddressId": address_id, "CouponId": _use_coupon(db, invoice, customer_id, at),

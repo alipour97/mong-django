@@ -123,7 +123,8 @@ class ErpGiftCard(models.Model):
 class ErpWriteLog(models.Model):
     """One statement this site sent to write in the sales software, and how its transaction ended."""
 
-    invoice_id = models.BigIntegerField("فاکتور سایت", db_index=True)
+    invoice_id = models.BigIntegerField("فاکتور سایت", null=True, blank=True, db_index=True)
+    customer_id = models.BigIntegerField("مشتری سایت", null=True, blank=True, db_index=True)
     software = models.CharField("نرم‌افزار", max_length=32)
     action = models.CharField("عمل", max_length=128, blank=True, default="")  # INSERT Invoices, UPDATE GiftCards...
     statement = models.TextField("دستور", blank=True, default="")
@@ -139,7 +140,7 @@ class ErpWriteLog(models.Model):
         ordering = ["-id"]
 
     def __str__(self) -> str:
-        return f"{self.invoice_id}: {self.action}"
+        return f"{self.invoice_id or self.customer_id}: {self.action}"
 
 
 class SyncState(models.Model):

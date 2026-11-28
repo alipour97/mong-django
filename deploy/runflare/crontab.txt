@@ -5,6 +5,8 @@
 */5 * * * * cd /app && python manage.py sync_erp >> /app/public/logs/cron.log 2>&1
 # Paid orders to the software, and the payment hub's unclear payments when one is due: every minute.
 * * * * * cd /app && python manage.py erp_outbox >> /app/public/logs/cron.log 2>&1
+# Newly registered customers, without waiting for their first order.
+* * * * * cd /app && python manage.py sync_dadehfa_customers >> /app/public/logs/cron.log 2>&1
 # Every branch's sales (best-seller sort) and the old site's new orders: hourly.
 15 * * * * cd /app && python manage.py sync_sales >> /app/public/logs/cron.log 2>&1
 # New LEBAZAI images and AI copy: nightly (00:30 UTC = 04:00 Tehran).

@@ -221,6 +221,8 @@ class SignUpView(PublicView):
             if d.get("password"):
                 customer.set_password(str(d["password"]))
             customer.last_modified = timezone.now()
+            if settings.ERP_CONNECTOR == "dadehfa" and not customer.erp_customer_id:
+                customer.erp_customer_pending_at = customer.last_modified
             try:
                 customer.save()
             except IntegrityError:

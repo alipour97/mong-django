@@ -1063,6 +1063,7 @@ class Customer(LegacyMixin):
     )
     samian_checked_at = models.DateTimeField(_("آخرین جستجو در سامیان"), null=True, blank=True)
     erp_customer_id = models.BigIntegerField(_("شناسه در نرم‌افزار فروش"), null=True, blank=True, db_index=True)
+    erp_customer_pending_at = models.DateTimeField(_("در صف ارسال حساب به داده‌فا"), null=True, blank=True, db_index=True)
     # A Django password hash; empty until the customer sets one (sign-in is by SMS code otherwise).
     # Dadehfa's own hashes were not carried over.
     password = models.CharField(_("رمز عبور"), max_length=256, blank=True, default="")

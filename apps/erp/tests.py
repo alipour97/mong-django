@@ -1569,6 +1569,7 @@ class SyncJobTests(TestCase):
         self.assertEqual(jobs.worst(["ok", "late"]), "late")
 
 
+@override_settings(ERP_CONNECTOR="dadehfa")
 class SyncPanelTests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -1591,10 +1592,11 @@ class SyncPanelTests(TestCase):
         lebazai = next(i for i in result["incomingData"] if i["operationKey"] == "lebazai")
         self.assertEqual(lebazai["state"], "late")  # never ran
         self.assertEqual(result["incomingState"], "late")
-        self.assertEqual([i["operationKey"] for i in result["outgoingData"]], ["outbox", "pending"])
+        self.assertEqual([i["operationKey"] for i in result["outgoingData"]], ["outbox", "customers", "pending"])
 
     def test_pending_turns_yellow_with_an_order_waiting_and_red_with_one_that_failed(self):
         SyncRun.objects.create(job="outbox", ok=True, finished_at=timezone.now())
+        SyncRun.objects.create(job="customers", ok=True, finished_at=timezone.now())
         self.assertEqual(self.status()["outgoingState"], "ok")
         customer = Customer.objects.create(cellphone="09120000001")
         Invoice.objects.create(customer=customer, state=Invoice.State.SUCCESSFUL, paid_at=timezone.now() - timedelta(hours=1))
