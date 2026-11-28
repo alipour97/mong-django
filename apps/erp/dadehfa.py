@@ -23,6 +23,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from apps.legacy.db import fetch_all
+from apps.smsir import normalize_mobile
 from apps.storefront.catalog import norm
 from apps.website import slugs
 from apps.website.models import Invoice, ProductVariant, SiteSetting
@@ -204,12 +205,13 @@ def _coupons() -> list[ErpCoupon]:
 def _gift_cards() -> list[ErpGiftCard]:
     rows = fetch_all("""
         SELECT c.Id, c.GCNum, c.StartDate, c.ExpDate, c.GCBalance, c.IsActive, c.CustomerId, c.UseDepCode, c.MinFactorPrice, c.GiftGroupMapId,
-               c.CustomerMapId, c.UseCompelete, c.BankPortalEndTime, c.Created, ISNULL(u.CellPhone, c.CustomerMobile) AS Mobile, u.FirstName, u.LastName,
+               c.CustomerMapId, c.UseCompelete, c.BankPortalEndTime, c.Created,
+               COALESCE(NULLIF(LTRIM(RTRIM(u.CellPhone)), ''), c.CustomerMobile) AS Mobile, u.FirstName, u.LastName,
                (SELECT COUNT(*) FROM Invoices i WHERE i.GiftCardId = c.Id AND i.InvoiceType = 3 AND i.IsDeleted = 0) AS InvoiceCount
         FROM GiftCards c LEFT JOIN Customers u ON u.Id = c.CustomerId
         WHERE c.IsDeleted = 0""")
     return [ErpGiftCard(
-        id=r["Id"], number=r["GCNum"], customer_erp_id=r["CustomerId"], mobile=_text(r["Mobile"]), balance=_rial(r["GCBalance"]),
+        id=r["Id"], number=_text(r["GCNum"]), customer_erp_id=r["CustomerId"], mobile=normalize_mobile(_text(r["Mobile"])), balance=_rial(r["GCBalance"]),
         min_price=_rial(r["MinFactorPrice"]), starts=_moment(r["StartDate"]), expires=_moment(r["ExpDate"]), is_active=bool(r["IsActive"]),
         use_whole=bool(r["UseCompelete"]), use_dep_code=bool(r["UseDepCode"]), held_until=_moment(r["BankPortalEndTime"]),
         created=_moment(r["Created"]), gift_group_map_id=_text(r["GiftGroupMapId"]), customer_map_id=_text(r["CustomerMapId"]),

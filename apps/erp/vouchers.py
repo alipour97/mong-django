@@ -107,7 +107,12 @@ def _software_coupon(serial: str, customer, invoice_id: int | None = None) -> Co
 
 
 def _software_cards(customer):
-    return ErpGiftCard.objects.filter(Q(customer_erp_id=_customer_id(customer)) | Q(mobile=customer.cellphone)).order_by("-id")
+    owner = Q(pk__in=[])
+    if customer.erp_customer_id:
+        owner |= Q(customer_erp_id=customer.erp_customer_id)
+    if mobile := normalize_mobile(customer.cellphone):
+        owner |= Q(mobile=mobile)
+    return ErpGiftCard.objects.filter(owner).order_by("-id")
 
 
 def _software_balance(card: ErpGiftCard) -> int:
@@ -117,9 +122,11 @@ def _software_balance(card: ErpGiftCard) -> int:
 
 def _software_gift_cards(customer) -> list[dict]:
     """What the customer can spend now, as the old site listed it."""
-    today, cards = timezone.localdate(), []
-    for card in _software_cards(customer).filter(is_active=True, balance__gt=0):
-        if (card.starts and timezone.localtime(card.starts).date() > today) or (card.expires and timezone.localtime(card.expires).date() < today):
+    now, cards = timezone.now(), []
+    today = timezone.localdate(now)
+    owned = _software_cards(customer).filter(Q(is_active=True) | Q(held_until__isnull=False), balance__gt=0)
+    for card in owned:
+        if (card.starts and timezone.localtime(card.starts).date() > today) or (card.expires and card.expires < now):
             continue
         balance = _software_balance(card)
         if balance <= 0:

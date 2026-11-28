@@ -7,9 +7,34 @@ from django.utils import timezone
 from apps.website import images
 
 from . import store, vouchers
-from .models import ErpWriteLog, ManualPhoto, SiteCoupon, SiteGiftCard
+from .models import ErpCoupon, ErpGiftCard, ErpWriteLog, ManualPhoto, SiteCoupon, SiteGiftCard
 
 MANUAL_PREFIX = "up/"
+
+
+class ReadOnlyAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ErpCoupon)
+class ErpCouponAdmin(ReadOnlyAdmin):
+    list_display = ("serial", "customer_erp_id", "reduction", "expires", "is_active", "is_used")
+    list_filter = ("is_active", "is_used", "listed")
+    search_fields = ("serial", "first_name", "last_name", "=customer_erp_id")
+
+
+@admin.register(ErpGiftCard)
+class ErpGiftCardAdmin(ReadOnlyAdmin):
+    list_display = ("number", "mobile", "customer_erp_id", "balance", "starts", "expires", "is_active")
+    list_filter = ("is_active", "use_whole")
+    search_fields = ("number", "mobile", "first_name", "last_name", "=customer_erp_id")
 
 
 @admin.register(SiteCoupon)
@@ -35,21 +60,12 @@ class SiteGiftCardAdmin(admin.ModelAdmin):
 
 
 @admin.register(ErpWriteLog)
-class ErpWriteLogAdmin(admin.ModelAdmin):
+class ErpWriteLogAdmin(ReadOnlyAdmin):
     """Everything this site wrote in the sales software. Read only: it is the record of what happened."""
 
     list_display = ("id", "invoice_id", "software", "action", "result", "ok", "created")
     list_filter = ("ok", "software", "action")
     search_fields = ("invoice_id", "error")
-
-    def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
-
-    def has_delete_permission(self, request, obj=None):
-        return False
 
 
 class ManualPhotoForm(forms.ModelForm):

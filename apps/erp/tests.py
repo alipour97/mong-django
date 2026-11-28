@@ -158,7 +158,7 @@ class ReadTests(TestCase):
         if "FROM GiftCards" in sql:
             return [{"Id": 4, "GCNum": "G", "StartDate": None, "ExpDate": None, "GCBalance": 5, "IsActive": True, "CustomerId": 8, "UseDepCode": False,
                      "MinFactorPrice": 0, "GiftGroupMapId": None, "CustomerMapId": None, "UseCompelete": False, "BankPortalEndTime": None,
-                     "Created": None, "Mobile": "0912", "FirstName": "ع", "LastName": None, "InvoiceCount": 2}]
+                     "Created": None, "Mobile": "+989121234567", "FirstName": "ع", "LastName": None, "InvoiceCount": 2}]
         if "FROM FeatureValues" in sql:
             return [{"Id": 6, "Name": "مشکی", "Value": "000000", "DisplayPriority": 1}, {"Id": 7, "Name": "38", "Value": "38", "DisplayPriority": 2}]
         if "FROM ProductVariants v" in sql:
@@ -199,7 +199,7 @@ class ReadTests(TestCase):
 
     def test_the_cards_come_with_who_holds_them(self):
         card = self.read().gift_cards[0]
-        self.assertEqual((card.number, card.mobile, card.invoice_count), ("G", "0912", 2))
+        self.assertEqual((card.number, card.mobile, card.invoice_count), ("G", "09121234567", 2))
 
     def test_after_discount_rounds_to_ten_thousand(self):
         self.assertEqual(dadehfa.after_discount(26800000, 62.724), 9990000)
@@ -644,7 +644,7 @@ class OutboxTests(TestCase):
 def software_vouchers(customer) -> None:
     """The software's coupon and gift card of the customer, as a sync left them."""
     ErpCoupon.objects.create(id=9, customer_erp_id=customer.id, serial="OK", reduction=Decimal(10), min_price=Decimal(1000))
-    ErpGiftCard.objects.create(id=4, number="G1", customer_erp_id=customer.id, balance=Decimal(5000000), starts=timezone.now())
+    ErpGiftCard.objects.create(id=4, number="G1", mobile=customer.cellphone, balance=Decimal(5000000), starts=timezone.now())
 
 
 class VoucherTests(TestCase):
@@ -690,24 +690,39 @@ class VoucherTests(TestCase):
         self.assertFalse(self.client.get("/api/v1/Coupon/Validation?serial=NO").json()["result"]["data"]["valid"])
         self.assertEqual(self.client.get("/api/v1/GiftCard/GetAll").json()["result"]["data"][0]["gcNum"], "G1")
 
+    def test_checkout_can_list_and_spend_a_card_linked_by_mobile(self):
+        ErpGiftCard.objects.filter(pk=4).update(customer_erp_id=900)
+        ErpGiftCard.objects.create(id=8, number="UNOWNED", customer_erp_id=self.customer.pk, balance=5000000)
+        cards = self.client.get("/api/v1/GiftCard/GetAll").json()["result"]["data"]
+        self.assertEqual([card["gcNum"] for card in cards], ["G1"])
+        self.assertEqual(self.add(gcNum="UNOWNED")["statusCode"], 400)
+        reply = self.add(gcNum="G1")
+        self.assertEqual(reply["statusCode"], 200)
+        invoice = Invoice.objects.get()
+        paid = self.client.get(f"/api/v1/Bank/GiftCardPayInvoiceById?InvoiceId={invoice.pk}")
+        self.assertEqual(paid.status_code, 200, paid.json())
+        invoice.refresh_from_db()
+        self.assertEqual((invoice.gift_card_id, invoice.state), (4, Invoice.State.SUCCESSFUL))
+        self.assertEqual(vouchers.find_gift_card("G1", self.customer).balance, 3200000)
+
 
 class SoftwareVoucherTests(TestCase):
     """The old API's rules, on what the last sync read."""
 
     def setUp(self):
-        self.customer = Customer.objects.create(first_name="ع", cellphone="09121234567")
+        self.customer = Customer.objects.create(first_name="ع", cellphone="09121234567", erp_customer_id=900)
 
     def coupon(self, **row):
         return {"id": 5, "serial": "S", "reduction": Decimal(10), **row}
 
     def card(self, **row):
         return {"id": 7, "number": "G", "starts": timezone.now() - timedelta(days=1), "balance": Decimal(1000000),
-                "customer_erp_id": self.customer.id, **row}
+                "customer_erp_id": self.customer.erp_customer_id, **row}
 
     def read_coupon(self, own=None, general=None, invoice_id=None):
         ErpCoupon.objects.all().delete()
         if own:
-            ErpCoupon.objects.create(customer_erp_id=self.customer.id, **own)
+            ErpCoupon.objects.create(customer_erp_id=self.customer.erp_customer_id, **own)
         if general:
             ErpCoupon.objects.create(**general)
         return vouchers.find_coupon("S", self.customer, invoice_id)
@@ -886,6 +901,16 @@ class CouponPanelTests(TestCase):
         items = reply.json()["data"]["result"]["items"]
         self.assertEqual([(c["gcNum"], c["invoiceCount"]) for c in items], [("G", 2)])
         self.assertEqual(self.get("Customer/GetGiftCardLable").json()["data"]["result"]["totalUsed"], 1)
+
+    def test_django_admin_shows_synced_vouchers_read_only(self):
+        ErpCoupon.objects.create(id=1, serial="ERP-COUPON")
+        ErpGiftCard.objects.create(id=2, number="ERP-CARD", balance=500)
+        self.client.force_login(User.objects.create_superuser(username="django-admin"))
+        for model, row_id, code in (("erpcoupon", 1, "ERP-COUPON"), ("erpgiftcard", 2, "ERP-CARD")):
+            url = f"/django-admin/erp/{model}/"
+            self.assertContains(self.client.get(url), code)
+            self.assertEqual(self.client.get(f"{url}add/").status_code, 403)
+            self.assertEqual(self.client.post(f"{url}{row_id}/change/", {}).status_code, 403)
 
 
 class SoftwareAwayTests(TestCase):
